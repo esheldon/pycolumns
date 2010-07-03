@@ -2,6 +2,8 @@
 
 TODO:
 
+    Resolve dependencies in esutil/recfile/numpydb
+
     Implement modes of opening, e.g. 'r', 'a', 'w' or whatever.  Only
     support modifying if appropriate mode is in place.  Default to 'r'.
 
