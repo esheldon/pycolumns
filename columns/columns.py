@@ -1246,7 +1246,7 @@ class Column(object):
         else:
             raise RuntimeError("Currently only support rec types")
 
-    def write_rec(self, data_in, create=False, meta=None):
+    def write_rec(self, data, create=False, meta=None):
         """
         Method:
             write_rec
@@ -1272,7 +1272,7 @@ class Column(object):
         if create:
             self.delete()
 
-        data = esutil.numpy_util.to_native(data_in)
+        #data = esutil.numpy_util.to_native(data_in)
 
         # make sure the data type of the input equals that of the column
         if not isinstance(data, numpy.ndarray):
@@ -1297,7 +1297,7 @@ class Column(object):
 
         self.reload()
 
-    def write_col(self, data_in, create=False, meta=None, cache=None):
+    def write_col(self, data, create=False, meta=None, cache=None):
         """
         Method:
             write_col
@@ -1326,7 +1326,7 @@ class Column(object):
         if create:
             self.delete()
 
-        data = esutil.numpy_util.to_native(data_in)
+        #data = esutil.numpy_util.to_native(data_in)
 
         # make sure the data type of the input equals that of the column
         if not isinstance(data, numpy.ndarray):

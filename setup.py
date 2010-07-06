@@ -26,7 +26,7 @@ data_files.append( ('ups',[path_join('ups','columns.table')] ) )
 
 # data_files copies the ups/esutil.table into prefix/ups
 setup(name='columns',
-      description='Simple, efficient, pythonic column database',
+      description='A simple, efficient, pythonic column database',
       packages=['columns'],
       data_files=data_files)
 
