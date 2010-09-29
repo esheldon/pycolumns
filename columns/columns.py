@@ -508,26 +508,47 @@ class Columns(dict):
             self.write_columns(data, create=docreate)
 
 
-    def read_columns(self, colnames, rows=None, asdict=False, verbose=False):
+    def read_columns(self, colnames=None, rows=None, asdict=False, verbose=False):
         """
+        Method:
+            read_columns
+        Class:
+            Columns
+        Calling Sequence:
+            cols = Columns(columns_dir)
+            data=cols.read_columns(colnames=None, 
+                                   rows=None, 
+                                   asdict=False, 
+                                   verbose=False):
+        Inputs:
+            colnames: 
+                Can be a scalar string or a sequence of strings.  Defaults to
+                all.
+            rows: 
+                Sequence of row numbers.  Defaults to all.
+            asdict: 
+                If True, read fixed length columns into numpy arrays and store
+                each in a dictionary with key=colname.  When supported,
+                variable length columns can also be stored in this type of
+                container as e.g.  strings.
 
-        if asdict=True, read fixed length columns into numpy arrays and store
-        each in a dictionary with key=colname.  When supported, variable length
-        columns can also be stored in this type of container as e.g.  strings.
+                if asdict=False, only fixed length columns can be read and they
+                are all packed into a single structured array (e.g. recarray).
 
-        if asdict=False, only fixed length columns can be read and they are all
-        packed into a single structured array (e.g. recarray).
+        Comments:
+            If a single column is desired, this can be read into a normal,
+            unstructured array using read_column or the [] notation.
 
-        If a single column is desired, this can be read into a normal,
-        unstructured array using read_column.
+        Restrictions:
+            If rows= keyword is sent, this is applied to all columns, and
+            currently only supports numpy fixed length types.  If all columns
+            are not the same length, an exception is raised.
 
-        If rows= keyword is sent, this is applied to all columns, and currently
-        only supports numpy fixed length types.  If all columns are not the
-        same length, an exception is raised.
-
-        Don't yet support columns themselves having structure.
         """
         
+        if colnames is None:
+            colnames = sorted( list( self.keys() ) )
+
         dtype = []
         if isinstance(colnames, (str,unicode)):
             colnames = [colnames]
