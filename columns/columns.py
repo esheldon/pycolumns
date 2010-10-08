@@ -794,18 +794,26 @@ class Column(object):
             self.index_dtype=db.data_dtype()
             db.close()
 
-    def index_filename(self):
+    def index_filename(self, tempdir=None):
         if self.filename is None:
             return None
 
         # remove the final extension
         index_fname='.'.join( self.filename.split('.')[0:-1] )
         index_fname = index_fname+'__index.db'
+
+        if tempdir is not None:
+            bname = os.path.basename(index_fname)
+            index_fname = os.path.join(tempdir,bname)
+
         return index_fname
+
+
     def has_index(self):
         return self.have_index
 
-    def create_index(self, index_dtype='i4', force=False, cache=None):
+    def create_index(self, index_dtype='i4', force=False, 
+                     cache=None, tempdir=None, verbose=False, db_verbose=0):
         """
         Class:
             Column
@@ -830,6 +838,18 @@ class Column(object):
             force: If True, any existing index is deleted. If this keyword
                 is not True and the index exists, and exception is raised.
                 Default is False.
+            tempdir:
+                A temporary directory to write the index.  This is very
+                useful when the tempdir is for example a linux "tempfs"
+                which is in memory.  This can speed up index creation
+                by enormous factors.
+
+                After creation, the index will be moved to it's final
+                destination.
+            verbose:
+                This can override the overall verbosity.
+            db_verbose:
+                An integer indicating the verbosity of the db code.
 
         Restrictions:
             Currently, the column type must be ordinary 'col' and should be
@@ -845,27 +865,39 @@ class Column(object):
         self._verify_db_available('create')
         
         # set up file name and data type info
-        index_fname=self.index_filename()
-        key_dtype = self.dtype.descr[0][1]
-        verbosity=0
-        if self.verbose:
-            verbosity=1
+        index_fname=self.index_filename(tempdir=tempdir)
 
-        # basic creating stup
-        numpydb.create(index_fname, key_dtype, index_dtype, verbosity=verbosity)
+        key_dtype = self.dtype.descr[0][1]
+
+        # basic create
+        if self.verbose or verbose:
+            stdout.write("Creating index for column '%s'\n" % self.name)
+            stdout.write("    db file: '%s'\n" % index_fname)
+        numpydb.create(index_fname, key_dtype, index_dtype, verbosity=db_verbose)
 
         # this reloads metadata for column, so we know the index file
-        # exists
+        # exists (if not using a temp file)
         self.reload()
 
         # Write the data to the index.  We should do this in chunks of,
         # say, 100 MB or something
-        if self.verbose:
-            stdout.write("Creating index for column '%s'\n" % self.name)
         data = self.read()
         indices=numpy.arange(data.size, dtype=index_dtype)
-        self._write_to_index(data, indices, cache=cache)
+
+        # note sending filename= will prevent calling _verify_db_available
+        # which is good since we may be using a temp file
+        self._write_to_index(data, indices, cache=cache, filename=index_fname)
         del data
+
+        if tempdir is not None:
+            # move to the final destination
+            final_fname=self.index_filename()
+            import shutil
+            if self.verbose or verbose:
+                stdout.write("    Moving to final destination: '%s'\n" % final_fname)
+            shutil.move(index_fname, final_fname)
+
+        self.reload()
 
     def init_from_filename(self):
         """
@@ -1397,11 +1429,15 @@ class Column(object):
                                      dtype=self.index_dtype)
             self._write_to_index(data, new_indices, cache=cache)
 
-    def _write_to_index(self, data, indices, cache=None):
-        self._verify_db_available('write')
+    def _write_to_index(self, data, indices, cache=None, filename=None):
 
 
-        index_fname = self.index_filename()
+        if filename is None:
+            self._verify_db_available('write')
+            index_fname = self.index_filename()
+        else:
+            index_fname = filename
+
         db=numpydb.NumpyDB()
         if cache is not None:
             if not isinstance(cache,(tuple,list)):
