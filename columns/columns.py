@@ -46,6 +46,18 @@ try:
 except:
     have_numpy=False
 
+try:
+    import json
+    have_json=True
+except:
+    have_json=False
+
+try:
+    import cjson
+    have_cjson=True
+except:
+    have_cjson=False
+
 
 class Columns(dict):
     """
@@ -172,7 +184,7 @@ class Columns(dict):
 
     """
     def __init__(self, dir=None, verbose=False):
-        self.types = ['col','rec','idx','sort','cols']
+        self.types = ['col','rec','idx','sort','cols','json']
         self.verbose=verbose
         self.init(dir=dir)
 
@@ -425,6 +437,8 @@ class Columns(dict):
                         type='col'
                     else:
                         type='rec'
+                elif isinstance(data, dict):
+                    type = 'json'
                 else:
                     raise ValueError("only support rec types for now")
             self.load_column(name=name, type=type)
@@ -751,6 +765,7 @@ class Column(object):
 
         if self.type == 'rec' or self.type == 'col':
             self.init_rec()
+
         if self.verbose:
             stdout.write(self.__repr__())
             stdout.write('\n')
@@ -947,7 +962,6 @@ class Column(object):
         self.size = self.meta['_SIZE']
         descr = self.meta['_DTYPE']
         self.dtype=numpy.dtype(descr)
-
 
 
     def __getitem__(self, arg):
@@ -1296,8 +1310,13 @@ class Column(object):
             self.write_rec(data, meta=meta)
         elif self.type == 'col':
             self.write_col(data, meta=meta)
+        elif self.type == 'json':
+            self.write_json(data)
         else:
             raise RuntimeError("Currently only support rec types")
+
+    def write_json(self, data):
+        write_json(data, self.filename)
 
     def write_rec(self, data, create=False, meta=None):
         """
@@ -1785,4 +1804,65 @@ def where( query_index ):
 
 
 
+def read_json(fname):
+    """
+    obj = json_util.read(file):  
+
+    Read from the file name or opened file object. If the faster cjson is
+    available, an attempt to use it is made.  If this fails (cjson is known
+    to fail in certain corner cases) ordinary json is tried.  
+    """
+
+    if not have_json and not have_cjson:
+        raise ImportError("Neither cjson or json could be imported")
+
+    input_fileobj=False
+    if isinstance(fname, file):
+        input_fileobj=True
+        fobj=fname
+    else:
+        fobj=open(fname)
+
+    if have_cjson:
+        try:
+            data = cjson.decode(fobj.read())
+        except: 
+            # fall back to using json
+            fobj.seek(0)
+            data = json.load(fobj)
+    else:
+        data = json.load(fobj)
+
+    if not input_fileobj:
+        fobj.close()
+    return data
+
+def write_json(obj, fname, pretty=True):
+    """
+    json_util.write(obj, fname, pretty=True)
+
+    Write the object to a fson file.  The "file" input can be either a file
+    name or opened file object.  Ordinary json is the default since it
+    supports human readable writing.  Sending pretty=False to the write
+    program will force use of cjson if it is available.
+    """
+
+    if not have_json and not have_cjson:
+        raise ImportError("Neither cjson or json could be imported")
+
+    input_fileobj=False
+    if isinstance(fname,file):
+        input_fileobj=True
+        fobj=fname
+    else:
+        fobj=open(fname,'w')
+    
+    if not pretty and have_cjson:
+        jstring = cjson.encode(obj)
+        fobj.write(jstring)
+    else:
+        json.dump(obj, fobj, indent=1, separators=(',', ':'))
+
+    if not input_fileobj:
+        fobj.close()
 
