@@ -828,7 +828,7 @@ class Column(object):
         return self.have_index
 
     def create_index(self, index_dtype='i4', force=False, 
-                     cache=None, tempdir=None, verbose=False, db_verbose=0):
+                     tempdir=None, verbose=False, db_verbose=0):
         """
         Class:
             Column
@@ -901,7 +901,7 @@ class Column(object):
 
         # note sending filename= will prevent calling _verify_db_available
         # which is good since we may be using a temp file
-        self._write_to_index(data, indices, cache=cache, filename=index_fname, verbose=db_verbose)
+        self._write_to_index(data, indices, filename=index_fname, verbose=db_verbose)
         del data
 
         if tempdir is not None:
@@ -1371,7 +1371,7 @@ class Column(object):
 
         self.reload()
 
-    def write_col(self, data, create=False, meta=None, cache=None):
+    def write_col(self, data, create=False, meta=None):
         """
         Method:
             write_col
@@ -1448,7 +1448,7 @@ class Column(object):
             new_indices=numpy.arange(self.size-data.size, 
                                      self.size, 
                                      dtype=self.index_dtype)
-            self._write_to_index(data, new_indices, cache=cache)
+            self._write_to_index(data, new_indices)
 
     def _write_to_index(self, data, indices, cache=None, filename=None, verbose=False):
 
