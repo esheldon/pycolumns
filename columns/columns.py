@@ -854,10 +854,10 @@ class Column(object):
                 is not True and the index exists, and exception is raised.
                 Default is False.
             tempdir:
-                A temporary directory to write the index.  This is very
-                useful when the tempdir is for example a linux "tempfs"
-                which is in memory.  This can speed up index creation
-                by enormous factors.
+                A temporary directory to write the index.  This is very useful
+                when the tempdir is for example a linux "tempfs" which is in
+                memory, e.g. /dev/shm.  This can speed up index creation by
+                enormous factors.
 
                 After creation, the index will be moved to it's final
                 destination.
@@ -901,7 +901,7 @@ class Column(object):
 
         # note sending filename= will prevent calling _verify_db_available
         # which is good since we may be using a temp file
-        self._write_to_index(data, indices, cache=cache, filename=index_fname)
+        self._write_to_index(data, indices, cache=cache, filename=index_fname, verbose=db_verbose)
         del data
 
         if tempdir is not None:
@@ -1019,6 +1019,8 @@ class Column(object):
             else:
                 return sf.read(rows=rows, columns=columns, fields=fields,
                                header=getmeta, reduce=reduce)
+        elif self.type == 'json':
+            return read_json(self.filename)
         else:
             raise RuntimeError("Only support 'col' and 'rec' types")
 
@@ -1448,7 +1450,7 @@ class Column(object):
                                      dtype=self.index_dtype)
             self._write_to_index(data, new_indices, cache=cache)
 
-    def _write_to_index(self, data, indices, cache=None, filename=None):
+    def _write_to_index(self, data, indices, cache=None, filename=None, verbose=False):
 
 
         if filename is None:
@@ -1468,7 +1470,7 @@ class Column(object):
         db.open(index_fname, 'r+')
 
         verbosity=0
-        if self.verbose:
+        if self.verbose or verbose:
             verbosity=1
         db.set_verbosity(verbosity)
 
