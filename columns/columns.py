@@ -859,6 +859,9 @@ class Column(object):
                 memory, e.g. /dev/shm.  This can speed up index creation by
                 enormous factors.
 
+                Note if /dev/shm exists it will be used by default if you
+                don't set tempdir yourself.
+
                 After creation, the index will be moved to it's final
                 destination.
             verbose:
@@ -871,6 +874,10 @@ class Column(object):
             scalar.
 
         """
+
+        if tempdir is None:
+            if os.path.exists('/dev/shm'):
+                tempdir = '/dev/shm'
 
         # delete existing index?
         if force:
