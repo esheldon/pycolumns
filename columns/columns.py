@@ -440,7 +440,7 @@ class Columns(dict):
                 elif isinstance(data, dict):
                     type = 'json'
                 else:
-                    raise ValueError("only support rec types for now")
+                    raise ValueError("only support rec and json types for now")
             self.load_column(name=name, type=type)
 
         self[name].write(data, create=create, meta=meta)
@@ -498,10 +498,10 @@ class Columns(dict):
         if nleft > 0:
             nstep += 1
 
-        stdout.write("Loading %s rows from file: %s\n" % (nrows,filename))
-        dp=pprint.pformat(sf.dtype.descr)
-        stdout.write("Details of columns: \n%s\n" % dp)
-        stdout.flush()
+        if self.verbose > 1:
+            stdout.write("Loading %s rows from file: %s\n" % (nrows,filename))
+            dp=pprint.pformat(sf.dtype.descr)
+            stdout.write("Details of columns: \n%s\n" % dp)
         for i in range(nstep):
             if i == 0 and create:
                 # only create first time
@@ -514,12 +514,13 @@ class Columns(dict):
             if stop > nrows:
                 stop=nrows
 
-            stdout.write("Writing slice: %s:%s out of %s\n" \
-                         % (start,stop,nrows))
-            stdout.flush()
+            if self.verbose > 1:
+                stdout.write("Writing slice: %s:%s out of %s\n" \
+                             % (start,stop,nrows))
             data = sf[start:stop]
 
             self.write_columns(data, create=docreate)
+        sf.close()
 
 
     def read_columns(self, colnames=None, rows=None, asdict=False, verbose=False):
@@ -987,11 +988,13 @@ class Column(object):
         if self.type == 'rec':
             sf=sfile.SFile(self.filename)
             data = sf[arg]
+            sf.close()
         elif self.type == 'col':
             sf=sfile.SFile(self.filename)
             name=sf.dtype.names[0]
             data = sf[name][arg]
             data = data[name]
+            sf.close()
         else:
             raise RuntimeError("Only support slices for 'rec' and 'col' types")
         return data
@@ -1024,8 +1027,11 @@ class Column(object):
             if memmap:
                 return sf.get_memmap()
             else:
-                return sf.read(rows=rows, columns=columns, fields=fields,
+                data = sf.read(rows=rows, columns=columns, fields=fields,
                                header=getmeta, reduce=reduce)
+                sf.close()
+                return data
+
         elif self.type == 'json':
             return read_json(self.filename)
         else:
@@ -1046,7 +1052,9 @@ class Column(object):
         """
         if self.type == 'rec' or self.type=='col':
             sf=sfile.SFile(self.filename)
-            return sf.read_header()
+            h = sf.read_header()
+            sf.close()
+            return h
         else:
             raise RuntimeError("Only support 'col' and 'rec' types")
 
@@ -1134,7 +1142,7 @@ class Column(object):
         db.set_verbosity(verbosity)
 
         result = db.match(values,select=select)
-        del db
+        db.close()
 
         if select == 'both':
             result = (result[0], Index(result[1]))
@@ -1147,22 +1155,30 @@ class Column(object):
     def __gt__(self, val):
         self._verify_db_available('read')
         db = numpydb.Open( self.index_filename() )
-        return Index(db.range1(val,'>'))
+        i = Index(db.range1(val,'>'))
+        db.close()
+        return i
 
     def __ge__(self, val):
         self._verify_db_available('read')
         db = numpydb.Open( self.index_filename() )
-        return Index( db.range1(val,'>=') )
+        i = Index( db.range1(val,'>=') )
+        db.close()
+        return i
 
     def __lt__(self, val):
         self._verify_db_available('read')
         db = numpydb.Open( self.index_filename() )
-        return Index( db.range1(val,'<') )
+        i = Index( db.range1(val,'<') )
+        db.close()
+        return i
 
     def __le__(self, val):
         self._verify_db_available('read')
         db = numpydb.Open( self.index_filename() )
-        return Index( db.range1(val,'<=') )
+        i = Index( db.range1(val,'<=') )
+        db.close()
+        return i
 
     # equality operators
     def __eq__(self, val):
@@ -1174,6 +1190,7 @@ class Column(object):
         ind1 = Index( db.range1(val,'<') )
         ind2 = Index( db.range1(val,'>') )
         ind = ind1 | ind2
+        db.close()
         return ind
 
 
@@ -1277,7 +1294,7 @@ class Column(object):
         db.set_verbosity(verbosity)
 
         result = db.between(low, high, interval, select=select)
-        del db
+        db.close()
 
         if select == 'both':
             result = (result[0], Index(result[1]))

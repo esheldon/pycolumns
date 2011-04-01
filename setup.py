@@ -1,12 +1,10 @@
 from distutils.core import setup,Extension
+import distutils.sysconfig
 from os.path import join as path_join
 import os,sys
 
-
-# create the ups table
-pyvers='%s.%s' % sys.version_info[0:2]
-d1='lib/python%s/site-packages' % pyvers
-d2='lib64/python%s/site-packages' % pyvers
+main_libdir=distutils.sysconfig.get_python_lib()
+pylib_install_subdir = main_libdir.replace(distutils.sysconfig.PREFIX+os.sep,'')
 
 if not os.path.exists('ups'):
     os.mkdir('ups')
@@ -16,8 +14,8 @@ setupOptional("python")
 setupOptional("numpydb")
 setupOptional("esutil")
 envPrepend(PYTHONPATH,${PRODUCT_DIR}/%s)
-envPrepend(PYTHONPATH,${PRODUCT_DIR}/%s)
-""" % (d1,d2)
+""" % pylib_install_subdir 
+
 tablefile.write(tab)
 tablefile.close()
 
