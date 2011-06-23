@@ -430,6 +430,9 @@ class Columns(dict):
 
         """
 
+        if name in self and create:
+            self[name].delete()
+
         if name not in self:
             if type is None:
                 if isinstance(data, numpy.ndarray):
@@ -443,7 +446,7 @@ class Columns(dict):
                     raise ValueError("only support rec and json types for now")
             self.load_column(name=name, type=type)
 
-        self[name].write(data, create=create, meta=meta)
+        self[name].write(data, meta=meta)
 
     def write_columns(self, data, create=False):
         """
