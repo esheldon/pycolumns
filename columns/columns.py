@@ -525,6 +525,70 @@ class Columns(dict):
             self.write_columns(data, create=docreate)
         sf.close()
 
+    def from_columns(self, coldir, create=False, indent=''):
+        """
+        Load the columns of the input columns database into the current
+        database, breaking it up into chunks of ~100 MB
+        """
+
+        chunksize=100 # Mb
+        step_bytes = chunksize*1000000
+
+        if create:
+            self.create()
+
+        if isinstance(coldir,list):
+            print >>stderr,"Processing list of",len(coldir),"columns dirs"
+            for cdir in coldir:
+                self.from_columns(cdir,indent=indent+'    ')
+                print >>stderr,indent+'    '+'-'*70
+            return
+
+        print >>stderr,indent+"Loading columns from:",coldir
+        c=Columns(coldir)
+
+        for colname in c:
+
+            print >>stderr,indent+'column:',colname
+
+            if isinstance(c[colname],Columns):
+                print >>stderr,indent+'=> column is a Columns db, recursing'    
+                dname=colname+'.cols'
+                inpath=os.path.join(coldir,dname)
+                thispath=os.path.join(self.dir,dname)
+                if colname not in self:
+                    self[colname] = Columns(thispath)
+                    self[colname].create()
+
+                self[colname].from_columns(inpath, indent=indent+'    ')
+            else:
+                nrows = c[colname].size
+                rowsize = c[colname].dtype.itemsize
+
+                # step size in rows
+                step = step_bytes/rowsize
+
+                nstep = nrows/step
+                nleft = nrows % step
+                if nleft > 0:
+                    nstep += 1
+
+                if nstep > 1:
+                    stderr.write(indent+"    Working in %d %d Mb chunks" % (nstep,chunksize))
+
+                for i in range(nstep):
+                    if nstep > 1:
+                        stderr.write('.')
+                    start = i*step
+                    stop = (i+1)*step
+                    if stop > nrows:
+                        stop=nrows
+
+                    data = c[colname][start:stop]
+                    self.write_column(colname,data)
+                if nstep > 1:
+                    stderr.write('\n')
+
 
     def read_columns(self, colnames=None, rows=None, asdict=False, verbose=False):
         """
