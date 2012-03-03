@@ -1454,7 +1454,13 @@ class Column(object):
                                  "\n\tcolumn dtype: %s"
                                  "\n\tinput dtype: %s" % types)
 
-        sf=sfile.SFile(self.filename, 'r+')
+
+        if os.path.exists(self.filename):
+            mode='r+'
+        else:
+            mode='w'
+
+        sf=sfile.SFile(self.filename, mode)
 
         # header will only be written on creation
         sf.write(data, header=meta)
