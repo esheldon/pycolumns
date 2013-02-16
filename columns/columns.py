@@ -231,7 +231,7 @@ class Columns(dict):
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
         else:
-            stdout.write("Directory already exists: '%s'" % self.dir)
+            stdout.write("Directory already exists: '%s'\n" % self.dir)
 
     def dirbase(self):
         """
@@ -1276,7 +1276,7 @@ class Column(object):
             be combined with other queries to produce a final result, but this
             can be controlled through the use of keywords.
 
-            Using match() requires that an index was created for this column
+            Using between() requires that an index was created for this column
             using create_index()
 
         Calling Sequence:
@@ -1328,15 +1328,6 @@ class Column(object):
                 '[)': Closed on the lower side, open on the high side.
                 '(]': Open on the lower side, closed on the high side
                 '()': Open on both sides.
-
-                # these are better done using the operators on the column
-                # unless you need the values or count
-                '>': One sided open
-                '>=': One sided closed.
-                '<': One sided open
-                '<=': One sided closed.
-                '=': Equality.
-
 
             select: Which data to return.  Can be
                 'values': Return the values of the key-value pairs, which
