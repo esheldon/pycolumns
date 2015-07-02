@@ -216,6 +216,9 @@ class Columns(dict):
             return True
 
     def dir_exists(self):
+        """
+        returns True of the database directory exists
+        """
         if not os.path.exists(self.dir):
             return False
         else:
@@ -752,7 +755,7 @@ class Column(object):
         # arrays representing a subset of rows
 
         # Note true slices and row subset other than [:] are only supported
-        # by 'rec' types.
+        # by 'col' and 'rec' types.
 
         >>> col=Column(...)
         >>> data = col[25:22]
@@ -893,6 +896,9 @@ class Column(object):
 
 
     def has_index(self):
+        """
+        returns True if the column has an index
+        """
         return self.have_index
 
     def create_index(self, index_dtype='i4', force=False, 
