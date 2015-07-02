@@ -480,6 +480,23 @@ class Columns(dict):
 
     def from_fits(self, filename, create=False, ext=1,
                   ensure_native=False, lower=False):
+        """
+        Write columns to the database, read from the input fits file.
+
+        parameters
+        ----------
+        filename: string
+            Name of the file to read
+        create: bool, optional
+            If True, over-write any existing columns with the same names as
+            those in the file
+        ext: extension number, optional
+            The FITS extension to read from
+        ensure_native: bool, optional
+            If True, ensure the data are in native byte ordering
+        lower: bool, optional
+            if True, lower-case all names
+        """
 
         data = esutil.io.read(filename, ext=ext, 
                               ensure_native=ensure_native, lower=lower)
