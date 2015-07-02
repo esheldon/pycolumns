@@ -434,7 +434,7 @@ class Columns(dict):
         """
 
         if name in self and create:
-            self[name].delete()
+            self.delete_column(name)
 
         if name not in self:
             if type is None:
@@ -462,6 +462,21 @@ class Columns(dict):
                              "input")
         for name in names:
             self.write_column(name, data[name], create=create)
+
+    def delete_column(self, name):
+        """
+        delete the specified column and reload
+
+        parameters
+        ----------
+        name: string
+            Name of column to delete
+        """
+        if name not in self:
+            print("cannot delete column '%s', it does not exist" % name)
+
+        self[name].delete()
+        self.reload()
 
     def from_fits(self, filename, create=False, ext=1,
                   ensure_native=False, lower=False):
