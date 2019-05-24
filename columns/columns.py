@@ -24,39 +24,26 @@ TODO:
 
 """
 import os
-from sys import stdout,stderr
 from glob import glob
 import pprint
 
-import copy
-
-import esutil
+import numpy as np
+import fitsio
 from esutil import sfile
 from esutil.ostools import expand_path
 
 try:
     import numpydb
-    havedb=True
-except:
-    havedb=False
+    havedb = True
+except ImportError:
+    havedb = False
 
-try:
-    import numpy
-    have_numpy=True
-except:
-    have_numpy=False
-
-try:
-    import json
-    have_json=True
-except:
-    have_json=False
-
+import json
 try:
     import cjson
-    have_cjson=True
-except:
-    have_cjson=False
+    have_cjson = True
+except ImportError:
+    have_cjson = False
 
 
 class Columns(dict):
@@ -67,7 +54,7 @@ class Columns(dict):
 
         Manage a database of "columns" represented by simple flat files.  This
         design is chosen to maximize efficiency of memory and speed.
-        Transactional robustness is not yet a priority.  
+        Transactional robustness is not yet a priority.
 
         If numpydb is available, indexes can be created for columns.  This
         facilitates fast searching.
@@ -116,7 +103,7 @@ class Columns(dict):
           has index: False
           dtype:
             [('id', '<i4')]
- 
+
 
         # get the column names
         >>> c.colnames()
@@ -136,7 +123,7 @@ class Columns(dict):
         >>> meta=c['id'].read_meta()
 
         # read a subset of rows
-        # slicing 
+        # slicing
         >>> id = c['id'][25:125]
 
         # specifying a set of rows
@@ -156,7 +143,7 @@ class Columns(dict):
         # perform fast searching
         >>> c['col'].create_index()
 
-        # get indices for some range.  Can also do 
+        # get indices for some range.  Can also do
         >>> ind=(c['col'] > 25)
         >>> ind=c['col'].between(25,35)
         >>> ind=(c['col'] == 25)
@@ -165,7 +152,11 @@ class Columns(dict):
         # composite searches over multiple columns
         >>> ind = (c['col1'] == 25) & (col['col2'] < 15.23)
         >>> ind = c['col1'].between(15,25) | (c['col2'] != 66)
-        >>> ind = c['col1'].between(15,25) & (c['col2'] != 66) & (c['col3'] < 5)
+        >>> ind = (
+            c['col1'].between(15,25) &
+            (c['col2'] != 66) &
+            (c['col3'] < 5)
+        )
 
         # create column or append data to a column
         >>> c.write_column(name, data)
@@ -184,8 +175,8 @@ class Columns(dict):
 
     """
     def __init__(self, dir=None, verbose=False):
-        self.types = ['col','rec','idx','sort','cols','json']
-        self.verbose=verbose
+        self.types = ['col', 'rec', 'idx', 'sort', 'cols', 'json']
+        self.verbose = verbose
         self.init(dir=dir)
 
     def init(self, dir=None):
@@ -207,9 +198,9 @@ class Columns(dict):
 
         self.dir = dir
         if self.verbose and self.dir is not None:
-            stdout.write("Database directory: %s\n" % self.dir)
+            print('Database directory:', self.dir)
             if not self.dir_exists():
-                stdout.write("  Directory does not yet exist. Use create()\n")
+                print('  Directory does not yet exist. Use create()')
 
     def ready(self, action=None):
         if self.dir_exists():
@@ -234,7 +225,8 @@ class Columns(dict):
         if not os.path.exists(self.dir):
             os.makedirs(self.dir)
         else:
-            stdout.write("Directory already exists: '%s'\n" % self.dir)
+            if self.verbose:
+                print('Directory already exists:', self.dir)
 
     def dirbase(self):
         """
@@ -242,12 +234,10 @@ class Columns(dict):
         """
         if self.dir is not None:
             bname = os.path.basename(self.dir)
-            name = '.'.join( bname.split('.')[0:-1] )
+            name = '.'.join(bname.split('.')[0:-1])
             return name
         else:
             return None
-
-
 
     def load(self):
         """
@@ -255,7 +245,7 @@ class Columns(dict):
         Load the metadata and a memory map for all existing columns in the
         directory.  Column files must have the right extensions to be noticed
         so far these can be
-        
+
             .rec, .idx, .sort
 
         and other column directories can be loaded if they have the extension
@@ -269,7 +259,7 @@ class Columns(dict):
                              "not exist. Use create()" % self.dir)
         # clear out the existing columns and start from scratch
         self.clear()
-        
+
         for type in self.types:
             if self.dir is not None:
                 pattern = os.path.join(self.dir, '*.'+type)
@@ -281,8 +271,6 @@ class Columns(dict):
                     else:
                         self.load_column(filename=f)
 
-
-
     def load_column(self, name=None, filename=None, type=None):
         """
         If filename is sent, clear the column and load the filename as new
@@ -293,13 +281,11 @@ class Columns(dict):
             under the db directory.
         """
 
-        col = Column(filename=filename, dir=self.dir, name=name, type=type, 
+        col = Column(filename=filename, dir=self.dir, name=name, type=type,
                      verbose=self.verbose)
         name = col.name
         self.clear(name)
         self[name] = col
-
-
 
     def load_coldir(self, dir):
         """
@@ -310,11 +296,9 @@ class Columns(dict):
         coldir = Columns(dir, verbose=self.verbose)
         if not os.path.exists(dir):
             coldir.create()
-        name=coldir.dirbase()
+        name = coldir.dirbase()
         self.clear(name)
         self[name] = coldir
-
-
 
     def reload(self, name=None):
         """
@@ -324,8 +308,8 @@ class Columns(dict):
 
         """
         if name is not None:
-            if isinstance(name,(str,unicode)):
-                name=[name]
+            if isinstance(name, str,):
+                name = [name]
 
             for n in name:
                 if name not in self:
@@ -336,32 +320,31 @@ class Columns(dict):
             for name in self:
                 self[name].reload()
 
-
     def colnames(self):
         """
         Return a list of all column names
         """
-        return list( self.keys() )
+        return list(self.keys())
 
     def get_repr_list(self):
         """
         Get a list of metadata for this columns directory and it's
         columns
         """
-        indent='  '
-        s=[]
+        indent = '  '
+        s = []
         if self.dir is not None:
-            dbase=self.dirbase()
+            dbase = self.dirbase()
             s += [dbase]
             s += ['dir: '+self.dir]
             if not self.dir_exists():
                 s += ['    Directory does not yet exist']
 
-        subcols=[]
+        subcols = []
         if len(self) > 0:
             s += ['Columns:']
-
-            s += ['  %-15s %5s %6s %-6s %s' % ('name','type','dtype','index','size')]
+            cnames = 'name', 'type', 'dtype', 'index', 'size'
+            s += ['  %-15s %5s %6s %-6s %s' % cnames]
             s += ['  '+'-'*(50)]
 
             subcols = ['Sub-Column Directories:']
@@ -369,29 +352,29 @@ class Columns(dict):
             subcols += ['  '+'-'*(50)]
 
             for name in sorted(self):
-                c=self[name]
+                c = self[name]
                 if isinstance(c, Column):
-                    name=c.name
+                    name = c.name
                     if len(name) > 15:
                         s += ['  %s' % name]
                         s += ['%23s' % (c.type,)]
                     else:
-                        s += ['  %-15s %5s' % (c.name,c.type)]
+                        s += ['  %-15s %5s' % (c.name, c.type)]
 
                     if c.type == 'col':
-                        c_dtype=c.dtype.descr[0][1]
+                        c_dtype = c.dtype.descr[0][1]
                     else:
-                        c_dtype=''
+                        c_dtype = ''
                     s[-1] += ' %6s' % c_dtype
                     s[-1] += ' %-6s' % self[name].has_index()
                     s[-1] += ' %s' % self[name].size
 
                 else:
-                    cdir = os.path.basename(c.dir).replace('.cols','')
+                    cdir = os.path.basename(c.dir).replace('.cols', '')
                     subcols += ['  %s' % cdir]
 
         s = [indent + tmp for tmp in s]
-        s=['Column Directory: '] + s
+        s = ['Column Directory: '] + s
 
         if len(subcols) > 3:
             s += [indent]
@@ -408,20 +391,18 @@ class Columns(dict):
         s = '\n'.join(s)
         return s
 
-
     def clear(self, name=None):
         """
         Clear out the dictionary of column info
         """
         if name is not None:
-            if isinstance(name,(list,tuple)):
+            if isinstance(name, (list, tuple)):
                 for n in name:
                     if n in self:
                         del self[n]
         else:
             if name in self:
                 del self[name]
-
 
     def write_column(self, name, data, type=None, create=False, meta=None):
         """
@@ -438,11 +419,11 @@ class Columns(dict):
 
         if name not in self:
             if type is None:
-                if isinstance(data, numpy.ndarray):
+                if isinstance(data, np.ndarray):
                     if data.dtype.names is None:
-                        type='col'
+                        type = 'col'
                     else:
-                        type='rec'
+                        type = 'rec'
                 elif isinstance(data, dict):
                     type = 'json'
                 else:
@@ -456,7 +437,7 @@ class Columns(dict):
         Write the fields of a structured array to columns
         """
 
-        names=data.dtype.names
+        names = data.dtype.names
         if names is None:
             raise ValueError("write_columns() takes a structured array as "
                              "input")
@@ -478,10 +459,14 @@ class Columns(dict):
         self[name].delete()
         self.reload()
 
-    def from_fits(self, filename, create=False, ext=1,
-                  ensure_native=False, lower=False):
+    def from_fits(self,
+                  filename,
+                  create=False,
+                  ext=1,
+                  lower=False):
         """
-        Write columns to the database, read from the input fits file.
+        Write columns to the database, reading from the input fits file.
+        Uses chunks of 100MB
 
         parameters
         ----------
@@ -492,29 +477,13 @@ class Columns(dict):
             those in the file
         ext: extension number, optional
             The FITS extension to read from
-        ensure_native: bool, optional
-            If True, ensure the data are in native byte ordering
         lower: bool, optional
             if True, lower-case all names
         """
 
-        data = esutil.io.read(filename, ext=ext, 
-                              ensure_native=ensure_native, lower=lower)
-
-        nrows = data.size
-
-        if self.verbose > 0:
-            stdout.write("Loading %s rows from file: %s\n" % (nrows,filename))
-
-        dp=pprint.pformat(data.dtype.descr)
-
-        if self.verbose > 1:
-            stdout.write("Details of columns: \n%s\n" % dp)
-        stdout.flush()
-
-        self.write_columns(data, create=create)
-
-        del data
+        with fitsio.FITS(filename, lower=lower) as fits:
+            hdu = fits[ext]
+            self._from_slicer(filename, hdu, create)
 
     def from_rec(self, filename, create=False):
         """
@@ -522,43 +491,49 @@ class Columns(dict):
         it up into chunks of ~100 MB
         """
 
-        sf=sfile.SFile(filename,'r')
+        with sfile.SFile(filename, 'r') as sf:
+            self._from_slicer(filename, sf, create)
 
-        nrows = sf.size
-        rowsize = sf.dtype.itemsize
+    def _from_slicer(self, filename, slicer, create):
+
+        one = slicer[1:1+1]
+        nrows = slicer.get_nrows()
+        rowsize = one.itemsize
+
         # step size in bytes
         step_bytes = 100*1000000
-        # step size in rows
-        step = step_bytes/rowsize
 
-        nstep = nrows/step
+        # step size in rows
+        step = step_bytes//rowsize
+
+        nstep = nrows//step
         nleft = nrows % step
         if nleft > 0:
             nstep += 1
 
         if self.verbose > 1:
-            stdout.write("Loading %s rows from file: %s\n" % (nrows,filename))
-            dp=pprint.pformat(sf.dtype.descr)
-            stdout.write("Details of columns: \n%s\n" % dp)
+            print('Loading %s rows from file: %s' % (nrows, filename))
+            dp = pprint.pformat(one.dtype.descr)
+            print('Details of columns: \n%s' % dp)
+
         for i in range(nstep):
             if i == 0 and create:
                 # only create first time
-                docreate=True
+                docreate = True
             else:
-                docreate=False
+                docreate = False
 
             start = i*step
             stop = (i+1)*step
             if stop > nrows:
-                stop=nrows
+                stop = nrows
 
             if self.verbose > 1:
-                stdout.write("Writing slice: %s:%s out of %s\n" \
-                             % (start,stop,nrows))
-            data = sf[start:stop]
+                print('Writing slice: %s:%s out '
+                      'of %s' % (start, stop, nrows))
+            data = slicer[start:stop]
 
             self.write_columns(data, create=docreate)
-        sf.close()
 
     def from_columns(self, coldir, create=False, indent=''):
         """
@@ -566,31 +541,31 @@ class Columns(dict):
         database, breaking it up into chunks of ~100 MB
         """
 
-        chunksize=100 # Mb
+        chunksize = 100  # Mb
         step_bytes = chunksize*1000000
 
         if create:
             self.create()
 
-        if isinstance(coldir,list):
-            print >>stderr,"Processing list of",len(coldir),"columns dirs"
+        if isinstance(coldir, (list, tuple)):
+            print('Processing list of', len(coldir), 'columns dirs')
             for cdir in coldir:
-                self.from_columns(cdir,indent=indent+'    ')
-                print >>stderr,indent+'    '+'-'*70
+                self.from_columns(cdir, indent=indent+'    ')
+                print(indent+'    '+'-'*70)
             return
 
-        print >>stderr,indent+"Loading columns from:",coldir
-        c=Columns(coldir)
+        print(indent+"Loading columns from:", coldir)
+        c = Columns(coldir)
 
         for colname in c:
 
-            print >>stderr,indent+'column:',colname
+            print(indent+'column:', colname)
 
-            if isinstance(c[colname],Columns):
-                print >>stderr,indent+'=> column is a Columns db, recursing'    
-                dname=colname+'.cols'
-                inpath=os.path.join(coldir,dname)
-                thispath=os.path.join(self.dir,dname)
+            if isinstance(c[colname], Columns):
+                print(indent+'=> column is a Columns db, recursing')
+                dname = colname+'.cols'
+                inpath = os.path.join(coldir, dname)
+                thispath = os.path.join(self.dir, dname)
                 if colname not in self:
                     self[colname] = Columns(thispath)
                     self[colname].create()
@@ -609,85 +584,88 @@ class Columns(dict):
                     nstep += 1
 
                 if nstep > 1:
-                    stderr.write(indent+"    Working in %d %d Mb chunks" % (nstep,chunksize))
+                    text = indent+"    Working in %d %d Mb chunks"
+                    print(text % (nstep, chunksize), end='')
 
                 for i in range(nstep):
                     if nstep > 1:
-                        stderr.write('.')
+                        print('.', end='')
                     start = i*step
                     stop = (i+1)*step
                     if stop > nrows:
-                        stop=nrows
+                        stop = nrows
 
                     data = c[colname][start:stop]
-                    self.write_column(colname,data)
+                    self.write_column(colname, data)
                 if nstep > 1:
-                    stderr.write('\n')
+                    print()
 
-
-    def read_columns(self, colnames=None, rows=None, asdict=False, verbose=False):
+    def read(self,
+             columns=None,
+             colnames=None,  # deprecated
+             rows=None,
+             asdict=False,
+             verbose=False):
         """
-        Method:
-            read_columns
-        Class:
-            Columns
-        Calling Sequence:
-            cols = Columns(columns_dir)
-            data=cols.read_columns(colnames=None, 
-                                   rows=None, 
-                                   asdict=False, 
-                                   verbose=False):
-        Inputs:
-            colnames: 
-                Can be a scalar string or a sequence of strings.  Defaults to
-                all.
-            rows: 
-                Sequence of row numbers.  Defaults to all.
-            asdict: 
-                If True, read fixed length columns into numpy arrays and store
-                each in a dictionary with key=colname.  When supported,
-                variable length columns can also be stored in this type of
-                container as e.g.  strings.
+        read columns and rows
 
-                if asdict=False, only fixed length columns can be read and they
-                are all packed into a single structured array (e.g. recarray).
+        Parameters
+        ----------
+        columns: sequence or string
+            Can be a scalar string or a sequence of strings.  Defaults to all.
+        rows: sequence or scalar
+            Sequence of row numbers.  Defaults to all.
+        asdict: bool, optional
+            If True, read fixed length columns into numpy arrays and store
+            each in a dictionary with key=colname.  When supported,
+            variable length columns can also be stored in this type of
+            container as e.g.  strings.
 
-        Comments:
+            if asdict=False, only fixed length columns can be read and they
+            are all packed into a single structured array (e.g. recarray).
+        verbose: bool, optional
+            Be verbose
+
+        Notes
+        ------
             If a single column is desired, this can be read into a normal,
             unstructured array using read_column or the [] notation.
 
-        Restrictions:
-            If rows= keyword is sent, this is applied to all columns, and
-            currently only supports numpy fixed length types.  If all columns
-            are not the same length, an exception is raised.
-
+        Restrictions
+        -------------
+        If rows= keyword is sent, this is applied to all columns, and currently
+        only supports numpy fixed length types.  If all columns are not the
+        same length, an exception is raised.
         """
-        
-        if colnames is None:
-            colnames = sorted( list( self.keys() ) )
+
+        if columns is None and colnames is not None:
+            columns = colnames
+
+        if columns is None:
+            columns = sorted(list(self.keys()))
 
         dtype = []
-        if isinstance(colnames, (str,unicode)):
-            colnames = [colnames]
+        if isinstance(columns, str):
+            columns = [columns]
 
-        ncol = len(colnames)
-        nrows = numpy.zeros(ncol, dtype='i8')
+        ncol = len(columns)
+        nrows = np.zeros(ncol, dtype='i8')
 
-        i=0
-        for colname in colnames:
-            if colname not in self: 
+        i = 0
+        for colname in columns:
+            if colname not in self:
                 raise ValueError("Column '%s' not found" % colname)
             meta = self[colname].meta
-            
+
             # Assume columns are not structured for now.
-            dtype.append( meta['_DTYPE'][0] )
+            dtype.append(meta['_DTYPE'][0])
 
             nrows[i] = meta['_SIZE']
             i += 1
 
         if ncol > 1 and rows is not None:
             # make sure they really align properly
-            w, = numpy.where( nrows != nrows[0] )
+            w, = np.where(nrows != nrows[0])
             if w.size > 0:
                 raise ValueError("When using the rows= keyword with multiple "
                                  "columns, the columns must be the same "
@@ -695,8 +673,8 @@ class Columns(dict):
 
         # if rows not sent, all are read
         if rows is not None:
-            if numpy.isscalar(rows):
-                n_rows2read=1
+            if np.isscalar(rows):
+                n_rows2read = 1
             else:
                 n_rows2read = len(rows)
         else:
@@ -706,32 +684,32 @@ class Columns(dict):
             # Just putting the arrays into a dictionary.
             data = {}
 
-            for colname in colnames:
+            for colname in columns:
 
                 if self.verbose or verbose:
-                    stdout.write("\tColumn: %s "
-                                 "getting %d rows\n" % (colname,n_rows2read))
-                
+                    print('\tColumn: %s getting %d '
+                          'rows' % (colname, n_rows2read))
+
                 # just read the data and put in dict, simpler than below
-                data[colname] = self.read_column(colname,rows=rows)
+                data[colname] = self.read_column(colname, rows=rows)
 
         else:
             # copying into a single array with fields
-            data = numpy.empty(n_rows2read, dtype=dtype)
+            data = np.empty(n_rows2read, dtype=dtype)
 
-            for colname in colnames:
+            for colname in columns:
 
                 if self.verbose or verbose:
-                    stdout.write("\tColumn: %s "
-                                 "getting %d rows\n" % (colname,n_rows2read))
+                    print('\tColumn: %s getting %d '
+                          'rows' % (colname, n_rows2read))
 
-                
-                data[colname][:] = self.read_column(colname,rows=rows)
-            
+                data[colname][:] = self.read_column(colname, rows=rows)
+
         return data
- 
 
-    def read_column(self, colname, rows=None, getmeta=False, memmap=False, 
+    read_columns = read
+
+    def read_column(self, colname, rows=None, getmeta=False, memmap=False,
                     reduce=True):
         """
         Only numpy, fixed length for now.  Eventually allow pickled columns.
@@ -739,22 +717,25 @@ class Columns(dict):
         if reduce=True, a simple array is returned if there are not multiple
             fields in the data.
 
-        if reduce=False, then a structured array is returend that can be used as
-            data[colname]
-
+        if reduce=False, then a structured array is returend that can be used
+        as data[colname]
         """
         if colname not in self:
             raise ValueError("Column '%s' not found" % colname)
 
         if self.verbose:
             if rows is not None:
-                stdout.write("Reading %d rows from "
-                             "column: '%s'\n" % (len(rows), colname))
+                print("Reading %d rows from "
+                      "column: '%s'" % (len(rows), colname))
             else:
-                stdout.write("Reading column: '%s'\n" % colname)
+                print("Reading column: '%s'" % colname)
 
-        return self[colname].read(rows=rows,getmeta=getmeta, memmap=memmap, 
-                                  reduce=reduce)
+        return self[colname].read(
+            rows=rows,
+            getmeta=getmeta,
+            memmap=memmap,
+            reduce=reduce,
+        )
 
 
 class Column(object):
@@ -780,10 +761,11 @@ class Column(object):
         >>> col=Column(filename='/full/path')
 
         # this one uses directory, column name, type
-        >>> col=Column(name='something', type='rec', dir='/some/path/dbname.cols')
+        >>> col=Column(name='something', type='rec',
+                       dir='/some/path/dbname.cols')
 
     Slice and item lookup:
-        # The Column class supports item lookup access, e.g. slices and 
+        # The Column class supports item lookup access, e.g. slices and
         # arrays representing a subset of rows
 
         # Note true slices and row subset other than [:] are only supported
@@ -799,13 +781,13 @@ class Column(object):
         >>> data = col[ ['id','flux'] ][ rows ]
 
     Indexes on columns:
-        If the numpydb package is available, you can create indexes on 
+        If the numpydb package is available, you can create indexes on
         columns and perform fast searches.
 
         # create the index
         >>> col.create_index()
 
-        # get indices for some range.  Can also do 
+        # get indices for some range.  Can also do
         >>> ind = (col > 25)
         >>> ind = col.between(25,35)
         >>> ind = (col == 25)
@@ -838,10 +820,10 @@ class Column(object):
     def __init__(self, filename=None, name=None, dir=None, type=None,
                  verbose=False):
 
-        self.init(filename=filename, 
-                  name=name, dir=dir, type=type,  
+        self.init(filename=filename,
+                  name=name, dir=dir, type=type,
                   verbose=verbose)
- 
+
     def init(self, filename=None, name=None, dir=None, type=None,
              verbose=False):
         """
@@ -850,16 +832,15 @@ class Column(object):
 
         self.clear()
 
-        self.filename=filename
+        self.filename = filename
         self.name = name
         self.dir = dir
-        self.type=type
-        self.verbose=verbose
+        self.type = type
+        self.verbose = verbose
 
         # make sure we have something to work with before continuing
-        if not self.args_sufficient(filename,dir,name,type):
+        if not self.args_sufficient(filename, dir, name, type):
             return
-
 
         if self.filename is not None:
             self.init_from_filename()
@@ -870,8 +851,7 @@ class Column(object):
             self.init_rec()
 
         if self.verbose:
-            stdout.write(self.__repr__())
-            stdout.write('\n')
+            print(self.__repr__())
 
         # get info for index if it exists
         self.init_index()
@@ -881,7 +861,7 @@ class Column(object):
         Just reload the metadata and memory map for this column
         """
         if self.verbose:
-            stdout.write("Reloading column metadata for: %s\n" % self.name)
+            print('Reloading column metadata for: %s' % self.name)
         self.init(filename=self.filename, verbose=self.verbose)
 
     def clear(self):
@@ -889,27 +869,27 @@ class Column(object):
         Clear out all the metadata for this column.
         """
         self.filename = None
-        self.name=None
-        self.dir=None
-        self.type=None
-        self.verbose=False
-        self.size=-1
-        self.meta=None
-        self.dtype=None
+        self.name = None
+        self.dir = None
+        self.type = None
+        self.verbose = False
+        self.size = -1
+        self.meta = None
+        self.dtype = None
 
-        self.have_index=False
-        self.index_dtype=None
+        self.have_index = False
+        self.index_dtype = None
 
     def init_index(self):
         """
         If index file exists, load some info
         """
-        index_fname=self.index_filename()
+        index_fname = self.index_filename()
         if os.path.exists(index_fname):
-            self.have_index=True
-            db=numpydb.NumpyDB(index_fname)
+            self.have_index = True
+            db = numpydb.NumpyDB(index_fname)
             # for the numerical indices
-            self.index_dtype=db.data_dtype()
+            self.index_dtype = db.data_dtype()
             db.close()
 
     def index_filename(self, tempdir=None):
@@ -917,15 +897,14 @@ class Column(object):
             return None
 
         # remove the final extension
-        index_fname='.'.join( self.filename.split('.')[0:-1] )
+        index_fname = '.'.join(self.filename.split('.')[0:-1])
         index_fname = index_fname+'__index.db'
 
         if tempdir is not None:
             bname = os.path.basename(index_fname)
-            index_fname = os.path.join(tempdir,bname)
+            index_fname = os.path.join(tempdir, bname)
 
         return index_fname
-
 
     def has_index(self):
         """
@@ -933,7 +912,7 @@ class Column(object):
         """
         return self.have_index
 
-    def create_index(self, index_dtype='i4', force=False, 
+    def create_index(self, index_dtype='i4', force=False,
                      tempdir=None, verbose=False, db_verbose=0):
         """
         Class:
@@ -991,17 +970,23 @@ class Column(object):
 
         # make sure we can create
         self._verify_db_available('create')
-        
+
         # set up file name and data type info
-        index_fname=self.index_filename(tempdir=tempdir)
+        index_fname = self.index_filename(tempdir=tempdir)
 
         key_dtype = self.dtype.descr[0][1]
 
         # basic create
         if self.verbose or verbose:
-            stdout.write("Creating index for column '%s'\n" % self.name)
-            stdout.write("    db file: '%s'\n" % index_fname)
-        numpydb.create(index_fname, key_dtype, index_dtype, verbosity=db_verbose)
+            print("Creating index for column '%s'" % self.name)
+            print("    db file: '%s'" % index_fname)
+
+        numpydb.create(
+            index_fname,
+            key_dtype,
+            index_dtype,
+            verbosity=db_verbose,
+        )
 
         # this reloads metadata for column, so we know the index file
         # exists (if not using a temp file)
@@ -1010,19 +995,24 @@ class Column(object):
         # Write the data to the index.  We should do this in chunks of,
         # say, 100 MB or something
         data = self.read()
-        indices=numpy.arange(data.size, dtype=index_dtype)
+        indices = np.arange(data.size, dtype=index_dtype)
 
         # note sending filename= will prevent calling _verify_db_available
         # which is good since we may be using a temp file
-        self._write_to_index(data, indices, filename=index_fname, verbose=db_verbose)
+        self._write_to_index(
+            data,
+            indices,
+            filename=index_fname,
+            verbose=db_verbose,
+        )
         del data
 
         if tempdir is not None:
             # move to the final destination
-            final_fname=self.index_filename()
+            final_fname = self.index_filename()
             import shutil
             if self.verbose or verbose:
-                stdout.write("    Moving to final destination: '%s'\n" % final_fname)
+                print("    Moving to final destination: '%s'" % final_fname)
             shutil.move(index_fname, final_fname)
 
         self.reload()
@@ -1035,7 +1025,7 @@ class Column(object):
         """
         if self.filename is not None:
             if self.verbose:
-                stdout.write("Initializing from file: %s\n" % self.filename)
+                print("Initializing from file: %s" % self.filename)
             self.name = self.extract_name()
             self.type = self.extract_type()
         else:
@@ -1052,14 +1042,11 @@ class Column(object):
         if self.name is not None and self.type is not None \
                 and self.dir is not None:
             if self.verbose:
-                stdout.write("Initalizing from "
-                             "\n\tdir: %s \n\tname: %s \n\ttype: %s\n" \
-                             % (self.dir, self.name, self.type))
+                mess = "Initalizing from \n\tdir: %s \n\tname: %s \n\ttype: %s"
+                print(mess % (self.dir, self.name, self.type))
             self.filename = self.create_filename()
         else:
             raise ValueError("You must set dir,name,type to use this function")
-
-
 
     def init_rec(self):
         """
@@ -1074,8 +1061,7 @@ class Column(object):
         self.meta = sfile.read_header(self.filename)
         self.size = self.meta['_SIZE']
         descr = self.meta['_DTYPE']
-        self.dtype=numpy.dtype(descr)
-
+        self.dtype = np.dtype(descr)
 
     def __getitem__(self, arg):
         """
@@ -1091,15 +1077,12 @@ class Column(object):
         """
 
         if self.type == 'rec':
-            sf=sfile.SFile(self.filename)
-            data = sf[arg]
-            sf.close()
+            with sfile.SFile(self.filename) as sf:
+                data = sf[arg]
         elif self.type == 'col':
-            sf=sfile.SFile(self.filename)
-            name=sf.dtype.names[0]
-            data = sf[name][arg]
-            data = data[name]
-            sf.close()
+            with sfile.SFile(self.filename) as sf:
+                name = sf.dtype.names[0]
+                data = sf[name][arg]
         else:
             raise RuntimeError("Only support slices for 'rec' and 'col' types")
         return data
@@ -1112,7 +1095,7 @@ class Column(object):
         Purpose:
             Read data from a column, possibly a subset or a memory map.
         Calling Sequence:
-            read(rows=, columns=, fields=, 
+            read(rows=, columns=, fields=,
                  getmeta=False, memmap=False, reduce=True)
 
         Keywords:
@@ -1121,24 +1104,30 @@ class Column(object):
                 rec type fields that themselves have fields internally.
             fields: same as columns keyword.
             getmeta: Return a tuple (data,metadata)
-            memmap: Get a memory map instead of the data.  Must be 
+            memmap: Get a memory map instead of the data.  Must be
                 supported by the data type.
             reduce: Ensure that rec type results that do not contain multiple
                 fields get reduced to a simple array; the name is removed so
                 it no longer appears to be a rec array.  Default True
         """
-        if self.type == 'rec' or self.type=='col':
-            sf=sfile.SFile(self.filename)
+        if self.type == 'rec' or self.type == 'col':
+            sf = sfile.SFile(self.filename)
             if memmap:
                 return sf.get_memmap()
             else:
-                data = sf.read(rows=rows, columns=columns, fields=fields,
-                               header=getmeta, reduce=reduce)
-                sf.close()
+                with sfile.SFile(self.filename) as sf:
+                    data = sf.read(
+                        rows=rows,
+                        columns=columns,
+                        fields=fields,
+                        header=getmeta,
+                        reduce=reduce,
+                    )
                 return data
 
         elif self.type == 'json':
             return read_json(self.filename)
+
         else:
             raise RuntimeError("Only support 'col' and 'rec' types")
 
@@ -1155,14 +1144,12 @@ class Column(object):
             Currently only for "col" and "rec" types
 
         """
-        if self.type == 'rec' or self.type=='col':
-            sf=sfile.SFile(self.filename)
-            h = sf.read_header()
-            sf.close()
+        if self.type == 'rec' or self.type == 'col':
+            with sfile.SFile(self.filename) as sf:
+                h = sf.read_header()
             return h
         else:
             raise RuntimeError("Only support 'col' and 'rec' types")
-
 
     def match(self, values, select='values'):
         """
@@ -1175,13 +1162,13 @@ class Column(object):
             Find all entries that match the requested value or values and
             return a query index of the result.  The requested values can be a
             scalar, sequence, or array, and must be convertible to the key data
-            type.  
+            type.
 
             The returned data is by default a columns.Index containing the
             indices (the "values" of the key-value database) for the matches,
             which can be combined with other queries to produce a final result,
             but this can be controlled through the use of keywords.
-            
+
 
             Note if you just want to match a single value, you can also use
             the == operator.
@@ -1202,8 +1189,8 @@ class Column(object):
             # simply equal the requested values
             >>> keys = col.match(values, select='keys')
 
-            # Extract both keys and values for the range of keys.  The data part
-            # is not a Index object in this case.
+            # Extract both keys and values for the range of keys.  The data
+            # part is not a Index object in this case.
             >>> keys,data = col.match(values,select='both')
 
             # just return the count
@@ -1220,9 +1207,9 @@ class Column(object):
             values:
                 A scalar, sequence, or array of values to match.  All entries
                 that match any of the entered values are returned.  Must be
-                convertible to the key data type. 
+                convertible to the key data type.
 
-                Note, these values must be *unique*, otherwise you'll get 
+                Note, these values must be *unique*, otherwise you'll get
                 duplicates returned.
 
         Keywords:
@@ -1239,14 +1226,14 @@ class Column(object):
         """
 
         self._verify_db_available('read')
-        db = numpydb.Open( self.index_filename() )
+        db = numpydb.Open(self.index_filename())
 
-        verbosity=0
+        verbosity = 0
         if self.verbose:
-            verbosity=1
+            verbosity = 1
         db.set_verbosity(verbosity)
 
-        result = db.match(values,select=select)
+        result = db.match(values, select=select)
         db.close()
 
         if select == 'both':
@@ -1259,29 +1246,29 @@ class Column(object):
     # one-sided range operators
     def __gt__(self, val):
         self._verify_db_available('read')
-        db = numpydb.Open( self.index_filename() )
-        i = Index(db.range1(val,'>'))
+        db = numpydb.Open(self.index_filename())
+        i = Index(db.range1(val, '>'))
         db.close()
         return i
 
     def __ge__(self, val):
         self._verify_db_available('read')
-        db = numpydb.Open( self.index_filename() )
-        i = Index( db.range1(val,'>=') )
+        db = numpydb.Open(self.index_filename())
+        i = Index(db.range1(val, '>='))
         db.close()
         return i
 
     def __lt__(self, val):
         self._verify_db_available('read')
-        db = numpydb.Open( self.index_filename() )
-        i = Index( db.range1(val,'<') )
+        db = numpydb.Open(self.index_filename())
+        i = Index(db.range1(val, '<'))
         db.close()
         return i
 
     def __le__(self, val):
         self._verify_db_available('read')
-        db = numpydb.Open( self.index_filename() )
-        i = Index( db.range1(val,'<=') )
+        db = numpydb.Open(self.index_filename())
+        i = Index(db.range1(val, '<='))
         db.close()
         return i
 
@@ -1289,85 +1276,43 @@ class Column(object):
     def __eq__(self, val):
         return self.match(val)
 
-    def __ne__(self,val):
+    def __ne__(self, val):
         self._verify_db_available('read')
-        db = numpydb.Open( self.index_filename() )
-        ind1 = Index( db.range1(val,'<') )
-        ind2 = Index( db.range1(val,'>') )
+        db = numpydb.Open(self.index_filename())
+        ind1 = Index(db.range1(val, '<'))
+        ind2 = Index(db.range1(val, '>'))
         ind = ind1 | ind2
         db.close()
         return ind
 
-
     def between(self, low, high, interval='[]', select='values'):
         """
-        Class:
-            Column
-        Method:
-            between()
-            Also known as range()
-        Purpose:
 
-            Find all entries in the range low,high, inclusive by default.  The
-            returned data is by default a columns.Index containing the indices
-            (the "values" of the key-value database) for the matches, which can
-            be combined with other queries to produce a final result, but this
-            can be controlled through the use of keywords.
+        Find all entries in the range low,high, inclusive by default.  The
+        returned data is by default a columns.Index containing the indices (the
+        "values" of the key-value database) for the matches, which can be
+        combined with other queries to produce a final result, but this can be
+        controlled through the use of keywords.
 
-            Using between() requires that an index was created for this column
-            using create_index()
+        Using between() requires that an index was created for this column
+        using create_index()
 
-        Calling Sequence:
-            result=between(low,high,interval='[]', select='values')
-            result=range(low,high,interval='[]', select='values')
+        Parameters
+        ----------
+        low:
+            the lower end of the range.  Must be convertible to the key data
+            type.
+        high:
+            the upper end of the range.  Must be convertible to the key data
+            type.
+        interval: str, optional
+            '[]': Closed on both sides
+            '[)': Closed on the lower side, open on the high side.
+            '(]': Open on the lower side, closed on the high side
+            '()': Open on both sides.
 
-            # Extract the indices for values in the given range
-            >>> query_index = col.between(low,high)
-
-            # Extract from different types of intervals
-            >>> values = db.between(low, high,'[]')
-            >>> values = db.between(low, high,'[)')
-            >>> values = db.between(low, high,'(]')
-            >>> values = db.between(low, high,'()')
-
-            # combine with the results of another query and extract the
-            # index array
-            >>> ind = columns.where( (col1.between(low,high)) & (col2 == value2) )
-
-            # Extract the key values for the range
-            >>> keys = col.between(low,high,select='keys')
-
-            # Extract both keys and values for the range of keys
-            >>> keys,indices = db.between(low,high,select='both')
-
-            # just return the count
-            >>> count = db.between(low,high,select='count')
-
-            # ways to get the underlying index array instead of an Index. The
-            # where() function simply returns .array().  Note you can use an
-            # Index just like a normal array, but it has different & and |
-            # properties
-
-            >>> ind=col.between(low,high).array()
-            >>> ind=columns.where( col.between(low,high) )
-
-        Inputs:
-            low: 
-                the lower end of the range.  Must be convertible to the key data
-                type.
-
-            high: 
-                the upper end of the range.  Must be convertible to the key data
-                type.
-
-        Keyword Inputs:
-            interval:
-                '[]': Closed on both sides
-                '[)': Closed on the lower side, open on the high side.
-                '(]': Open on the lower side, closed on the high side
-                '()': Open on both sides.
-
-            select: Which data to return.  Can be
+        select: str, optional
+            Which data to return.  Can be
                 'values': Return the values of the key-value pairs, which
                     here is a set of indices. (Default)
                 'keys': Return the keys of the key-value pairs.
@@ -1377,16 +1322,49 @@ class Column(object):
             Default behaviour is to return a Index of the key-value pairs in
             the database.
 
+        examples
+        ---------
 
+        result=between(low,high,interval='[]', select='values')
 
+        # Extract the indices for values in the given range
+        >>> query_index = col.between(low,high)
+
+        # Extract from different types of intervals
+        >>> values = db.between(low, high,'[]')
+        >>> values = db.between(low, high,'[)')
+        >>> values = db.between(low, high,'(]')
+        >>> values = db.between(low, high,'()')
+
+        # combine with the results of another query and extract the
+        # index array
+        >>> ind = columns.where( (col1.between(low,high)) &
+                                 (col2 == value2) )
+
+        # Extract the key values for the range
+        >>> keys = col.between(low,high,select='keys')
+
+        # Extract both keys and values for the range of keys
+        >>> keys,indices = db.between(low,high,select='both')
+
+        # just return the count
+        >>> count = db.between(low,high,select='count')
+
+        # ways to get the underlying index array instead of an Index. The
+        # where() function simply returns .array().  Note you can use an
+        # Index just like a normal array, but it has different & and |
+        # properties
+
+        >>> ind=col.between(low,high).array()
+        >>> ind=columns.where( col.between(low,high) )
         """
 
         self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename(),verbose=self.verbose)
+        db = numpydb.Open(self.index_filename(), verbose=self.verbose)
 
-        verbosity=0
+        verbosity = 0
         if self.verbose:
-            verbosity=1
+            verbosity = 1
         db.set_verbosity(verbosity)
 
         result = db.between(low, high, interval, select=select)
@@ -1399,7 +1377,6 @@ class Column(object):
 
         return result
 
-
     def write(self, data, create=False, meta=None):
         """
         Method:
@@ -1411,15 +1388,15 @@ class Column(object):
         Calling Sequence:
             write(data, create=False, meta=None)
         Inputs:
-            data: 
+            data:
                 Data to write.  If the column data already exists, data may be
                 appended for 'rec' type columns.  The data types in that case
                 must match exactly.
 
         Keywords:
             create: If True, delete the existing data and write a new
-                file. Default False.  
-            meta: 
+                file. Default False.
+            meta:
                 Add this metadata to the header of the file if this is
                 supported by the file type.  Will normally only be written if
                 this is the creation of the file.
@@ -1438,6 +1415,9 @@ class Column(object):
             raise RuntimeError("Currently only support rec types")
 
     def write_json(self, data):
+        """
+        write json data
+        """
         write_json(data, self.filename)
 
     def write_rec(self, data, create=False, meta=None):
@@ -1456,7 +1436,7 @@ class Column(object):
                 and create=False, the data types must match exactly.
         Keywords:
             create: If True, delete the existing data and write a new
-                file. Default False.  
+                file. Default False.
             meta: Add this metadata to the header of the file.  Will only
                 be written if this is the creation of the file. Note
                 the number of rows is updated during appending.
@@ -1466,10 +1446,8 @@ class Column(object):
         if create:
             self.delete()
 
-        #data = esutil.numpy_util.to_native(data_in)
-
         # make sure the data type of the input equals that of the column
-        if not isinstance(data, numpy.ndarray):
+        if not isinstance(data, np.ndarray):
             raise ValueError("For rec columns data must be a numpy array")
 
         if data.dtype.names is None:
@@ -1483,17 +1461,14 @@ class Column(object):
                                  "\n\tcolumn dtype: %s"
                                  "\n\tinput dtype: %s" % types)
 
-
         if os.path.exists(self.filename):
-            mode='r+'
+            mode = 'r+'
         else:
-            mode='w'
+            mode = 'w'
 
-        sf=sfile.SFile(self.filename, mode)
-
-        # header will only be written on creation
-        sf.write(data, header=meta)
-        sf.close()
+        with sfile.SFile(self.filename, mode) as sf:
+            # header will only be written on creation
+            sf.write(data, header=meta)
 
         self.reload()
 
@@ -1515,7 +1490,7 @@ class Column(object):
 
         Keywords:
             create: If True, delete the existing data and write a new
-                file. Default False.  
+                file. Default False.
             meta: Add this metadata to the header of the file.  Will only
                 be written if this is the creation of the file. Note
                 the number of rows is updated during appending.
@@ -1526,10 +1501,8 @@ class Column(object):
         if create:
             self.delete()
 
-        #data = esutil.numpy_util.to_native(data_in)
-
         # make sure the data type of the input equals that of the column
-        if not isinstance(data, numpy.ndarray):
+        if not isinstance(data, np.ndarray):
             raise ValueError("For 'col' columns data must be a numpy array")
 
         if data.dtype.names is None:
@@ -1562,27 +1535,31 @@ class Column(object):
                                  "\n\tcolumn dtype: %s"
                                  "\n\tinput dtype: %s" % types)
         if os.path.exists(self.filename):
-            mode='r+'
+            mode = 'r+'
         else:
-            mode='w'
+            mode = 'w'
 
-        sf=sfile.SFile(self.filename, mode)
-
-        # header will only be written on creation
-        sf.write(data, header=meta)
-        sf.close()
+        with sfile.SFile(self.filename, mode) as sf:
+            # header will only be written on creation
+            sf.write(data, header=meta)
 
         self.reload()
 
-        if self.have_index: 
+        if self.have_index:
             # create the new indices
-            new_indices=numpy.arange(self.size-data.size, 
-                                     self.size, 
-                                     dtype=self.index_dtype)
+            new_indices = np.arange(
+                self.size-data.size,
+                self.size,
+                dtype=self.index_dtype,
+            )
             self._write_to_index(data, new_indices)
 
-    def _write_to_index(self, data, indices, cache=None, filename=None, verbose=False):
-
+    def _write_to_index(self,
+                        data,
+                        indices,
+                        cache=None,
+                        filename=None,
+                        verbose=False):
 
         if filename is None:
             self._verify_db_available('write')
@@ -1590,23 +1567,25 @@ class Column(object):
         else:
             index_fname = filename
 
-        db=numpydb.NumpyDB()
+        db = numpydb.NumpyDB()
         if cache is not None:
-            if not isinstance(cache,(tuple,list)):
-                raise ValueError("cache must be a sequence [gbytes,bytes,ncache]")
-            gbytes = int( cache[0] )
-            bytes = int( cache[1] )
-            ncache = int( cache[2] )
-            db.set_cachesize(gbytes,bytes,ncache)
+            if not isinstance(cache, (tuple, list)):
+                raise ValueError('cache must be a sequence '
+                                 '[gbytes,bytes,ncache]')
+            gbytes = int(cache[0])
+            bytes = int(cache[1])
+            ncache = int(cache[2])
+            db.set_cachesize(gbytes, bytes, ncache)
+
         db.open(index_fname, 'r+')
 
-        verbosity=0
+        verbosity = 0
         if self.verbose or verbose:
-            verbosity=1
+            verbosity = 1
         db.set_verbosity(verbosity)
 
         if self.verbose:
-            stdout.write("Writing data to index for column '%s'\n" % self.name)
+            print("Writing data to index for column '%s'" % self.name)
         # if the sent data has names, use the name of
         # this column
         if data.dtype.names is not None:
@@ -1624,10 +1603,12 @@ class Column(object):
             raise ValueError("Column type must be 'col' for indexing")
 
         # for reading and writing, the file must already exist
-        if action == 'read' or action=='write':
+        if action == 'read' or action == 'write':
             if not self.have_index:
-                raise RuntimeError("No index file found for "
-                                   "column '%s'.  Use create_index()" % self.name)
+                raise RuntimeError(
+                    "No index file found for "
+                    "column '%s'.  Use create_index()" % self.name
+                )
             index_fname = self.index_filename()
             if not os.path.exists(index_fname):
                 raise RuntimeError("index file does not "
@@ -1645,32 +1626,29 @@ class Column(object):
         if self.filename is None:
             return
         if os.path.exists(self.filename):
-            stdout.write("Removing data for column: %s\n" % self.name)
+            print("Removing data for column: %s" % self.name)
             os.remove(self.filename)
 
         # remove index if it exists
         self.delete_index()
 
-
-        stdout.write("Deleting metadata for column: %s\n" % self.name)
-        self.size=0
-        self.meta=None
-        self.dtype=None
-
+        print("Deleting metadata for column: %s" % self.name)
+        self.size = 0
+        self.meta = None
+        self.dtype = None
 
     def delete_index(self):
         """
         Delete the index for this column if it exists
         """
         if self.have_index:
-            index_fname=self.index_filename()
+            index_fname = self.index_filename()
             if os.path.exists(index_fname):
-                stdout.write("Removing index for column: %s\n" % self.name)
+                print("Removing index for column: %s" % self.name)
                 os.remove(index_fname)
 
-        self.have_index=False
-        self.index_dtype=None
-
+        self.have_index = False
+        self.index_dtype = None
 
     def get_named_view(self, data):
         typestring = data.dtype.descr[0][1]
@@ -1680,22 +1658,16 @@ class Column(object):
             # I'm going to have to make a copy
             if len(shape) == 1:
                 # this is just easier to read
-                shape=shape[0]
+                shape = shape[0]
             dtype_use = [(self.name, typestring, shape)]
             size = data.shape[0]
-            newdata = numpy.zeros(size,dtype=dtype_use)
+            newdata = np.zeros(size, dtype=dtype_use)
             newdata[self.name] = data
         else:
             # Can just re-view it
             dtype_use = [(self.name, typestring)]
             newdata = data.view(dtype_use)
 
-        crap="""
-        print 'data dtype: ',data.dtype.descr
-        print 'data.shape: ',data.shape
-        print 'data[0].shape: ',data[0].shape
-        print 'new dtype: ',dtype_use
-        """
         return newdata
 
     def get_repr_list(self, full=False):
@@ -1704,11 +1676,10 @@ class Column(object):
         Get a list of metadat for this column.
 
         """
-        indent='  '
-
+        indent = '  '
 
         if not full:
-            s=''
+            s = ''
             if self.name is not None:
                 s += 'Column: %-15s' % self.name
             if self.type is not None:
@@ -1718,9 +1689,9 @@ class Column(object):
             if self.name is not None:
                 s += ' has index: %s' % self.have_index
 
-            s=[s]
+            s = [s]
         else:
-            s=[]
+            s = []
             if self.name is not None:
                 s += ['"'+self.name+'"']
 
@@ -1735,10 +1706,9 @@ class Column(object):
                 s += ['has index: %s' % self.have_index]
 
             if self.dtype is not None:
-                drepr=pprint.pformat(self.dtype.descr)
+                drepr = pprint.pformat(self.dtype.descr)
                 drepr = drepr.split('\n')
                 drepr = ['  '+d for d in drepr]
-                #drepr = '  '+drepr.replace('\n','\n  ')
                 s += ["dtype: "] + drepr
 
             if self.meta is not None:
@@ -1751,7 +1721,6 @@ class Column(object):
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
 
-
         return s
 
     def __repr__(self):
@@ -1761,7 +1730,7 @@ class Column(object):
         s = self.get_repr_list(full=True)
         s = "\n".join(s)
         return s
-        
+
     def extract_name(self):
         """
         Extract the column name from the file name
@@ -1769,7 +1738,7 @@ class Column(object):
         if self.filename is None:
             raise ValueError("You haven't specified a filename yet")
         bname = os.path.basename(self.filename)
-        name = '.'.join( bname.split('.')[0:-1] )
+        name = '.'.join(bname.split('.')[0:-1])
         return name
 
     def extract_type(self):
@@ -1792,25 +1761,37 @@ class Column(object):
                              "has not been set")
         return os.path.join(self.dir, self.name+'.'+self.type)
 
-        
     def meta2string(self, strip=True):
         if self.meta is None:
             return ''
+
         newd = {}
 
-        skipkeys=['_DTYPE','_SIZE','_NROWS','_HAS_FIELDS','_DELIM','_SHAPE','_VERSION']
+        skipkeys = [
+            '_DTYPE',
+            '_SIZE',
+            '_NROWS',
+            '_HAS_FIELDS',
+            '_DELIM',
+            '_SHAPE',
+            '_VERSION',
+        ]
         for key in self.meta:
             if strip:
                 if key not in skipkeys:
                     newd[key] = self.meta[key]
             else:
-                news[key] = self.meta[key]
+                newd[key] = self.meta[key]
 
         if len(newd) == 0:
             return ''
         return pprint.pformat(newd)
 
-    def args_sufficient(self,filename=None, dir=None, name=None, type=None):
+    def args_sufficient(self,
+                        filename=None,
+                        dir=None,
+                        name=None,
+                        type=None):
         """
 
         Determine if the inputs are enough for initialization
@@ -1823,8 +1804,7 @@ class Column(object):
             return True
 
 
-
-class Index(numpy.ndarray):
+class Index(np.ndarray):
     """
     Package:
         columns
@@ -1832,14 +1812,14 @@ class Index(numpy.ndarray):
         Index
     Purpose:
         Represent an index into a database.  This object inherits from
-        normal python arrays, but behaves differently under the "&" 
+        normal python arrays, but behaves differently under the "&"
         and "|" operators.  These return the intersection or union of
         values in two Index objects.
 
     Methods:
         The "&" and "|" operators are defined.
 
-        array(): Return an ordinary numpy.ndarray view of the Index.
+        array(): Return an ordinary np.ndarray view of the Index.
 
     Examples:
         >>> i1=Index([3,4,5])
@@ -1851,47 +1831,40 @@ class Index(numpy.ndarray):
 
     """
     def __new__(self, init_data, copy=False):
-        #return numpy.ndarray.__new__(self,init_data, ndmin=1, copy=copy)        
-        #self._data=numpy.array(init_data,ndmin=1,copy=False)
-
-        # now convert data to an array
-        arr = numpy.array(init_data, copy=copy)
-        ndim = arr.ndim
+        arr = np.array(init_data, copy=copy)
         shape = arr.shape
 
-        ret = numpy.ndarray.__new__(self, shape, arr.dtype,
-                                    buffer=arr)
+        ret = np.ndarray.__new__(self, shape, arr.dtype,
+                                 buffer=arr)
         return ret
 
     def array(self):
-        return self.view(numpy.ndarray)
+        return self.view(np.ndarray)
 
     def __and__(self, ind):
         # take the intersection
-        if isinstance(ind,Index):
-            #w=numpy.intersect1d_nu(self._data, ind._data)
-            w=numpy.intersect1d(self, ind)
+        if isinstance(ind, Index):
+            w = np.intersect1d(self, ind)
         else:
             raise ValueError("comparison index must be an Index object")
         return Index(w)
 
     def __or__(self, ind):
         # take the unique union
-        if isinstance(ind,Index):
-            w=numpy.union1d(self, ind)
+        if isinstance(ind, Index):
+            w = np.union1d(self, ind)
         else:
             raise ValueError("comparison index must be an Index object")
 
         return Index(w)
 
     def __repr__(self):
-        rep=numpy.ndarray.__repr__(self)
-        rep=rep.replace('array','Index')
+        rep = np.ndarray.__repr__(self)
+        rep = rep.replace('array', 'Index')
         return rep
 
 
-
-def where( query_index ):
+def where(query_index):
     """
     Package:
         columns
@@ -1905,7 +1878,7 @@ def where( query_index ):
     Calling Sequence:
         indices = where(query_index)
     Inputs:
-        query_index:  
+        query_index:
             A Index object generated by using operators such as "==" on an
             indexed column object.  The Column methods between and match also
             return Index objects.  Index objects can be combined with
@@ -1920,7 +1893,7 @@ def where( query_index ):
 
         >>> import columns
         >>> c=columns.Columns(column_dir)
-        >>> ind=columns.where(  (c['type'] == 'event') 
+        >>> ind=columns.where(  (c['type'] == 'event')
                               & (c['rate'].between(10,20)) )
 
         # now read some data from a set of columns using these
@@ -1935,67 +1908,28 @@ def where( query_index ):
     return query_index.array()
 
 
-
-
 def read_json(fname):
     """
-    obj = json_util.read(file):  
-
-    Read from the file name or opened file object. If the faster cjson is
-    available, an attempt to use it is made.  If this fails (cjson is known
-    to fail in certain corner cases) ordinary json is tried.  
+    wrapper to read json
     """
 
-    if not have_json and not have_cjson:
-        raise ImportError("Neither cjson or json could be imported")
-
-    input_fileobj=False
-    if isinstance(fname, file):
-        input_fileobj=True
-        fobj=fname
-    else:
-        fobj=open(fname)
-
-    if have_cjson:
-        try:
+    with open(fname) as fobj:
+        if have_cjson:
             data = cjson.decode(fobj.read())
-        except: 
-            # fall back to using json
-            fobj.seek(0)
+        else:
             data = json.load(fobj)
-    else:
-        data = json.load(fobj)
-
-    if not input_fileobj:
-        fobj.close()
     return data
+
 
 def write_json(obj, fname, pretty=True):
     """
-    json_util.write(obj, fname, pretty=True)
-
-    Write the object to a fson file.  The "file" input can be either a file
-    name or opened file object.  Ordinary json is the default since it
-    supports human readable writing.  Sending pretty=False to the write
-    program will force use of cjson if it is available.
+    wrapper for writing json
     """
 
-    if not have_json and not have_cjson:
-        raise ImportError("Neither cjson or json could be imported")
+    with open(fname, 'w') as fobj:
 
-    input_fileobj=False
-    if isinstance(fname,file):
-        input_fileobj=True
-        fobj=fname
-    else:
-        fobj=open(fname,'w')
-    
-    if not pretty and have_cjson:
-        jstring = cjson.encode(obj)
-        fobj.write(jstring)
-    else:
-        json.dump(obj, fobj, indent=1, separators=(',', ':'))
-
-    if not input_fileobj:
-        fobj.close()
-
+        if not pretty and have_cjson:
+            jstring = cjson.encode(obj)
+            fobj.write(jstring)
+        else:
+            json.dump(obj, fobj, indent=1, separators=(',', ':'))
