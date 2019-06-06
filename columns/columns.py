@@ -1,49 +1,16 @@
-"""
-
-TODO:
-
-    Resolve dependencies in esutil/recfile/numpydb
-
-    Implement modes of opening, e.g. 'r', 'a', 'w' or whatever.  Only
-    support modifying if appropriate mode is in place.  Default to 'r'.
-
-    Hide the attributes for the classes so they won't accidentally
-    get written. Either as _name or in a dict.  Give access through
-    functions.
-
-
-    Deal with 'rec' types.  There is a way to have nested rec arrays, but
-    I'm not sure how things will play out.
-
-    Type checking when appending.
-
-    Support other types of columns.  Can use pickle for this.  Only allow
-    loading these into dict.
-
-
-
-"""
 import os
 from glob import glob
 import pprint
-
+import json
 import numpy as np
 import fitsio
-from esutil import sfile
-from esutil.ostools import expand_path
+import shutil
 
 try:
     import numpydb
     havedb = True
 except ImportError:
     havedb = False
-
-import json
-try:
-    import cjson
-    have_cjson = True
-except ImportError:
-    have_cjson = False
 
 
 class Columns(dict):
@@ -97,7 +64,7 @@ class Columns(dict):
         >>> c['id']
         Column:
           "id"
-          filename: ./id.col
+          filename: ./id.fits
           type: col
           size: 64348146
           has index: False
@@ -175,7 +142,7 @@ class Columns(dict):
 
     """
     def __init__(self, dir=None, verbose=False):
-        self.types = ['col', 'rec', 'idx', 'sort', 'cols', 'json']
+        self.types = ['fits', 'idx', 'sort', 'cols', 'json']
         self.verbose = verbose
         self.init(dir=dir)
 
@@ -185,16 +152,16 @@ class Columns(dict):
         exists.  If it exists and contains column files their metadata will be
         loaded.
         """
-        self.set_dir(dir)
+        self._set_dir(dir)
         if self.dir_exists():
             self.load()
 
-    def set_dir(self, dir=None):
+    def _set_dir(self, dir=None):
         """
         Set the database directory, creating if none exists.
         """
         if dir is not None:
-            dir = expand_path(dir)
+            dir = os.path.expandvars(dir)
 
         self.dir = dir
         if self.verbose and self.dir is not None:
@@ -218,17 +185,21 @@ class Columns(dict):
                                  "name: '%s'" % self.dir)
             return True
 
-    def create(self):
+    def create(self, clobber=False):
         """
-        Create the database directory if it does not yet exist.
+        Create the database directory
         """
-        if not os.path.exists(self.dir):
-            os.makedirs(self.dir)
-        else:
-            if self.verbose:
-                print('Directory already exists:', self.dir)
+        exists = os.path.exists(self.dir)
 
-    def dirbase(self):
+        if exists and not clobber:
+            raise RuntimeError("directory '%s' already exists" % self.dir)
+
+        elif exists and clobber:
+            shutil.rmtree(self.dir)
+
+        os.makedirs(self.dir)
+
+    def _dirbase(self):
         """
         Return the dir basename minus any extension
         """
@@ -296,7 +267,7 @@ class Columns(dict):
         coldir = Columns(dir, verbose=self.verbose)
         if not os.path.exists(dir):
             coldir.create()
-        name = coldir.dirbase()
+        name = coldir._dirbase()
         self.clear(name)
         self[name] = coldir
 
@@ -326,7 +297,7 @@ class Columns(dict):
         """
         return list(self.keys())
 
-    def get_repr_list(self):
+    def _get_repr_list(self):
         """
         Get a list of metadata for this columns directory and it's
         columns
@@ -334,7 +305,7 @@ class Columns(dict):
         indent = '  '
         s = []
         if self.dir is not None:
-            dbase = self.dirbase()
+            dbase = self._dirbase()
             s += [dbase]
             s += ['dir: '+self.dir]
             if not self.dir_exists():
@@ -361,7 +332,7 @@ class Columns(dict):
                     else:
                         s += ['  %-15s %5s' % (c.name, c.type)]
 
-                    if c.type == 'col':
+                    if c.type == 'fits':
                         c_dtype = c.dtype.descr[0][1]
                     else:
                         c_dtype = ''
@@ -387,7 +358,7 @@ class Columns(dict):
         """
         The columns representation to the world
         """
-        s = self.get_repr_list()
+        s = self._get_repr_list()
         s = '\n'.join(s)
         return s
 
@@ -406,11 +377,11 @@ class Columns(dict):
 
     def write_column(self, name, data, type=None, create=False, meta=None):
         """
+        Write data to a column.
 
-        Write data to a column. If the column does not already exist, it is
-        created.  If the type is 'rec' and the column exists, the data are
-        appended unless create=True.  For other types, the data are always
-        created.
+        If the column does not already exist, it is created.  If the type is
+        'fits' and the column exists, the data are appended unless create=True.
+        For other types, the data are always created.
 
         """
 
@@ -420,14 +391,11 @@ class Columns(dict):
         if name not in self:
             if type is None:
                 if isinstance(data, np.ndarray):
-                    if data.dtype.names is None:
-                        type = 'col'
-                    else:
-                        type = 'rec'
+                    type = 'fits'
                 elif isinstance(data, dict):
                     type = 'json'
                 else:
-                    raise ValueError("only support rec and json types for now")
+                    raise ValueError("only support fits and json types for now")
             self.load_column(name=name, type=type)
 
         self[name].write(data, meta=meta)
@@ -459,11 +427,11 @@ class Columns(dict):
         self[name].delete()
         self.reload()
 
-    def from_fits(self,
-                  filename,
-                  create=False,
-                  ext=1,
-                  lower=False):
+    def fromfile(self,
+                 filename,
+                 create=False,
+                 ext=1,
+                 lower=False):
         """
         Write columns to the database, reading from the input fits file.
         Uses chunks of 100MB
@@ -484,15 +452,6 @@ class Columns(dict):
         with fitsio.FITS(filename, lower=lower) as fits:
             hdu = fits[ext]
             self._from_slicer(filename, hdu, create)
-
-    def from_rec(self, filename, create=False):
-        """
-        Load the columns of a rec file into separate column files, breaking
-        it up into chunks of ~100 MB
-        """
-
-        with sfile.SFile(filename, 'r') as sf:
-            self._from_slicer(filename, sf, create)
 
     def _from_slicer(self, filename, slicer, create):
 
@@ -655,12 +614,11 @@ class Columns(dict):
         for colname in columns:
             if colname not in self:
                 raise ValueError("Column '%s' not found" % colname)
-            meta = self[colname].meta
 
-            # Assume columns are not structured for now.
-            dtype.append(meta['_DTYPE'][0])
+            col = self[colname]
+            nrows[i] = col.size
+            dtype.append(col.dtype.descr[0])
 
-            nrows[i] = meta['_SIZE']
             i += 1
 
         if ncol > 1 and rows is not None:
@@ -709,16 +667,9 @@ class Columns(dict):
 
     read_columns = read
 
-    def read_column(self, colname, rows=None, getmeta=False, memmap=False,
-                    reduce=True):
+    def read_column(self, colname, rows=None, getmeta=False):
         """
         Only numpy, fixed length for now.  Eventually allow pickled columns.
-
-        if reduce=True, a simple array is returned if there are not multiple
-            fields in the data.
-
-        if reduce=False, then a structured array is returend that can be used
-        as data[colname]
         """
         if colname not in self:
             raise ValueError("Column '%s' not found" % colname)
@@ -730,12 +681,7 @@ class Columns(dict):
             else:
                 print("Reading column: '%s'" % colname)
 
-        return self[colname].read(
-            rows=rows,
-            getmeta=getmeta,
-            memmap=memmap,
-            reduce=reduce,
-        )
+        return self[colname].read(rows=rows, getmeta=getmeta)
 
 
 class Column(object):
@@ -761,7 +707,7 @@ class Column(object):
         >>> col=Column(filename='/full/path')
 
         # this one uses directory, column name, type
-        >>> col=Column(name='something', type='rec',
+        >>> col=Column(name='something', type='fits',
                        dir='/some/path/dbname.cols')
 
     Slice and item lookup:
@@ -769,7 +715,7 @@ class Column(object):
         # arrays representing a subset of rows
 
         # Note true slices and row subset other than [:] are only supported
-        # by 'col' and 'rec' types.
+        # by the 'fits' type
 
         >>> col=Column(...)
         >>> data = col[25:22]
@@ -799,8 +745,6 @@ class Column(object):
         >>> ind = col1.between(15,25) | (col2 != 66)
         >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
 
-
-
     Methods:
 
         # see docs for each method for more info
@@ -808,7 +752,7 @@ class Column(object):
         init(): Same args as construction
         clear(): Clear out all metadata for this column.
         reload(): Reload all metadat for this column.
-        read(rows=,columns=,fields=,getmeta=,memmap=,reduct=True):
+        read(rows=,columns=,fields=,getmeta=True):
             read data from column
         write(data, create=False, meta=None):
             write data to column, appending unless create=False
@@ -839,16 +783,16 @@ class Column(object):
         self.verbose = verbose
 
         # make sure we have something to work with before continuing
-        if not self.args_sufficient(filename, dir, name, type):
+        if not self._args_sufficient(filename, dir, name, type):
             return
 
         if self.filename is not None:
-            self.init_from_filename()
+            self._init_from_filename()
         elif self.name is not None:
-            self.init_from_name()
+            self._init_from_name()
 
-        if self.type == 'rec' or self.type == 'col':
-            self.init_rec()
+        if self.type == 'fits':
+            self._init_fits()
 
         if self.verbose:
             print(self.__repr__())
@@ -1017,7 +961,7 @@ class Column(object):
 
         self.reload()
 
-    def init_from_filename(self):
+    def _init_from_filename(self):
         """
 
         Initiaize this column based on the pull path filename
@@ -1026,12 +970,12 @@ class Column(object):
         if self.filename is not None:
             if self.verbose:
                 print("Initializing from file: %s" % self.filename)
-            self.name = self.extract_name()
-            self.type = self.extract_type()
+            self.name = self._extract_name()
+            self.type = self._extract_type()
         else:
             raise ValueError("You must set filename to use this function")
 
-    def init_from_name(self):
+    def _init_from_name(self):
         """
 
         Initialize this based on name.  The filename is constructed from
@@ -1044,11 +988,11 @@ class Column(object):
             if self.verbose:
                 mess = "Initalizing from \n\tdir: %s \n\tname: %s \n\ttype: %s"
                 print(mess % (self.dir, self.name, self.type))
-            self.filename = self.create_filename()
+            self.filename = self._create_filename()
         else:
             raise ValueError("You must set dir,name,type to use this function")
 
-    def init_rec(self):
+    def _init_fits(self):
         """
 
         Init as a rec type
@@ -1056,12 +1000,17 @@ class Column(object):
         """
         if self.filename is None:
             return
+
         if not os.path.exists(self.filename):
             return
-        self.meta = sfile.read_header(self.filename)
-        self.size = self.meta['_SIZE']
-        descr = self.meta['_DTYPE']
-        self.dtype = np.dtype(descr)
+
+        with fitsio.FITS(self.filename) as fits:
+            hdu = fits[1]
+            self.meta = hdu.read_header()
+            self.size = hdu.get_nrows()
+            example = hdu[0:1]
+            descr = example.dtype.descr
+            self.dtype = np.dtype(descr)
 
     def __getitem__(self, arg):
         """
@@ -1076,80 +1025,53 @@ class Column(object):
 
         """
 
-        if self.type == 'rec':
-            with sfile.SFile(self.filename) as sf:
-                data = sf[arg]
-        elif self.type == 'col':
-            with sfile.SFile(self.filename) as sf:
-                name = sf.dtype.names[0]
-                data = sf[name][arg]
+        if self.type == 'fits':
+            with fitsio.FITS(self.filename) as fits:
+                hdu = fits[1]
+                data = hdu[self.name][arg]
+            return data
         else:
-            raise RuntimeError("Only support slices for 'rec' and 'col' types")
-        return data
+            raise RuntimeError('Only support slices for fits type')
 
-    def read(self, rows=None, columns=None, fields=None, getmeta=False,
-             memmap=False, reduce=True):
+    def read(self, rows=None, getmeta=False):
         """
-        Method:
-            read
-        Purpose:
-            Read data from a column, possibly a subset or a memory map.
-        Calling Sequence:
-            read(rows=, columns=, fields=,
-                 getmeta=False, memmap=False, reduce=True)
+        read data from this column
 
-        Keywords:
-            rows: A subset of the rows to read.
-            columns: A subset of the fields to read.  Only works for
-                rec type fields that themselves have fields internally.
-            fields: same as columns keyword.
-            getmeta: Return a tuple (data,metadata)
-            memmap: Get a memory map instead of the data.  Must be
-                supported by the data type.
-            reduce: Ensure that rec type results that do not contain multiple
-                fields get reduced to a simple array; the name is removed so
-                it no longer appears to be a rec array.  Default True
+        Parameters
+        ----------
+        rows: A subset of the rows to read.
+        getmeta: Return a tuple (data,metadata)
         """
-        if self.type == 'rec' or self.type == 'col':
-            sf = sfile.SFile(self.filename)
-            if memmap:
-                return sf.get_memmap()
-            else:
-                with sfile.SFile(self.filename) as sf:
-                    data = sf.read(
-                        rows=rows,
-                        columns=columns,
-                        fields=fields,
-                        header=getmeta,
-                        reduce=reduce,
-                    )
-                return data
+        if self.type == 'fits':
+
+            with fitsio.FITS(self.filename) as fits:
+                hdu = fits[1]
+                data = hdu.read(
+                    rows=rows,
+                    header=getmeta,
+                )
+                data = data[self.name]
+                if getmeta:
+                    meta = hdu.read_header()
+                    return data, meta
+                else:
+                    return data
 
         elif self.type == 'json':
-            return read_json(self.filename)
-
+            return _read_json(self.filename)
         else:
-            raise RuntimeError("Only support 'col' and 'rec' types")
+            raise RuntimeError("Only support 'fits' and 'json' type")
 
     def read_meta(self):
         """
-        Method:
-            read_meta
-        Purpose:
-            Read the meta-data from a column if it exists.
-        Calling Sequence:
-            meta=read_meta()
-
-        Restrictions:
-            Currently only for "col" and "rec" types
-
+        Read the meta data for this column
         """
-        if self.type == 'rec' or self.type == 'col':
-            with sfile.SFile(self.filename) as sf:
-                h = sf.read_header()
-            return h
+        if self.type == 'fits':
+            with fitsio.FITS(self.filename) as fits:
+                hdu = fits[1]
+                return hdu.read_header()
         else:
-            raise RuntimeError("Only support 'col' and 'rec' types")
+            raise RuntimeError('only fits type has meta data')
 
     def match(self, values, select='values'):
         """
@@ -1390,7 +1312,7 @@ class Column(object):
         Inputs:
             data:
                 Data to write.  If the column data already exists, data may be
-                appended for 'rec' type columns.  The data types in that case
+                appended for 'fits' type columns.  The data types in that case
                 must match exactly.
 
         Keywords:
@@ -1405,74 +1327,20 @@ class Column(object):
         if create:
             self.delete()
 
-        if self.type == 'rec':
-            self.write_rec(data, meta=meta)
-        elif self.type == 'col':
-            self.write_col(data, meta=meta)
+        if self.type == 'fits':
+            self._write_fits(data, meta=meta)
         elif self.type == 'json':
-            self.write_json(data)
+            self._write_json(data)
         else:
             raise RuntimeError("Currently only support rec types")
 
-    def write_json(self, data):
+    def _write_json(self, data):
         """
         write json data
         """
-        write_json(data, self.filename)
+        _write_json(data, self.filename)
 
-    def write_rec(self, data, create=False, meta=None):
-        """
-        Method:
-            write_rec
-        Purpose:
-            Write data to a rec column.  The data must have field names set.
-            Append unless create=True.  The column must be created with mode =
-            'w' or 'a' or 'r+'.  (mode checking not yet implemented)
-
-        Calling Sequence:
-            write_rec(data, create=False, meta=None)
-        Inputs:
-            data: An array to write.  If the column data already exists,
-                and create=False, the data types must match exactly.
-        Keywords:
-            create: If True, delete the existing data and write a new
-                file. Default False.
-            meta: Add this metadata to the header of the file.  Will only
-                be written if this is the creation of the file. Note
-                the number of rows is updated during appending.
-        """
-
-        # If forcing create, delete myself.
-        if create:
-            self.delete()
-
-        # make sure the data type of the input equals that of the column
-        if not isinstance(data, np.ndarray):
-            raise ValueError("For rec columns data must be a numpy array")
-
-        if data.dtype.names is None:
-            raise ValueError("Array has no fields, use a 'col' type instead")
-        elif self.dtype is not None and not create:
-            if data.dtype != self.dtype:
-                types = (self.dtype.descr, data.dtype.descr)
-                raise ValueError("The data type of the input is incompatible "
-                                 "with the existing column data "
-                                 "type: "
-                                 "\n\tcolumn dtype: %s"
-                                 "\n\tinput dtype: %s" % types)
-
-        if os.path.exists(self.filename):
-            mode = 'r+'
-        else:
-            mode = 'w'
-
-        with sfile.SFile(self.filename, mode) as sf:
-            # header will only be written on creation
-            sf.write(data, header=meta)
-
-        self.reload()
-
-    def write_col(self, data, create=False, meta=None):
+    def _write_fits(self, data, create=False, meta=None):
         """
         Method:
             write_col
@@ -1503,47 +1371,21 @@ class Column(object):
 
         # make sure the data type of the input equals that of the column
         if not isinstance(data, np.ndarray):
-            raise ValueError("For 'col' columns data must be a numpy array")
+            raise ValueError("For 'fits' columns data must be a numpy array")
 
-        if data.dtype.names is None:
-            # the data is a simple array without fields.  view the data with a
-            # named field for writing as a rec file.  A copy is made for
-            # array fields
-            data = self.get_named_view(data)
-        elif self.dtype is not None and not create:
-            # if the data in the file already exist, make sure we can get
-            # the data in a form appropriate for writing
-            if data.dtype.names != self.dtype.names:
-                # if the field only has a single name, then see if one of
-                # the names in the input matches the name of the column
-                if len(self.dtype.names) == 1:
-                    if self.name in data.dtype.names:
-                        data = self.get_named_view(data[self.name])
-                    else:
-                        raise ValueError("None of the fields in the input "
-                                         "structured array match the column "
-                                         "name")
-                else:
-                    # let the full dtype check below report the error
-                    pass
+        if data.dtype.names is not None:
+            raise ValueError('do not enter data with fields')
+        # view the data with a named field for writing
+        data = self._get_named_view(data)
 
-            if data.dtype != self.dtype:
-                types = (self.dtype.descr, data.dtype.descr)
-                raise ValueError("The data type of the input is incompatible "
-                                 "with the column data "
-                                 "type: "
-                                 "\n\tcolumn dtype: %s"
-                                 "\n\tinput dtype: %s" % types)
-        if os.path.exists(self.filename):
-            mode = 'r+'
-        else:
-            mode = 'w'
+        with fitsio.FITS(self.filename, 'rw', clobber=create) as fits:
+            if 1 in fits:
+                fits[1].append(data)
+            else:
+                fits.write(data, header=meta)
+                self.dtype = np.dtype(data.dtype.descr)
 
-        with sfile.SFile(self.filename, mode) as sf:
-            # header will only be written on creation
-            sf.write(data, header=meta)
-
-        self.reload()
+            self.size = fits[1].get_nrows()
 
         if self.have_index:
             # create the new indices
@@ -1650,7 +1492,7 @@ class Column(object):
         self.have_index = False
         self.index_dtype = None
 
-    def get_named_view(self, data):
+    def _get_named_view(self, data):
         typestring = data.dtype.descr[0][1]
         shape = data[0].shape
         if len(shape) > 0:
@@ -1670,7 +1512,7 @@ class Column(object):
 
         return newdata
 
-    def get_repr_list(self, full=False):
+    def _get_repr_list(self, full=False):
         """
 
         Get a list of metadat for this column.
@@ -1712,7 +1554,7 @@ class Column(object):
                 s += ["dtype: "] + drepr
 
             if self.meta is not None:
-                hs = self.meta2string()
+                hs = self._meta2string()
                 if hs != '':
                     hs = hs.split('\n')
                     hs = ['  '+h for h in hs]
@@ -1727,11 +1569,11 @@ class Column(object):
         """
         Print out some info about this column
         """
-        s = self.get_repr_list(full=True)
+        s = self._get_repr_list(full=True)
         s = "\n".join(s)
         return s
 
-    def extract_name(self):
+    def _extract_name(self):
         """
         Extract the column name from the file name
         """
@@ -1741,7 +1583,7 @@ class Column(object):
         name = '.'.join(bname.split('.')[0:-1])
         return name
 
-    def extract_type(self):
+    def _extract_type(self):
         """
         Extract the type from the file name
         """
@@ -1749,7 +1591,7 @@ class Column(object):
             raise ValueError("You haven't specified a filename yet")
         return self.filename.split('.')[-1]
 
-    def create_filename(self):
+    def _create_filename(self):
         if self.dir is None:
             raise ValueError("Cannot create column filename: directory "
                              "has not been set")
@@ -1761,7 +1603,7 @@ class Column(object):
                              "has not been set")
         return os.path.join(self.dir, self.name+'.'+self.type)
 
-    def meta2string(self, strip=True):
+    def _meta2string(self, strip=True):
         if self.meta is None:
             return ''
 
@@ -1787,7 +1629,7 @@ class Column(object):
             return ''
         return pprint.pformat(newd)
 
-    def args_sufficient(self,
+    def _args_sufficient(self,
                         filename=None,
                         dir=None,
                         name=None,
@@ -1908,20 +1750,17 @@ def where(query_index):
     return query_index.array()
 
 
-def read_json(fname):
+def _read_json(fname):
     """
     wrapper to read json
     """
 
     with open(fname) as fobj:
-        if have_cjson:
-            data = cjson.decode(fobj.read())
-        else:
-            data = json.load(fobj)
+        data = json.load(fobj)
     return data
 
 
-def write_json(obj, fname, pretty=True):
+def _write_json(obj, fname, pretty=True):
     """
     wrapper for writing json
     """
