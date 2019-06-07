@@ -1587,6 +1587,7 @@ class Column(object):
 
         newd = {}
 
+        """
         skipkeys = [
             '_DTYPE',
             '_SIZE',
@@ -1596,6 +1597,20 @@ class Column(object):
             '_SHAPE',
             '_VERSION',
         ]
+        """
+        skipkeys = [
+            'BITPIX',
+            'GCOUNT',
+            'NAXIS',
+            'NAXIS1',
+            'NAXIS2',
+            'PCOUNT',
+            'TFIELDS',
+            'TFORM1',
+            'TTYPE1',
+            'XTENSION',
+        ]
+
         for key in self.meta:
             if strip:
                 if key not in skipkeys:
