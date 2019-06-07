@@ -15,22 +15,20 @@ except ImportError:
 
 class Columns(dict):
     """
-    Class:
-        Columns
-    Purpose:
+    Manage a database of "columns" represented by simple flat files.  This
+    design is chosen to maximize efficiency of memory and speed.
+    Transactional robustness is not yet a priority.
 
-        Manage a database of "columns" represented by simple flat files.  This
-        design is chosen to maximize efficiency of memory and speed.
-        Transactional robustness is not yet a priority.
+    If numpydb is available, indexes can be created for columns.  This
+    facilitates fast searching.
 
-        If numpydb is available, indexes can be created for columns.  This
-        facilitates fast searching.
-
-    Construction:
+    Construction
+    ------------
         >>> coldir='/some/path/mycols.cols
         >>> c=Columns(coldir)
 
-    Examples:
+    Examples
+    ---------
         # construct a column database from the specified coldir
         >>> coldir='/some/path/mydata.cols'
         >>> c=Columns(coldir)
@@ -56,9 +54,6 @@ class Columns(dict):
             name
             --------------------------------------------------
             psfstars
-
-
-          ...
 
         # display info about column 'id'
         >>> c['id']
@@ -100,11 +95,12 @@ class Columns(dict):
 
 
         # read multiple columns into a single rec array
-        >>> data = c.read_columns(['id','flux'], rows=rows)
+        >>> data = c.read(columns=['id','flux'], rows=rows)
 
         # or put different columns into fields of a dictionary instead of
-        # packing them into a single array
-        >>> data = c.read_columns(['id','flux'], asdict=True)
+        # packing them into a single array.  This allows reading from
+        # different-length columns and from dict types
+        >>> data = c.read(columns=['id','flux'], asdict=True)
 
         # If numpydb is available, you can create indexes and
         # perform fast searching
@@ -133,11 +129,11 @@ class Columns(dict):
 
         # write multiple columns from the fields in a rec array
         # names in the data correspond to column names
-        >>> c.write_columns(recdata)
+        >>> data = np.zeros(num, dtype=[('ra','f8'), ('dec','f8')])
+        >>> c.write(data)
 
-        # write/append data from the fields in a .rec file or .fits file
-        >>> c.from_rec(recfile_name)
-        >>> c.from_fits(fitsfile_name)
+        # write/append data from the fields in a .fits file
+        >>> c.fromfile(fitsfile_name)
 
 
     """
@@ -244,16 +240,16 @@ class Columns(dict):
 
     def load_column(self, name=None, filename=None, type=None):
         """
-        If filename is sent, clear the column and load the filename as new
-
-        If name is sent:
-            1) if column exists, simply run reload_column()
-            2) if it doesn't exist, try to load a column with that name
-            under the db directory.
+        Load the specified column
         """
 
-        col = Column(filename=filename, dir=self.dir, name=name, type=type,
-                     verbose=self.verbose)
+        col = Column(
+            filename=filename,
+            dir=self.dir,
+            name=name,
+            type=type,
+            verbose=self.verbose,
+        )
         name = col.name
         self.clear(name)
         self[name] = col
@@ -381,8 +377,7 @@ class Columns(dict):
 
         If the column does not already exist, it is created.  If the type is
         'fits' and the column exists, the data are appended unless create=True.
-        For other types, the data are always created.
-
+        For other types, the file is always created or overwritten.
         """
 
         if name in self and create:
@@ -395,22 +390,26 @@ class Columns(dict):
                 elif isinstance(data, dict):
                     type = 'json'
                 else:
-                    raise ValueError("only support fits and json types for now")
+                    raise ValueError(
+                        'only support array and dict types for now'
+                    )
             self.load_column(name=name, type=type)
 
         self[name].write(data, meta=meta)
 
-    def write_columns(self, data, create=False):
+    def write(self, data, create=False):
         """
         Write the fields of a structured array to columns
         """
 
         names = data.dtype.names
         if names is None:
-            raise ValueError("write_columns() takes a structured array as "
-                             "input")
+            raise ValueError('write() takes a structured array as '
+                             'input')
         for name in names:
             self.write_column(name, data[name], create=create)
+
+    write_columns = write
 
     def delete_column(self, name):
         """
@@ -686,20 +685,17 @@ class Columns(dict):
 
 class Column(object):
     """
-    Class:
-        Column
+    Represent a column in a Columns database.  Facilitate opening, reading,
+    writing of data.  This class can be instantiated alone, but is usually
+    accessed through the Columns class.
 
-    Purpose:
-        Represent a column in a Columns database.  Facilitate opening, reading,
-        writing of data.  This class can be instantiated alone, but is usually
-        accessed through the Columns class.
+    If the numpydb package is available, B-tree indexes can be created for
+    any column.  Searching can be done using standard ==, >, >=, <, <=
+    operators, as well as the .match() and between() functions.  The
+    functional forms are more powerful.
 
-        If the numpydb package is available, B-tree indexes can be created for
-        any column.  Searching can be done using standard ==, >, >=, <, <=
-        operators, as well as the .match() and between() functions.  The
-        functional forms are more powerful.
-
-    Construction:
+    Construction
+    ------------
         >>> col=Column(filename=, name=, dir=, type=, verbose=False)
 
         # there are alternative construction methods
@@ -710,7 +706,8 @@ class Column(object):
         >>> col=Column(name='something', type='fits',
                        dir='/some/path/dbname.cols')
 
-    Slice and item lookup:
+    Slice and item lookup
+    ---------------------
         # The Column class supports item lookup access, e.g. slices and
         # arrays representing a subset of rows
 
@@ -726,7 +723,8 @@ class Column(object):
         >>> id = col['id'][:]
         >>> data = col[ ['id','flux'] ][ rows ]
 
-    Indexes on columns:
+    Indexes on columns
+    ------------------
         If the numpydb package is available, you can create indexes on
         columns and perform fast searches.
 
@@ -745,7 +743,8 @@ class Column(object):
         >>> ind = col1.between(15,25) | (col2 != 66)
         >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
 
-    Methods:
+    Methods
+    -------
 
         # see docs for each method for more info
 
@@ -764,9 +763,13 @@ class Column(object):
     def __init__(self, filename=None, name=None, dir=None, type=None,
                  verbose=False):
 
-        self.init(filename=filename,
-                  name=name, dir=dir, type=type,
-                  verbose=verbose)
+        self.init(
+            filename=filename,
+            name=name,
+            dir=dir,
+            type=type,
+            verbose=verbose,
+        )
 
     def init(self, filename=None, name=None, dir=None, type=None,
              verbose=False):
@@ -837,6 +840,9 @@ class Column(object):
             db.close()
 
     def index_filename(self, tempdir=None):
+        """
+        get the filename for the index of this column
+        """
         if self.filename is None:
             return None
 
@@ -856,52 +862,42 @@ class Column(object):
         """
         return self.have_index
 
-    def create_index(self, index_dtype='i4', force=False,
+    def create_index(self, index_dtype='i8', force=False,
                      tempdir=None, verbose=False, db_verbose=0):
         """
-        Class:
-            Column
-        Name:
-            create_index
-        Purpose:
-            Create an index for this column.  The index is created by the
-            numpydb package which uses a Berkeley DB B-tree.  The database file
-            will be named {columnfile}__index.db
+        Create an index for this column.  The index is created by the
+        numpydb package which uses a Berkeley DB B-tree.  The database file
+        will be named {columnfile}__index.db
 
-            Once the index is created, all data from the column will be put
-            into the index.  Also, after creation any data appended to the
-            column are automatically added to the index.
+        Once the index is created, all data from the column will be put
+        into the index.  Also, after creation any data appended to the
+        column are automatically added to the index.
 
-        Calling Sequence:
-            col.create_index(index_type='i4', force=False)
+        Parameters
+        ----------
+        index_dtype: str, optional
+            The data type for the index.  The default is 'i8' but can
+            also be 'i4'
+        force: bool, optional
+            If True, any existing index is deleted. If this keyword is not True
+            and the index exists, and exception is raised.  Default is False.
+        tempdir:
+            A temporary directory to write the index.  This is very useful when
+            the tempdir is for example a linux "tempfs" which is in memory,
+            e.g. /dev/shm.  This can speed up index creation by a large factor
 
-        Keywords:
-            index_dtype: The data type for the index.  The default is 'i4'
-                but you will want 'i8' if you need large index values.
+            Note if /dev/shm exists it will be used by default if you don't set
+            tempdir yourself.
 
-            force: If True, any existing index is deleted. If this keyword
-                is not True and the index exists, and exception is raised.
-                Default is False.
-            tempdir:
-                A temporary directory to write the index.  This is very useful
-                when the tempdir is for example a linux "tempfs" which is in
-                memory, e.g. /dev/shm.  This can speed up index creation by
-                enormous factors.
+            After creation, the index will be moved to it's final destination.
+        verbose: bool, optional
+            This can override the overall verbosity.
+        db_verbose: int, optional
+            An integer indicating the verbosity of the db code.
 
-                Note if /dev/shm exists it will be used by default if you
-                don't set tempdir yourself.
-
-                After creation, the index will be moved to it's final
-                destination.
-            verbose:
-                This can override the overall verbosity.
-            db_verbose:
-                An integer indicating the verbosity of the db code.
-
-        Restrictions:
-            Currently, the column type must be ordinary 'col' and should be
-            scalar.
-
+        Restrictions
+        ------------
+        Currently, the column type must be ordinary 'col' and should be scalar.
         """
 
         if tempdir is None:
@@ -954,7 +950,6 @@ class Column(object):
         if tempdir is not None:
             # move to the final destination
             final_fname = self.index_filename()
-            import shutil
             if self.verbose or verbose:
                 print("    Moving to final destination: '%s'" % final_fname)
             shutil.move(index_fname, final_fname)
@@ -963,9 +958,7 @@ class Column(object):
 
     def _init_from_filename(self):
         """
-
         Initiaize this column based on the pull path filename
-
         """
         if self.filename is not None:
             if self.verbose:
@@ -977,26 +970,25 @@ class Column(object):
 
     def _init_from_name(self):
         """
-
         Initialize this based on name.  The filename is constructed from
         the dir and name
-
         """
 
-        if self.name is not None and self.type is not None \
-                and self.dir is not None:
+        if (self.name is not None
+                and self.type is not None
+                and self.dir is not None):
+
             if self.verbose:
                 mess = "Initalizing from \n\tdir: %s \n\tname: %s \n\ttype: %s"
                 print(mess % (self.dir, self.name, self.type))
+
             self.filename = self._create_filename()
         else:
             raise ValueError("You must set dir,name,type to use this function")
 
     def _init_fits(self):
         """
-
-        Init as a rec type
-
+        Init from a fits file
         """
         if self.filename is None:
             return
@@ -1014,15 +1006,11 @@ class Column(object):
 
     def __getitem__(self, arg):
         """
+        Item lookup method, e.g. col[..].  for fits files this is sent right to
+        the __getitem__ of the fits hdu object.
 
-        Item lookup method, e.g. col[..].  for rec types this is sent
-        right to the __getitem__ of the rec object.
-
-        Slices and sequences are supported for rows.  You can also request
-        a subset of fields.
-
-        We should keep the SFile object open for speed?
-
+        Slices and sequences are supported for rows.  You can also request a
+        subset of fields.
         """
 
         if self.type == 'fits':
@@ -1031,7 +1019,9 @@ class Column(object):
                 data = hdu[self.name][arg]
             return data
         else:
-            raise RuntimeError('Only support slices for fits type')
+            raise RuntimeError(
+                'Only support indexing and slicing for fits type'
+            )
 
     def read(self, rows=None, getmeta=False):
         """
@@ -1039,8 +1029,10 @@ class Column(object):
 
         Parameters
         ----------
-        rows: A subset of the rows to read.
-        getmeta: Return a tuple (data,metadata)
+        rows: sequence, optional
+            A subset of the rows to read.
+        getmeta: bool, optional
+            Return a tuple (data,metadata). Only supported for array types
         """
         if self.type == 'fits':
 
@@ -1059,12 +1051,14 @@ class Column(object):
 
         elif self.type == 'json':
             return _read_json(self.filename)
+
         else:
             raise RuntimeError("Only support 'fits' and 'json' type")
 
     def read_meta(self):
         """
-        Read the meta data for this column
+        Read the meta data for this column.  Metadata is only supported
+        for array types
         """
         if self.type == 'fits':
             with fitsio.FITS(self.filename) as fits:
@@ -1075,76 +1069,71 @@ class Column(object):
 
     def match(self, values, select='values'):
         """
-        Class:
-            Column
-        Method:
-            match
+        Find all entries that match the requested value or values and return a
+        query index of the result.  The requested values can be a scalar,
+        sequence, or array, and must be convertible to the key data type.
 
-        Purpose:
-            Find all entries that match the requested value or values and
-            return a query index of the result.  The requested values can be a
-            scalar, sequence, or array, and must be convertible to the key data
-            type.
+        The returned data is by default a columns.Index containing the indices
+        (the "values" of the key-value database) for the matches, which can be
+        combined with other queries to produce a final result, but this can be
+        controlled through the use of keywords.
 
-            The returned data is by default a columns.Index containing the
-            indices (the "values" of the key-value database) for the matches,
-            which can be combined with other queries to produce a final result,
-            but this can be controlled through the use of keywords.
+        Note if you just want to match a single value, you can also use the ==
+        operator.
 
+        Using match() requires that an index was created for this column using
+        create_index()
 
-            Note if you just want to match a single value, you can also use
-            the == operator.
+        Parameters
+        ----------
+        values: scalar or sequence
+            Value(s) to match.  All entries that match are included in the
+            returned query index.  Must be convertible to the key data type.
 
-            Using match() requires that an index was created for this column
-            using create_index()
+            Note, these values must be *unique*.
 
-        Calling Sequence:
-            # Find the matches and return a Index
-            >>> ind = col.match(value)
-            >>> ind = col.match([value1,value2,value3])
-
-
-            # combine with the results of another query
-            >>> ind = ( (col1.match(values)) & (col2 == value2) )
-
-            # Instead of indices, extract the key values that match, these will
-            # simply equal the requested values
-            >>> keys = col.match(values, select='keys')
-
-            # Extract both keys and values for the range of keys.  The data
-            # part is not a Index object in this case.
-            >>> keys,data = col.match(values,select='both')
-
-            # just return the count
-            >>> count = col.match(values,select='count')
-
-
-            # ways to get the underlying array instead of an Index. The where()
-            # function simply returns .array().  Note you can use an Index just
-            # like a normal array, but it has different & and | properties
-            >>> ind=col.match(value).array()
-            >>> ind=columns.where( col.match(values) )
-
-        Inputs:
-            values:
-                A scalar, sequence, or array of values to match.  All entries
-                that match any of the entered values are returned.  Must be
-                convertible to the key data type.
-
-                Note, these values must be *unique*, otherwise you'll get
-                duplicates returned.
-
-        Keywords:
-            select: Which data to return.  Can be
-                'values': Return the values of the key-value pairs, which
-                    here is a set of indices. (Default)
-                'keys': Return the keys of the key-value pairs.
-                'both': Return a tuple (keys,values)
-                'count': Return the count of all matches.
+        select: str
+            Which data to return.  Can be
+            'values':  Return the Index.  This is the values of the key-value
+              pairs, which here is a set of indices. (Default)
+            'keys': Return the keys of the key-value pairs.
+            'both': Return a tuple (keys,values)
+            'count': Return the count of all matches.
 
             Default behaviour is to return a Index of the key-value pairs in
             the database.
 
+        Returns
+        --------
+        An Index by default, see the select keyword
+
+        Examples
+        --------
+        # Find the matches and return a Index
+        >>> ind = col.match(value)
+        >>> ind = col.match([value1,value2,value3])
+
+
+        # combine with the results of another query
+        >>> ind = ( (col1.match(values)) & (col2 == value2) )
+
+        # Instead of indices, extract the key values that match, these will
+        # simply equal the requested values
+        >>> keys = col.match(values, select='keys')
+
+        # Extract both keys and values for the range of keys.  The data
+        # part is not a Index object in this case.
+        >>> keys,data = col.match(values,select='both')
+
+        # just return the count
+        >>> count = col.match(values,select='count')
+
+
+        # ways to get the underlying array instead of an Index. The where()
+        # function simply returns .array().  Note you can use an Index just
+        # like a normal array, but it has different & and | properties
+        >>> ind=col.match(value).array()
+        >>> ind=columns.where( col.match(values) )
         """
 
         self._verify_db_available('read')
@@ -1209,7 +1198,6 @@ class Column(object):
 
     def between(self, low, high, interval='[]', select='values'):
         """
-
         Find all entries in the range low,high, inclusive by default.  The
         returned data is by default a columns.Index containing the indices (the
         "values" of the key-value database) for the matches, which can be
@@ -1221,10 +1209,10 @@ class Column(object):
 
         Parameters
         ----------
-        low:
+        low: number
             the lower end of the range.  Must be convertible to the key data
             type.
-        high:
+        high: number
             the upper end of the range.  Must be convertible to the key data
             type.
         interval: str, optional
@@ -1301,14 +1289,10 @@ class Column(object):
 
     def write(self, data, create=False, meta=None):
         """
-        Method:
-            write
-        Purpose:
-            Write data to a column.  Append unles create=True.
-            The column must be created with mode = 'w' or 'a' or 'r+'.
-            (mode checking not yet implemented)
-        Calling Sequence:
-            write(data, create=False, meta=None)
+        Write data to a column.  Append unles create=True.
+        The column must be created with mode = 'w' or 'a' or 'r+'.
+        (mode checking not yet implemented)
+
         Inputs:
             data:
                 Data to write.  If the column data already exists, data may be
@@ -1342,27 +1326,21 @@ class Column(object):
 
     def _write_fits(self, data, create=False, meta=None):
         """
-        Method:
-            write_col
-        Purpose:
-            Write data to a 'col' column.  The data must be a simple array or
-            have a single field.  For more complex columns, use the 'rec' type.
-            Append unless create=True.  The column must be opened with mode =
-            'w' or 'a' or 'r+'.  (mode checking not yet implemented)
+        Write data to a 'col' column in a fits file.  The data must be an array
+        without fields.  Append unless create=True.
 
-        Calling Sequence:
-            write_col(data, create=False, meta=None)
-        Inputs:
-            data: An array to write.  If the column data already exists,
-                and create=False, the data types must match exactly.
-
-        Keywords:
-            create: If True, delete the existing data and write a new
-                file. Default False.
-            meta: Add this metadata to the header of the file.  Will only
-                be written if this is the creation of the file. Note
-                the number of rows is updated during appending.
-
+        Parameters
+        ----------
+        data: array
+            Data to append to the file.  If the column data already exists,
+            and create=False, the data types must match exactly.
+        create: bool, optional
+            If True, delete the existing data and write a new file. Default
+            False.
+        meta: bool, optional
+            Add this metadata to the header of the file.  Will only be written
+            if this is the creation of the file. Note the number of rows is
+            updated during appending.
         """
 
         # If forcing create, delete myself.
@@ -1630,14 +1608,12 @@ class Column(object):
         return pprint.pformat(newd)
 
     def _args_sufficient(self,
-                        filename=None,
-                        dir=None,
-                        name=None,
-                        type=None):
+                         filename=None,
+                         dir=None,
+                         name=None,
+                         type=None):
         """
-
         Determine if the inputs are enough for initialization
-
         """
         if (filename is None) and \
                 (dir is None or name is None or type is None):
@@ -1648,15 +1624,9 @@ class Column(object):
 
 class Index(np.ndarray):
     """
-    Package:
-        columns
-    Class:
-        Index
-    Purpose:
-        Represent an index into a database.  This object inherits from
-        normal python arrays, but behaves differently under the "&"
-        and "|" operators.  These return the intersection or union of
-        values in two Index objects.
+    Represent an index into a database.  This object inherits from normal
+    numpy arrays, but behaves differently under the "&" and "|" operators.
+    These return the intersection or union of values in two Index objects.
 
     Methods:
         The "&" and "|" operators are defined.
@@ -1708,26 +1678,23 @@ class Index(np.ndarray):
 
 def where(query_index):
     """
-    Package:
-        columns
-    Name:
-        where
-    Purpose:
-        Extract results from a query_index object into a normal numpy array.
-        This is not usually necessary, as query objects inherit from numpy
-        arrays.
+    Extract results from a query_index object into a normal numpy array.  This
+    is not usually necessary, as query objects inherit from numpy arrays.
 
-    Calling Sequence:
-        indices = where(query_index)
-    Inputs:
-        query_index:
-            A Index object generated by using operators such as "==" on an
-            indexed column object.  The Column methods between and match also
-            return Index objects.  Index objects can be combined with
-            the "|" and "&" operators.  This where functions extracts the
-            underlying index array.
+    Parameters
+    ----------
+    query_index: Index
+        An Index object generated by using operators such as "==" on an indexed
+        column object.  The Column methods between and match also return Index
+        objects.  Index objects can be combined with the "|" and "&" operators.
+        This where functions extracts the underlying index array.
 
-    Example:
+    Returns
+    -------
+    numpy array of indices
+
+    Example
+    --------
 
         # lets say we have indexes on columns 'type' and 'mag' get the indices
         # where type is 'event' and rate is between 10 and 20.  Note the braces
@@ -1766,9 +1733,4 @@ def _write_json(obj, fname, pretty=True):
     """
 
     with open(fname, 'w') as fobj:
-
-        if not pretty and have_cjson:
-            jstring = cjson.encode(obj)
-            fobj.write(jstring)
-        else:
-            json.dump(obj, fobj, indent=1, separators=(',', ':'))
+        json.dump(obj, fobj, indent=1, separators=(',', ':'))
