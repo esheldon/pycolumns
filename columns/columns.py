@@ -80,10 +80,6 @@ class Columns(dict):
         >>> id = c['id'].read()
         >>> id = c.read_column('id')
 
-        # Also get metadata
-        >>> id, id_meta = c.read_column('id', rows=rows, meta=True)
-        >>> meta=c['id'].read_meta()
-
         # read a subset of rows
         # slicing
         >>> id = c['id'][25:125]
@@ -209,11 +205,12 @@ class Columns(dict):
     def load(self):
         """
 
-        Load the metadata and a memory map for all existing columns in the
+        Load all existing columns in the
         directory.  Column files must have the right extensions to be noticed
         so far these can be
 
-            .rec, .idx, .sort
+            .fits
+            .json
 
         and other column directories can be loaded if they have the extension
 
@@ -371,7 +368,7 @@ class Columns(dict):
             if name in self:
                 del self[name]
 
-    def write_column(self, name, data, type=None, create=False, meta=None):
+    def write_column(self, name, data, type=None, create=False):
         """
         Write data to a column.
 
@@ -395,7 +392,7 @@ class Columns(dict):
                     )
             self.load_column(name=name, type=type)
 
-        self[name].write(data, meta=meta)
+        self[name].write(data)
 
     def write(self, data, create=False):
         """
@@ -666,7 +663,7 @@ class Columns(dict):
 
     read_columns = read
 
-    def read_column(self, colname, rows=None, getmeta=False):
+    def read_column(self, colname, rows=None):
         """
         Only numpy, fixed length for now.  Eventually allow pickled columns.
         """
@@ -680,7 +677,7 @@ class Columns(dict):
             else:
                 print("Reading column: '%s'" % colname)
 
-        return self[colname].read(rows=rows, getmeta=getmeta)
+        return self[colname].read(rows=rows)
 
 
 class Column(object):
@@ -751,9 +748,9 @@ class Column(object):
         init(): Same args as construction
         clear(): Clear out all metadata for this column.
         reload(): Reload all metadat for this column.
-        read(rows=,columns=,fields=,getmeta=True):
+        read(rows=,columns=,fields=):
             read data from column
-        write(data, create=False, meta=None):
+        write(data, create=False):
             write data to column, appending unless create=False
         delete():
             Attempt to delete the data file associated with this column
@@ -805,7 +802,7 @@ class Column(object):
 
     def reload(self):
         """
-        Just reload the metadata and memory map for this column
+        Just reload the metadata for this column
         """
         if self.verbose:
             print('Reloading column metadata for: %s' % self.name)
@@ -821,7 +818,6 @@ class Column(object):
         self.type = None
         self.verbose = False
         self.size = -1
-        self.meta = None
         self.dtype = None
 
         self.have_index = False
@@ -998,7 +994,6 @@ class Column(object):
 
         with fitsio.FITS(self.filename) as fits:
             hdu = fits[1]
-            self.meta = hdu.read_header()
             self.size = hdu.get_nrows()
             example = hdu[0:1]
             descr = example.dtype.descr
@@ -1023,7 +1018,7 @@ class Column(object):
                 'Only support indexing and slicing for fits type'
             )
 
-    def read(self, rows=None, getmeta=False):
+    def read(self, rows=None):
         """
         read data from this column
 
@@ -1031,41 +1026,20 @@ class Column(object):
         ----------
         rows: sequence, optional
             A subset of the rows to read.
-        getmeta: bool, optional
-            Return a tuple (data,metadata). Only supported for array types
         """
         if self.type == 'fits':
 
             with fitsio.FITS(self.filename) as fits:
                 hdu = fits[1]
-                data = hdu.read(
-                    rows=rows,
-                    header=getmeta,
-                )
+                data = hdu.read(rows=rows)
                 data = data[self.name]
-                if getmeta:
-                    meta = hdu.read_header()
-                    return data, meta
-                else:
-                    return data
+                return data
 
         elif self.type == 'json':
             return _read_json(self.filename)
 
         else:
             raise RuntimeError("Only support 'fits' and 'json' type")
-
-    def read_meta(self):
-        """
-        Read the meta data for this column.  Metadata is only supported
-        for array types
-        """
-        if self.type == 'fits':
-            with fitsio.FITS(self.filename) as fits:
-                hdu = fits[1]
-                return hdu.read_header()
-        else:
-            raise RuntimeError('only fits type has meta data')
 
     def match(self, values, select='values'):
         """
@@ -1287,32 +1261,27 @@ class Column(object):
 
         return result
 
-    def write(self, data, create=False, meta=None):
+    def write(self, data, create=False):
         """
         Write data to a column.  Append unles create=True.
-        The column must be created with mode = 'w' or 'a' or 'r+'.
-        (mode checking not yet implemented)
 
-        Inputs:
-            data:
-                Data to write.  If the column data already exists, data may be
-                appended for 'fits' type columns.  The data types in that case
-                must match exactly.
+        Parameters
+        ----------
+        data:  array or dict
+            Data to write.  If the column data already exists, data may be
+            appended for 'fits' type columns.  The data types in that case must
+            match exactly.
 
-        Keywords:
-            create: If True, delete the existing data and write a new
-                file. Default False.
-            meta:
-                Add this metadata to the header of the file if this is
-                supported by the file type.  Will normally only be written if
-                this is the creation of the file.
+        create: bool, optional
+            If True, delete the existing data and write a new
+            file. Default False.
         """
 
         if create:
             self.delete()
 
         if self.type == 'fits':
-            self._write_fits(data, meta=meta)
+            self._write_fits(data)
         elif self.type == 'json':
             self._write_json(data)
         else:
@@ -1324,7 +1293,7 @@ class Column(object):
         """
         _write_json(data, self.filename)
 
-    def _write_fits(self, data, create=False, meta=None):
+    def _write_fits(self, data, create=False):
         """
         Write data to a 'col' column in a fits file.  The data must be an array
         without fields.  Append unless create=True.
@@ -1337,10 +1306,6 @@ class Column(object):
         create: bool, optional
             If True, delete the existing data and write a new file. Default
             False.
-        meta: bool, optional
-            Add this metadata to the header of the file.  Will only be written
-            if this is the creation of the file. Note the number of rows is
-            updated during appending.
         """
 
         # If forcing create, delete myself.
@@ -1360,7 +1325,7 @@ class Column(object):
             if 1 in fits:
                 fits[1].append(data)
             else:
-                fits.write(data, header=meta)
+                fits.write(data)
                 self.dtype = np.dtype(data.dtype.descr)
 
             self.size = fits[1].get_nrows()
@@ -1454,7 +1419,6 @@ class Column(object):
 
         print("Deleting metadata for column: %s" % self.name)
         self.size = 0
-        self.meta = None
         self.dtype = None
 
     def delete_index(self):
@@ -1531,13 +1495,6 @@ class Column(object):
                 drepr = ['  '+d for d in drepr]
                 s += ["dtype: "] + drepr
 
-            if self.meta is not None:
-                hs = self._meta2string()
-                if hs != '':
-                    hs = hs.split('\n')
-                    hs = ['  '+h for h in hs]
-                    s += ['meta data:'] + hs
-
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
 
@@ -1580,47 +1537,6 @@ class Column(object):
             raise ValueError("Cannot create column filename: type "
                              "has not been set")
         return os.path.join(self.dir, self.name+'.'+self.type)
-
-    def _meta2string(self, strip=True):
-        if self.meta is None:
-            return ''
-
-        newd = {}
-
-        """
-        skipkeys = [
-            '_DTYPE',
-            '_SIZE',
-            '_NROWS',
-            '_HAS_FIELDS',
-            '_DELIM',
-            '_SHAPE',
-            '_VERSION',
-        ]
-        """
-        skipkeys = [
-            'BITPIX',
-            'GCOUNT',
-            'NAXIS',
-            'NAXIS1',
-            'NAXIS2',
-            'PCOUNT',
-            'TFIELDS',
-            'TFORM1',
-            'TTYPE1',
-            'XTENSION',
-        ]
-
-        for key in self.meta:
-            if strip:
-                if key not in skipkeys:
-                    newd[key] = self.meta[key]
-            else:
-                newd[key] = self.meta[key]
-
-        if len(newd) == 0:
-            return ''
-        return pprint.pformat(newd)
 
     def _args_sufficient(self,
                          filename=None,
