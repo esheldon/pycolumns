@@ -488,7 +488,7 @@ class Columns(dict):
                       'of %s' % (start, stop, nrows))
             data = slicer[start:stop]
 
-            self.write_columns(data, create=docreate)
+            self.write(data, create=docreate)
 
     def from_columns(self, coldir, create=False, indent=''):
         """
