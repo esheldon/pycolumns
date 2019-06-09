@@ -117,6 +117,10 @@ class SimpleFile(object):
         Close the file and reset the metadata to None
         """
 
+        if hasattr(self, '_mmap'):
+            # official way to close the file according to docs
+            del self._mmap
+
         if hasattr(self, '_fobj') and self._fobj is not None:
             self._fobj.close()
 
@@ -131,27 +135,41 @@ class SimpleFile(object):
         self._dtype = None
 
     @property
-    def shape(self):
+    def size(self):
         """
-        get the number of rows in the file
+        get the total number of elements
         """
-        if self._hdr is None:
+        if self._mmap is None:
             raise RuntimeError("no file has been opened for reading")
 
-        return self._shape
+        return self._mmap.size
+
+    @property
+    def shape(self):
+        """
+        get the shape of the data
+        """
+        if self._mmap is None:
+            raise RuntimeError("no file has been opened for reading")
+
+        return self._mmap.shape
 
     @property
     def dtype(self):
         """
         get the number of rows in the file
         """
-        return self._dtype
+        if self._mmap is None:
+            raise RuntimeError("no file has been opened for reading")
+        return self._mmap.dtype
 
     @property
     def header(self):
         """
         get a copy of the header
         """
+        if self._hdr is None:
+            raise RuntimeError("no file has been opened for reading")
         hdr = {}
         hdr.update(self._hdr)
         return hdr
@@ -169,48 +187,6 @@ class SimpleFile(object):
         get the file name
         """
         return self._filename
-
-    def _ensure_open(self):
-        """
-        check if a file is open, if not raise a RuntimeError
-        """
-        if not hasattr(self, '_fobj') or self._fobj is None:
-            raise RuntimeError("no file is open")
-
-    def _ensure_open_for_writing(self):
-        """
-        check if a file is open for writing, if not raise a RuntimeError
-        """
-        self._ensure_open()
-        if self._fobj.mode[0] != 'w' and '+' not in self._mode:
-            raise ValueError("You must open with 'w*' or 'r+' to write")
-
-    def _ensure_open_for_reading(self):
-        """
-        check if a file is open for reading, if not raise a RuntimeError
-        """
-        self._ensure_open()
-
-        if self._fobj.mode[0] != 'r' and '+' not in self._mode:
-            raise ValueError("You must open with 'w+' or 'r*' to read")
-
-    def _ensure_compatible_dtype(self, data):
-        """
-        if we are writing binary we demand exact match.
-
-        For text we just make sure everything matches if the
-        byte order is ignored
-        """
-
-        # if self._dtype is not None, there was data in the file
-        if self._dtype is not None:
-            if self._dtype != data.dtype:
-                m = (
-                    "attempt to write an incompatible "
-                    "data type: expected '%s' got '%s'"
-                )
-                m = m % (self._descr, data.dtype.descr)
-                raise ValueError(m)
 
     def write(self, data):
         """
@@ -266,6 +242,48 @@ class SimpleFile(object):
         """
 
         return self._mmap[arg]
+
+    def _ensure_open(self):
+        """
+        check if a file is open, if not raise a RuntimeError
+        """
+        if not hasattr(self, '_fobj') or self._fobj is None:
+            raise RuntimeError("no file is open")
+
+    def _ensure_open_for_writing(self):
+        """
+        check if a file is open for writing, if not raise a RuntimeError
+        """
+        self._ensure_open()
+        if self._fobj.mode[0] != 'w' and '+' not in self._mode:
+            raise ValueError("You must open with 'w*' or 'r+' to write")
+
+    def _ensure_open_for_reading(self):
+        """
+        check if a file is open for reading, if not raise a RuntimeError
+        """
+        self._ensure_open()
+
+        if self._fobj.mode[0] != 'r' and '+' not in self._mode:
+            raise ValueError("You must open with 'w+' or 'r*' to read")
+
+    def _ensure_compatible_dtype(self, data):
+        """
+        if we are writing binary we demand exact match.
+
+        For text we just make sure everything matches if the
+        byte order is ignored
+        """
+
+        # if self._dtype is not None, there was data in the file
+        if self._dtype is not None:
+            if self._dtype != data.dtype:
+                m = (
+                    "attempt to write an incompatible "
+                    "data type: expected '%s' got '%s'"
+                )
+                m = m % (self._descr, data.dtype.descr)
+                raise ValueError(m)
 
     def _write_initial_header(self, data):
         """
