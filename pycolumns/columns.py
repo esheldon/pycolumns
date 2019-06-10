@@ -3,8 +3,8 @@ from glob import glob
 import pprint
 import json
 import numpy as np
-import fitsio
 import shutil
+from .sfile import SimpleFile
 
 try:
     import numpydb
@@ -59,7 +59,7 @@ class Columns(dict):
         >>> c['id']
         Column:
           "id"
-          filename: ./id.fits
+          filename: ./id.col
           type: col
           size: 64348146
           has index: False
@@ -129,12 +129,12 @@ class Columns(dict):
         >>> c.write(data)
 
         # write/append data from the fields in a .fits file
-        >>> c.fromfile(fitsfile_name)
+        >>> c.from_fits(fitsfile_name)
 
 
     """
     def __init__(self, dir=None, verbose=False):
-        self.types = ['fits', 'idx', 'sort', 'cols', 'json']
+        self.types = ['col', 'json', 'cols']
         self.verbose = verbose
         self.init(dir=dir)
 
@@ -209,7 +209,7 @@ class Columns(dict):
         directory.  Column files must have the right extensions to be noticed
         so far these can be
 
-            .fits
+            .col
             .json
 
         and other column directories can be loaded if they have the extension
@@ -325,7 +325,7 @@ class Columns(dict):
                     else:
                         s += ['  %-15s %5s' % (c.name, c.type)]
 
-                    if c.type == 'fits':
+                    if c.type == 'col':
                         c_dtype = c.dtype.descr[0][1]
                     else:
                         c_dtype = ''
@@ -373,7 +373,7 @@ class Columns(dict):
         Write data to a column.
 
         If the column does not already exist, it is created.  If the type is
-        'fits' and the column exists, the data are appended unless create=True.
+        'col' and the column exists, the data are appended unless create=True.
         For other types, the file is always created or overwritten.
         """
 
@@ -383,7 +383,7 @@ class Columns(dict):
         if name not in self:
             if type is None:
                 if isinstance(data, np.ndarray):
-                    type = 'fits'
+                    type = 'col'
                 elif isinstance(data, dict):
                     type = 'json'
                 else:
@@ -423,11 +423,11 @@ class Columns(dict):
         self[name].delete()
         self.reload()
 
-    def fromfile(self,
-                 filename,
-                 create=False,
-                 ext=1,
-                 lower=False):
+    def from_fits(self,
+                  filename,
+                  create=False,
+                  ext=1,
+                  lower=False):
         """
         Write columns to the database, reading from the input fits file.
         Uses chunks of 100MB
@@ -444,6 +444,7 @@ class Columns(dict):
         lower: bool, optional
             if True, lower-case all names
         """
+        import fitsio
 
         with fitsio.FITS(filename, lower=lower) as fits:
             hdu = fits[ext]
@@ -700,8 +701,10 @@ class Column(object):
         >>> col=Column(filename='/full/path')
 
         # this one uses directory, column name, type
-        >>> col=Column(name='something', type='fits',
-                       dir='/some/path/dbname.cols')
+        >>> col=Column(
+                name='something', type='col',
+                dir='/some/path/dbname.cols',
+            )
 
     Slice and item lookup
     ---------------------
@@ -709,7 +712,7 @@ class Column(object):
         # arrays representing a subset of rows
 
         # Note true slices and row subset other than [:] are only supported
-        # by the 'fits' type
+        # by the 'col' type
 
         >>> col=Column(...)
         >>> data = col[25:22]
@@ -757,7 +760,11 @@ class Column(object):
 
 
     """
-    def __init__(self, filename=None, name=None, dir=None, type=None,
+    def __init__(self,
+                 filename=None,
+                 name=None,
+                 dir=None,
+                 type=None,
                  verbose=False):
 
         self.init(
@@ -791,8 +798,8 @@ class Column(object):
         elif self.name is not None:
             self._init_from_name()
 
-        if self.type == 'fits':
-            self._init_fits()
+        if self.type == 'col':
+            self._init_col()
 
         if self.verbose:
             print(self.__repr__())
@@ -982,9 +989,31 @@ class Column(object):
         else:
             raise ValueError("You must set dir,name,type to use this function")
 
-    def _init_fits(self):
+    @property
+    def shape(self):
         """
-        Init from a fits file
+        get the shape of the columns
+        """
+        if self.type=='fits':
+            return self._sf.shape
+        else:
+            raise ValuError(".shape doesn't work for "
+                            "column type '%s'" % self.type)
+
+    @property
+    def size(self):
+        """
+        get the size of the columns
+        """
+        if self.type=='fits':
+            return self._sf.size
+        else:
+            raise ValuError(".size doesn't work for "
+                            "column type '%s'" % self.type)
+
+    def _init_col(self):
+        """
+        Init from a col file (SimpleFile)
         """
         if self.filename is None:
             return
@@ -992,7 +1021,7 @@ class Column(object):
         if not os.path.exists(self.filename):
             return
 
-        with fitsio.FITS(self.filename) as fits:
+        self._sf = SimpleFile(self.filename)
             hdu = fits[1]
             self.size = hdu.get_nrows()
             example = hdu[0:1]
@@ -1280,8 +1309,8 @@ class Column(object):
         if create:
             self.delete()
 
-        if self.type == 'fits':
-            self._write_fits(data)
+        if self.type == 'col':
+            self._write_col(data)
         elif self.type == 'json':
             self._write_json(data)
         else:
@@ -1293,10 +1322,10 @@ class Column(object):
         """
         _write_json(data, self.filename)
 
-    def _write_fits(self, data, create=False):
+    def _write_col(self, data, create=False):
         """
-        Write data to a 'col' column in a fits file.  The data must be an array
-        without fields.  Append unless create=True.
+        Write data to a 'col' column file.  The data must be an array without
+        fields.  Append unless create=True.
 
         Parameters
         ----------
@@ -1318,8 +1347,6 @@ class Column(object):
 
         if data.dtype.names is not None:
             raise ValueError('do not enter data with fields')
-        # view the data with a named field for writing
-        data = self._get_named_view(data)
 
         with fitsio.FITS(self.filename, 'rw', clobber=create) as fits:
             if 1 in fits:
@@ -1433,26 +1460,6 @@ class Column(object):
 
         self.have_index = False
         self.index_dtype = None
-
-    def _get_named_view(self, data):
-        typestring = data.dtype.descr[0][1]
-        shape = data[0].shape
-        if len(shape) > 0:
-            # I don't know how to do a simple view in this case,
-            # I'm going to have to make a copy
-            if len(shape) == 1:
-                # this is just easier to read
-                shape = shape[0]
-            dtype_use = [(self.name, typestring, shape)]
-            size = data.shape[0]
-            newdata = np.zeros(size, dtype=dtype_use)
-            newdata[self.name] = data
-        else:
-            # Can just re-view it
-            dtype_use = [(self.name, typestring)]
-            newdata = data.view(dtype_use)
-
-        return newdata
 
     def _get_repr_list(self, full=False):
         """
