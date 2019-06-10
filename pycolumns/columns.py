@@ -12,6 +12,8 @@ try:
 except ImportError:
     havedb = False
 
+ALLOWED_COL_TYPES = ['array', 'json', 'cols']
+
 
 class Columns(dict):
     """
@@ -60,7 +62,7 @@ class Columns(dict):
         Column:
           "id"
           filename: ./id.col
-          type: col
+          type: array
           size: 64348146
           has index: False
           dtype:
@@ -100,13 +102,13 @@ class Columns(dict):
 
         # If numpydb is available, you can create indexes and
         # perform fast searching
-        >>> c['col'].create_index()
+        >>> c['x'].create_index()
 
         # get indices for some range.  Can also do
-        >>> ind=(c['col'] > 25)
-        >>> ind=c['col'].between(25,35)
-        >>> ind=(c['col'] == 25)
-        >>> ind=c['col'].match([25,77])
+        >>> ind=(c['x'] > 25)
+        >>> ind=c['x'].between(25,35)
+        >>> ind=(c['x'] == 25)
+        >>> ind=c['x'].match([25,77])
 
         # composite searches over multiple columns
         >>> ind = (c['col1'] == 25) & (col['col2'] < 15.23)
@@ -130,11 +132,9 @@ class Columns(dict):
 
         # write/append data from the fields in a .fits file
         >>> c.from_fits(fitsfile_name)
-
-
     """
+
     def __init__(self, dir=None, verbose=False):
-        self.types = ['col', 'json', 'cols']
         self.verbose = verbose
         self.init(dir=dir)
 
@@ -148,6 +148,10 @@ class Columns(dict):
         if self.dir_exists():
             self.load()
 
+    @property
+    def dir(self):
+        return self._dir
+
     def _set_dir(self, dir=None):
         """
         Set the database directory, creating if none exists.
@@ -155,7 +159,9 @@ class Columns(dict):
         if dir is not None:
             dir = os.path.expandvars(dir)
 
-        self.dir = dir
+        self._dir = dir
+
+        # from here on using the property
         if self.verbose and self.dir is not None:
             print('Database directory:', self.dir)
             if not self.dir_exists():
@@ -177,19 +183,35 @@ class Columns(dict):
                                  "name: '%s'" % self.dir)
             return True
 
-    def create(self, clobber=False):
+    def create(self):
         """
         Create the database directory
         """
-        exists = os.path.exists(self.dir)
 
-        if exists and not clobber:
+        if os.path.exists(self.dir):
             raise RuntimeError("directory '%s' already exists" % self.dir)
 
-        elif exists and clobber:
-            shutil.rmtree(self.dir)
-
         os.makedirs(self.dir)
+
+    def delete(self, yes=False):
+        """
+        delete all data in the directory
+
+        Parameters
+        ----------
+        yes: bool
+            If True, don't prompt for confirmation
+        """
+        if not yes:
+            answer = input('really delete all data? (y/n) ')
+            if answer.lower() == 'y':
+                yes = True
+
+        if not yes:
+            return
+
+        for colname in self:
+            self.delete_column(colname, yes=True)
 
     def _dirbase(self):
         """
@@ -224,7 +246,7 @@ class Columns(dict):
         # clear out the existing columns and start from scratch
         self.clear()
 
-        for type in self.types:
+        for type in ALLOWED_COL_TYPES:
             if self.dir is not None:
                 pattern = os.path.join(self.dir, '*.'+type)
                 fnames = glob(pattern)
@@ -240,13 +262,30 @@ class Columns(dict):
         Load the specified column
         """
 
-        col = Column(
-            filename=filename,
-            dir=self.dir,
-            name=name,
-            type=type,
-            verbose=self.verbose,
-        )
+        if filename is not None:
+
+            name = _extract_colname(filename)
+            type = _extract_coltype(filename)
+
+        elif name is not None and type is not None:
+            if self.dir is None:
+                raise ValueError("no dir is set for Columns db, can't "
+                                 "construct names")
+
+            filename = _create_filename(self.dir, name, type)
+        else:
+            raise ValueError('either send a filename or specify name, type')
+
+        if type not in ALLOWED_COL_TYPES:
+            raise ValueError("bad column type: '%s'" % type)
+
+        if type == 'array':
+            col = ArrayColumn(
+                filename=filename,
+                dir=self.dir,
+                name=name,
+                verbose=self.verbose,
+            )
         name = col.name
         self.clear(name)
         self[name] = col
@@ -259,7 +298,8 @@ class Columns(dict):
         """
         coldir = Columns(dir, verbose=self.verbose)
         if not os.path.exists(dir):
-            coldir.create()
+            raise RuntimeError("coldir does not exists: '%s'" % dir)
+
         name = coldir._dirbase()
         self.clear(name)
         self[name] = coldir
@@ -307,7 +347,7 @@ class Columns(dict):
         subcols = []
         if len(self) > 0:
             s += ['Columns:']
-            cnames = 'name', 'type', 'dtype', 'index', 'size'
+            cnames = 'name', 'type', 'dtype', 'index', 'shape'
             s += ['  %-15s %5s %6s %-6s %s' % cnames]
             s += ['  '+'-'*(50)]
 
@@ -317,21 +357,23 @@ class Columns(dict):
 
             for name in sorted(self):
                 c = self[name]
-                if isinstance(c, Column):
+                if isinstance(c, ColumnBase):
+
                     name = c.name
+
                     if len(name) > 15:
                         s += ['  %s' % name]
                         s += ['%23s' % (c.type,)]
                     else:
                         s += ['  %-15s %5s' % (c.name, c.type)]
 
-                    if c.type == 'col':
+                    if c.type == 'array':
                         c_dtype = c.dtype.descr[0][1]
                     else:
                         c_dtype = ''
                     s[-1] += ' %6s' % c_dtype
-                    s[-1] += ' %-6s' % self[name].has_index()
-                    s[-1] += ' %s' % self[name].size
+                    s[-1] += ' %-6s' % self[name].has_index
+                    s[-1] += ' %s' % (self[name].shape,)
 
                 else:
                     cdir = os.path.basename(c.dir).replace('.cols', '')
@@ -368,22 +410,19 @@ class Columns(dict):
             if name in self:
                 del self[name]
 
-    def write_column(self, name, data, type=None, create=False):
+    def write_column(self, name, data, type=None):
         """
         Write data to a column.
 
         If the column does not already exist, it is created.  If the type is
-        'col' and the column exists, the data are appended unless create=True.
-        For other types, the file is always created or overwritten.
+        'array' and the column exists, the data are appended.  For other types,
+        the file is always created or overwritten.
         """
-
-        if name in self and create:
-            self.delete_column(name)
 
         if name not in self:
             if type is None:
                 if isinstance(data, np.ndarray):
-                    type = 'col'
+                    type = 'array'
                 elif isinstance(data, dict):
                     type = 'json'
                 else:
@@ -394,7 +433,7 @@ class Columns(dict):
 
         self[name].write(data)
 
-    def write(self, data, create=False):
+    def write(self, data):
         """
         Write the fields of a structured array to columns
         """
@@ -404,11 +443,11 @@ class Columns(dict):
             raise ValueError('write() takes a structured array as '
                              'input')
         for name in names:
-            self.write_column(name, data[name], create=create)
+            self.write_column(name, data[name])
 
     write_columns = write
 
-    def delete_column(self, name):
+    def delete_column(self, name, yes=False):
         """
         delete the specified column and reload
 
@@ -416,18 +455,24 @@ class Columns(dict):
         ----------
         name: string
             Name of column to delete
+        yes: bool
+            If True, don't prompt for confirmation
         """
         if name not in self:
             print("cannot delete column '%s', it does not exist" % name)
 
+        if not yes:
+            answer = input('really delete all data? (y/n) ')
+            if answer.lower() == 'y':
+                yes = True
+
+        if not yes:
+            return
+
         self[name].delete()
         self.reload()
 
-    def from_fits(self,
-                  filename,
-                  create=False,
-                  ext=1,
-                  lower=False):
+    def from_fits(self, filename, ext=1, lower=False):
         """
         Write columns to the database, reading from the input fits file.
         Uses chunks of 100MB
@@ -436,9 +481,6 @@ class Columns(dict):
         ----------
         filename: string
             Name of the file to read
-        create: bool, optional
-            If True, over-write any existing columns with the same names as
-            those in the file
         ext: extension number, optional
             The FITS extension to read from
         lower: bool, optional
@@ -448,9 +490,9 @@ class Columns(dict):
 
         with fitsio.FITS(filename, lower=lower) as fits:
             hdu = fits[ext]
-            self._from_slicer(filename, hdu, create)
+            self._from_slicer(filename, hdu)
 
-    def _from_slicer(self, filename, slicer, create):
+    def _from_slicer(self, filename, slicer):
 
         one = slicer[1:1+1]
         nrows = slicer.get_nrows()
@@ -473,11 +515,6 @@ class Columns(dict):
             print('Details of columns: \n%s' % dp)
 
         for i in range(nstep):
-            if i == 0 and create:
-                # only create first time
-                docreate = True
-            else:
-                docreate = False
 
             start = i*step
             stop = (i+1)*step
@@ -489,7 +526,7 @@ class Columns(dict):
                       'of %s' % (start, stop, nrows))
             data = slicer[start:stop]
 
-            self.write(data, create=docreate)
+            self.write(data)
 
     def from_columns(self, coldir, create=False, indent=''):
         """
@@ -613,8 +650,17 @@ class Columns(dict):
                 raise ValueError("Column '%s' not found" % colname)
 
             col = self[colname]
-            nrows[i] = col.size
-            dtype.append(col.dtype.descr[0])
+            shape = col.shape
+
+            nrows[i] = shape[0]
+
+            descr = col.dtype.descr[0][1]
+
+            dt = (colname, descr)
+            if len(shape) > 1:
+                dt = dt + shape[1:]
+
+            dtype.append(dt)
 
             i += 1
 
@@ -681,101 +727,43 @@ class Columns(dict):
         return self[colname].read(rows=rows)
 
 
-class Column(object):
+class ColumnBase(object):
     """
     Represent a column in a Columns database.  Facilitate opening, reading,
     writing of data.  This class can be instantiated alone, but is usually
     accessed through the Columns class.
 
-    If the numpydb package is available, B-tree indexes can be created for
-    any column.  Searching can be done using standard ==, >, >=, <, <=
-    operators, as well as the .match() and between() functions.  The
-    functional forms are more powerful.
-
     Construction
     ------------
-        >>> col=Column(filename=, name=, dir=, type=, verbose=False)
+    >>> col=Column(filename=, name=, dir=, type=, verbose=False)
 
-        # there are alternative construction methods
-        # this method determins all info from the full path
-        >>> col=Column(filename='/full/path')
+    # there are alternative construction methods
+    # this method determins all info from the full path
+    >>> col=Column(filename='/full/path')
 
-        # this one uses directory, column name, type
-        >>> col=Column(
-                name='something', type='col',
-                dir='/some/path/dbname.cols',
-            )
-
-    Slice and item lookup
-    ---------------------
-        # The Column class supports item lookup access, e.g. slices and
-        # arrays representing a subset of rows
-
-        # Note true slices and row subset other than [:] are only supported
-        # by the 'col' type
-
-        >>> col=Column(...)
-        >>> data = col[25:22]
-        >>> data = col[row_list]
-
-        # if the column itself contains multiple fields, you can access subsets
-        # of these
-        >>> id = col['id'][:]
-        >>> data = col[ ['id','flux'] ][ rows ]
-
-    Indexes on columns
-    ------------------
-        If the numpydb package is available, you can create indexes on
-        columns and perform fast searches.
-
-        # create the index
-        >>> col.create_index()
-
-        # get indices for some range.  Can also do
-        >>> ind = (col > 25)
-        >>> ind = col.between(25,35)
-        >>> ind = (col == 25)
-        >>> ind = c['col'].match([25,77])
-
-        # composite searches over multiple columns with the same number
-        # of records
-        >>> ind = (col1 == 25) & (col2 < 15.23)
-        >>> ind = col1.between(15,25) | (col2 != 66)
-        >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
-
-    Methods
-    -------
-
-        # see docs for each method for more info
-
-        init(): Same args as construction
-        clear(): Clear out all metadata for this column.
-        reload(): Reload all metadat for this column.
-        read(rows=,columns=,fields=):
-            read data from column
-        write(data, create=False):
-            write data to column, appending unless create=False
-        delete():
-            Attempt to delete the data file associated with this column
-
-
+    # this one uses directory, column name, type
+    >>> col=Column(
+            name='something', type='array',
+            dir='/some/path/dbname.cols',
+        )
     """
     def __init__(self,
                  filename=None,
                  name=None,
                  dir=None,
-                 type=None,
                  verbose=False):
 
         self.init(
             filename=filename,
             name=name,
             dir=dir,
-            type=type,
             verbose=verbose,
         )
 
-    def init(self, filename=None, name=None, dir=None, type=None,
+    def init(self,
+             filename=None,
+             name=None,
+             dir=None,
              verbose=False):
         """
         See main docs for the Column class
@@ -783,29 +771,48 @@ class Column(object):
 
         self.clear()
 
-        self.filename = filename
-        self.name = name
-        self.dir = dir
-        self.type = type
+        self._filename = filename
+        self._name = name
+        self._dir = dir
         self.verbose = verbose
 
         # make sure we have something to work with before continuing
-        if not self._args_sufficient(filename, dir, name, type):
+        if not self._init_args_sufficient(filename, dir, name):
             return
 
         if self.filename is not None:
-            self._init_from_filename()
+            self._set_meta_from_filename()
+
         elif self.name is not None:
-            self._init_from_name()
+            self._set_meta_from_name()
 
-        if self.type == 'col':
-            self._init_col()
+    @property
+    def dir(self):
+        """
+        get the directory holding the file
+        """
+        return self._dir
 
-        if self.verbose:
-            print(self.__repr__())
+    @property
+    def filename(self):
+        """
+        get the file name holding the column data
+        """
+        return self._filename
 
-        # get info for index if it exists
-        self.init_index()
+    @property
+    def name(self):
+        """
+        get the name type of the column
+        """
+        return self._name
+
+    @property
+    def type(self):
+        """
+        get the data type of the column
+        """
+        return self._type
 
     def reload(self):
         """
@@ -819,16 +826,322 @@ class Column(object):
         """
         Clear out all the metadata for this column.
         """
-        self.filename = None
-        self.name = None
-        self.dir = None
-        self.type = None
-        self.verbose = False
-        self.size = -1
-        self.dtype = None
 
-        self.have_index = False
-        self.index_dtype = None
+        self._filename = None
+        self._name = None
+        self._dir = None
+        self.verbose = False
+
+    def write(self, data):
+        """
+        Write data to a column.
+        """
+        raise NotImplementedError('implement write')
+
+    def read(self, *args):
+        """
+        Read data from a column
+        """
+        raise NotImplementedError('implement read')
+
+    def delete(self):
+        """
+        Attempt to delete the data file associated with this column
+        """
+        if self.filename is None:
+            return
+
+        if os.path.exists(self.filename):
+            print("Removing data for column: %s" % self.name)
+            os.remove(self.filename)
+
+    #
+    # setup methods
+    #
+
+    def _set_meta_from_filename(self):
+        """
+        Initiaize this column based on the pull path filename
+        """
+        if self.filename is not None:
+            if self.verbose:
+                print("Initializing from file: %s" % self.filename)
+
+            if self.filename is None:
+                raise ValueError("You haven't specified a filename yet")
+
+            self._name = _extract_colname(self.filename)
+        else:
+            raise ValueError("You must set filename to use this function")
+
+    def _set_meta_from_name(self):
+        """
+        Initialize this based on name.  The filename is constructed from
+        the dir and name
+        """
+
+        if self.name is not None and self.dir is not None:
+
+            if self.verbose:
+                mess = "Initalizing from \n\tdir: %s \n\tname: %s \n\ttype: %s"
+                print(mess % (self.dir, self.name, self.type))
+
+            self._filename = _create_filename(self.dir, self.name, self.type)
+        else:
+            raise ValueError("You must set dir,name,type to use this function")
+
+    def _get_repr_list(self, full=False):
+        """
+
+        Get a list of metadat for this column.
+
+        """
+        raise NotImplementedError('implemente _get_repr_list')
+
+    def __repr__(self):
+        """
+        Print out some info about this column
+        """
+        s = self._get_repr_list(full=True)
+        s = "\n".join(s)
+        return s
+
+    def _init_args_sufficient(self,
+                              filename=None,
+                              dir=None,
+                              name=None):
+        """
+        Determine if the inputs are enough for initialization
+        """
+        if (filename is None) and \
+                (dir is None or name is None):
+            return False
+        else:
+            return True
+
+
+class ArrayColumn(ColumnBase):
+    """
+    represents an array column in a Columns database
+
+    If the numpydb package is available, B-tree indexes can be created for
+    any column.  Searching can be done using standard ==, >, >=, <, <=
+    operators, as well as the .match() and between() functions.  The
+    functional forms are more powerful.
+
+    Slice and item lookup
+    ---------------------
+    # The Column class supports item lookup access, e.g. slices and
+    # arrays representing a subset of rows
+
+    # Note true slices and row subset other than [:] are only supported
+    # by the 'array' type
+
+    >>> col=Column(...)
+    >>> data = col[25:22]
+    >>> data = col[row_list]
+
+    # if the column itself contains multiple fields, you can access subsets
+    # of these
+    >>> id = col['id'][:]
+    >>> data = col[ ['id','flux'] ][ rows ]
+
+    Indexes on columns
+    ------------------
+    If the numpydb package is available, you can create indexes on
+    columns and perform fast searches.
+
+    # create the index
+    >>> col.create_index()
+
+    # get indices for some range.  Can also do
+    >>> ind = (col > 25)
+    >>> ind = col.between(25,35)
+    >>> ind = (col == 25)
+    >>> ind = col.match([25,77])
+
+    # composite searches over multiple columns with the same number
+    # of records
+    >>> ind = (col1 == 25) & (col2 < 15.23)
+    >>> ind = col1.between(15,25) | (col2 != 66)
+    >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
+
+    """
+    def init(self,
+             filename=None,
+             name=None,
+             dir=None,
+             verbose=False):
+        """
+        initialize the meta data, and possibly load the mmap
+        """
+
+        self._type = 'array'
+
+        super(ArrayColumn, self).init(
+            filename=filename,
+            name=name,
+            dir=dir,
+            verbose=verbose,
+        )
+
+        if self.filename is None or not os.path.exists(self.filename):
+            return
+
+        self._open_file('r+')
+
+        # get info for index if it exists
+        self.init_index()
+
+    def _open_file(self, mode):
+        self._sf = SimpleFile(self.filename, mode=mode)
+
+    def clear(self):
+        """
+        Clear out all the metadata for this column.
+        """
+
+        super(ArrayColumn, self).clear()
+
+        if self.has_data:
+            del self._sf
+
+        self._has_index = False
+        self._index_dtype = None
+
+    @property
+    def has_data(self):
+        """
+        returns True if this column has some data
+        """
+        return hasattr(self, '_sf')
+
+    def ensure_has_data(self):
+        """
+        raise RuntimeError if no data is present
+        """
+        if not self.has_data:
+            raise ValueError('this column has no associated data')
+
+    @property
+    def dtype(self):
+        """
+        get the data type of the column
+        """
+        self.ensure_has_data()
+
+        return self._sf.dtype
+
+    @property
+    def shape(self):
+        """
+        get the shape of the column
+        """
+        self.ensure_has_data()
+
+        return self._sf.shape
+
+    @property
+    def size(self):
+        """
+        get the size of the columns
+        """
+        self.ensure_has_data()
+
+        return self._sf.size
+
+    def write(self, data):
+        """
+        Write data to the column.  Data are appended if the file already
+        exists.
+
+        Parameters
+        ----------
+        data: array
+            Data to append to the file.  If the column data already exists,
+            the data types must match exactly.
+        """
+
+        # make sure the data type of the input equals that of the column
+        if not isinstance(data, np.ndarray):
+            raise ValueError("For 'array' columns data must be a numpy array")
+
+        if data.dtype.names is not None:
+            raise ValueError('do not enter data with fields')
+
+        if not self.has_data:
+            self._open_file('w+')
+
+        self._sf.write(data)
+
+        if self.has_index:
+            # create the new indices
+            new_indices = np.arange(
+                self.size-data.size,
+                self.size,
+                dtype=self.index_dtype,
+            )
+            self._write_to_index(data, new_indices)
+
+    def __getitem__(self, arg):
+        """
+        Item lookup method, e.g. col[..] meaning slices or
+        sequences, etc.
+        """
+        if not hasattr(self, '_sf'):
+            raise ValueError('no file loaded yet')
+
+        return self._sf[arg]
+
+    def read(self, rows=None):
+        """
+        read data from this column
+
+        Parameters
+        ----------
+        rows: sequence, optional
+            A subset of the rows to read.
+        """
+        if not hasattr(self, '_sf'):
+            raise ValueError('no file loaded yet')
+
+        if rows is None:
+            return self._sf[:]
+        else:
+            return self._sf[rows]
+
+    def delete(self):
+        """
+        Attempt to delete the data file associated with this column
+        """
+
+        if hasattr(self, '_sf'):
+            del self._sf
+
+        super(ArrayColumn, self).delete()
+
+        # remove index if it exists
+        self.delete_index()
+
+    #
+    # index related methods
+    #
+
+    @property
+    def has_index(self):
+        """
+        returns True if an index exists for this column
+        """
+        return self._has_index
+
+    @property
+    def index_dtype(self):
+        """
+        returns True if an index exists for this column
+        """
+        if not self.has_index:
+            raise RuntimeError('no index exists for this column')
+        return self._index_dtype
 
     def init_index(self):
         """
@@ -836,10 +1149,10 @@ class Column(object):
         """
         index_fname = self.index_filename()
         if os.path.exists(index_fname):
-            self.have_index = True
+            self._has_index = True
             db = numpydb.NumpyDB(index_fname)
             # for the numerical indices
-            self.index_dtype = db.data_dtype()
+            self._index_dtype = db.data_dtype()
             db.close()
 
     def index_filename(self, tempdir=None):
@@ -858,12 +1171,6 @@ class Column(object):
             index_fname = os.path.join(tempdir, bname)
 
         return index_fname
-
-    def has_index(self):
-        """
-        returns True if the column has an index
-        """
-        return self.have_index
 
     def create_index(self, index_dtype='i8', force=False,
                      tempdir=None, verbose=False, db_verbose=0):
@@ -897,10 +1204,6 @@ class Column(object):
             This can override the overall verbosity.
         db_verbose: int, optional
             An integer indicating the verbosity of the db code.
-
-        Restrictions
-        ------------
-        Currently, the column type must be ordinary 'col' and should be scalar.
         """
 
         if tempdir is None:
@@ -959,116 +1262,18 @@ class Column(object):
 
         self.reload()
 
-    def _init_from_filename(self):
+    def delete_index(self):
         """
-        Initiaize this column based on the pull path filename
+        Delete the index for this column if it exists
         """
-        if self.filename is not None:
-            if self.verbose:
-                print("Initializing from file: %s" % self.filename)
-            self.name = self._extract_name()
-            self.type = self._extract_type()
-        else:
-            raise ValueError("You must set filename to use this function")
+        if self.has_index:
+            index_fname = self.index_filename()
+            if os.path.exists(index_fname):
+                print("Removing index for column: %s" % self.name)
+                os.remove(index_fname)
 
-    def _init_from_name(self):
-        """
-        Initialize this based on name.  The filename is constructed from
-        the dir and name
-        """
-
-        if (self.name is not None
-                and self.type is not None
-                and self.dir is not None):
-
-            if self.verbose:
-                mess = "Initalizing from \n\tdir: %s \n\tname: %s \n\ttype: %s"
-                print(mess % (self.dir, self.name, self.type))
-
-            self.filename = self._create_filename()
-        else:
-            raise ValueError("You must set dir,name,type to use this function")
-
-    @property
-    def shape(self):
-        """
-        get the shape of the columns
-        """
-        if self.type=='fits':
-            return self._sf.shape
-        else:
-            raise ValuError(".shape doesn't work for "
-                            "column type '%s'" % self.type)
-
-    @property
-    def size(self):
-        """
-        get the size of the columns
-        """
-        if self.type=='fits':
-            return self._sf.size
-        else:
-            raise ValuError(".size doesn't work for "
-                            "column type '%s'" % self.type)
-
-    def _init_col(self):
-        """
-        Init from a col file (SimpleFile)
-        """
-        if self.filename is None:
-            return
-
-        if not os.path.exists(self.filename):
-            return
-
-        self._sf = SimpleFile(self.filename)
-            hdu = fits[1]
-            self.size = hdu.get_nrows()
-            example = hdu[0:1]
-            descr = example.dtype.descr
-            self.dtype = np.dtype(descr)
-
-    def __getitem__(self, arg):
-        """
-        Item lookup method, e.g. col[..].  for fits files this is sent right to
-        the __getitem__ of the fits hdu object.
-
-        Slices and sequences are supported for rows.  You can also request a
-        subset of fields.
-        """
-
-        if self.type == 'fits':
-            with fitsio.FITS(self.filename) as fits:
-                hdu = fits[1]
-                data = hdu[self.name][arg]
-            return data
-        else:
-            raise RuntimeError(
-                'Only support indexing and slicing for fits type'
-            )
-
-    def read(self, rows=None):
-        """
-        read data from this column
-
-        Parameters
-        ----------
-        rows: sequence, optional
-            A subset of the rows to read.
-        """
-        if self.type == 'fits':
-
-            with fitsio.FITS(self.filename) as fits:
-                hdu = fits[1]
-                data = hdu.read(rows=rows)
-                data = data[self.name]
-                return data
-
-        elif self.type == 'json':
-            return _read_json(self.filename)
-
-        else:
-            raise RuntimeError("Only support 'fits' and 'json' type")
+        self._has_index = False
+        self._index_dtype = None
 
     def match(self, values, select='values'):
         """
@@ -1290,82 +1495,6 @@ class Column(object):
 
         return result
 
-    def write(self, data, create=False):
-        """
-        Write data to a column.  Append unles create=True.
-
-        Parameters
-        ----------
-        data:  array or dict
-            Data to write.  If the column data already exists, data may be
-            appended for 'fits' type columns.  The data types in that case must
-            match exactly.
-
-        create: bool, optional
-            If True, delete the existing data and write a new
-            file. Default False.
-        """
-
-        if create:
-            self.delete()
-
-        if self.type == 'col':
-            self._write_col(data)
-        elif self.type == 'json':
-            self._write_json(data)
-        else:
-            raise RuntimeError("Currently only support rec types")
-
-    def _write_json(self, data):
-        """
-        write json data
-        """
-        _write_json(data, self.filename)
-
-    def _write_col(self, data, create=False):
-        """
-        Write data to a 'col' column file.  The data must be an array without
-        fields.  Append unless create=True.
-
-        Parameters
-        ----------
-        data: array
-            Data to append to the file.  If the column data already exists,
-            and create=False, the data types must match exactly.
-        create: bool, optional
-            If True, delete the existing data and write a new file. Default
-            False.
-        """
-
-        # If forcing create, delete myself.
-        if create:
-            self.delete()
-
-        # make sure the data type of the input equals that of the column
-        if not isinstance(data, np.ndarray):
-            raise ValueError("For 'fits' columns data must be a numpy array")
-
-        if data.dtype.names is not None:
-            raise ValueError('do not enter data with fields')
-
-        with fitsio.FITS(self.filename, 'rw', clobber=create) as fits:
-            if 1 in fits:
-                fits[1].append(data)
-            else:
-                fits.write(data)
-                self.dtype = np.dtype(data.dtype.descr)
-
-            self.size = fits[1].get_nrows()
-
-        if self.have_index:
-            # create the new indices
-            new_indices = np.arange(
-                self.size-data.size,
-                self.size,
-                dtype=self.index_dtype,
-            )
-            self._write_to_index(data, new_indices)
-
     def _write_to_index(self,
                         data,
                         indices,
@@ -1411,12 +1540,10 @@ class Column(object):
     def _verify_db_available(self, action=None):
         if not havedb:
             raise ImportError("Could not import numpydb")
-        if self.type != 'col':
-            raise ValueError("Column type must be 'col' for indexing")
 
         # for reading and writing, the file must already exist
         if action == 'read' or action == 'write':
-            if not self.have_index:
+            if not self.has_index:
                 raise RuntimeError(
                     "No index file found for "
                     "column '%s'.  Use create_index()" % self.name
@@ -1431,35 +1558,93 @@ class Column(object):
                 raise RuntimeError("index file already "
                                    "exists: '%s'" % index_fname)
 
-    def delete(self):
+    def _get_repr_list(self, full=False):
         """
-        Attempt to delete the data file associated with this column
+
+        Get a list of metadat for this column.
+
         """
-        if self.filename is None:
-            return
-        if os.path.exists(self.filename):
-            print("Removing data for column: %s" % self.name)
-            os.remove(self.filename)
+        indent = '  '
 
-        # remove index if it exists
-        self.delete_index()
+        if not full:
+            s = ''
+            if self.name is not None:
+                s += 'Column: %-15s' % self.name
 
-        print("Deleting metadata for column: %s" % self.name)
-        self.size = 0
-        self.dtype = None
+            s += ' type: %10s' % self.type
 
-    def delete_index(self):
+            if self.shape is not None:
+                s += ' shape: %12s' % (self.shape,)
+
+            if self.name is not None:
+                s += ' has index: %s' % self.has_index
+
+            s = [s]
+        else:
+            s = []
+            if self.name is not None:
+                s += ['"'+self.name+'"']
+
+            if self.filename is not None:
+                s += ['filename: %s' % self.filename]
+
+            s += ['type: array']
+
+            if self.shape is not None:
+                s += ['shape: %s' % (self.shape,)]
+
+            if self.name is not None:
+                s += ['has index: %s' % self.has_index]
+
+            if self.dtype is not None:
+                drepr = pprint.pformat(self.dtype.descr)
+                drepr = drepr.split('\n')
+                drepr = ['  '+d for d in drepr]
+                s += ["dtype: "] + drepr
+
+            s = [indent + tmp for tmp in s]
+            s = ['Column: '] + s
+
+        return s
+
+
+class JSONColumn(ColumnBase):
+    def init(self,
+             filename=None,
+             name=None,
+             dir=None,
+             verbose=False):
         """
-        Delete the index for this column if it exists
+        initialize the meta data, and possibly load the mmap
         """
-        if self.have_index:
-            index_fname = self.index_filename()
-            if os.path.exists(index_fname):
-                print("Removing index for column: %s" % self.name)
-                os.remove(index_fname)
 
-        self.have_index = False
-        self.index_dtype = None
+        self._type = 'json'
+
+        super(ArrayColumn, self).init(
+            filename=filename,
+            name=name,
+            dir=dir,
+            verbose=verbose,
+        )
+
+    def write(self, data):
+        """
+        Write data to the JSON column.
+
+        Parameters
+        ----------
+        data: array
+            The data must be supported by the JSON format.
+        """
+
+        _write_json(data, self.filename)
+
+    def read(self):
+        """
+        read data from this column
+        """
+
+        return _read_json(self.filename)
 
     def _get_repr_list(self, full=False):
         """
@@ -1473,12 +1658,7 @@ class Column(object):
             s = ''
             if self.name is not None:
                 s += 'Column: %-15s' % self.name
-            if self.type is not None:
-                s += ' type: %10s' % self.type
-            if self.size >= 0:
-                s += ' size: %12s' % self.type
-            if self.name is not None:
-                s += ' has index: %s' % self.have_index
+            s += ' type: %10s' % self.type
 
             s = [s]
         else:
@@ -1488,76 +1668,13 @@ class Column(object):
 
             if self.filename is not None:
                 s += ['filename: %s' % self.filename]
-            if self.type is not None:
-                s += ['type: %s' % self.type]
-            if self.size >= 0:
-                s += ['size: %s' % self.size]
 
-            if self.name is not None:
-                s += ['has index: %s' % self.have_index]
-
-            if self.dtype is not None:
-                drepr = pprint.pformat(self.dtype.descr)
-                drepr = drepr.split('\n')
-                drepr = ['  '+d for d in drepr]
-                s += ["dtype: "] + drepr
+            s += ['type: JSON']
 
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
 
         return s
-
-    def __repr__(self):
-        """
-        Print out some info about this column
-        """
-        s = self._get_repr_list(full=True)
-        s = "\n".join(s)
-        return s
-
-    def _extract_name(self):
-        """
-        Extract the column name from the file name
-        """
-        if self.filename is None:
-            raise ValueError("You haven't specified a filename yet")
-        bname = os.path.basename(self.filename)
-        name = '.'.join(bname.split('.')[0:-1])
-        return name
-
-    def _extract_type(self):
-        """
-        Extract the type from the file name
-        """
-        if self.filename is None:
-            raise ValueError("You haven't specified a filename yet")
-        return self.filename.split('.')[-1]
-
-    def _create_filename(self):
-        if self.dir is None:
-            raise ValueError("Cannot create column filename: directory "
-                             "has not been set")
-        if self.name is None:
-            raise ValueError("Cannot create column filename: name "
-                             "has not been set")
-        if self.type is None:
-            raise ValueError("Cannot create column filename: type "
-                             "has not been set")
-        return os.path.join(self.dir, self.name+'.'+self.type)
-
-    def _args_sufficient(self,
-                         filename=None,
-                         dir=None,
-                         name=None,
-                         type=None):
-        """
-        Determine if the inputs are enough for initialization
-        """
-        if (filename is None) and \
-                (dir is None or name is None or type is None):
-            return False
-        else:
-            return True
 
 
 class Index(np.ndarray):
@@ -1672,3 +1789,35 @@ def _write_json(obj, fname, pretty=True):
 
     with open(fname, 'w') as fobj:
         json.dump(obj, fobj, indent=1, separators=(',', ':'))
+
+
+def _extract_colname(filename):
+    """
+    Extract the column name from the file name
+    """
+
+    bname = os.path.basename(filename)
+    name = '.'.join(bname.split('.')[0:-1])
+    return name
+
+
+def _extract_coltype(filename):
+    """
+    Extract the type from the file name
+    """
+    return filename.split('.')[-1]
+
+def _create_filename(dir, name, type):
+
+    if dir is None:
+        raise ValueError('Cannot create column filename, dir is None')
+
+    if name is None:
+        raise ValueError('Cannot create column filename: name is None')
+
+    if type is None:
+        raise ValueError('Cannot create column filename: type is None')
+
+    return os.path.join(dir, name+'.'+type)
+
+
