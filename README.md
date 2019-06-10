@@ -14,11 +14,11 @@ for indexing.  A TODO is to examine copying the needed parts into pycolumns.
 
 == Examples ==
 ```python
->>> import columns
+>>> import pycolumns as pyc
 
 
 # instantiate a column database from the specified coldir
->>> c=columns.Columns('/some/path/mycols.cols')
+>>> c=pyc.Columns('/some/path/mycols.cols')
 
 
 # display some info about the columns
