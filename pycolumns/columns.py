@@ -286,6 +286,16 @@ class Columns(dict):
                 name=name,
                 verbose=self.verbose,
             )
+        elif type == 'json':
+            col = JSONColumn(
+                filename=filename,
+                dir=self.dir,
+                name=name,
+                verbose=self.verbose,
+            )
+        else:
+            raise ValueError("bad column type '%s'" % type)
+
         name = col.name
         self.clear(name)
         self[name] = col
@@ -369,11 +379,9 @@ class Columns(dict):
 
                     if c.type == 'array':
                         c_dtype = c.dtype.descr[0][1]
-                    else:
-                        c_dtype = ''
-                    s[-1] += ' %6s' % c_dtype
-                    s[-1] += ' %-6s' % self[name].has_index
-                    s[-1] += ' %s' % (self[name].shape,)
+                        s[-1] += ' %6s' % c_dtype
+                        s[-1] += ' %-6s' % self[name].has_index
+                        s[-1] += ' %s' % (self[name].shape,)
 
                 else:
                     cdir = os.path.basename(c.dir).replace('.cols', '')
@@ -1620,7 +1628,7 @@ class JSONColumn(ColumnBase):
 
         self._type = 'json'
 
-        super(ArrayColumn, self).init(
+        super(JSONColumn, self).init(
             filename=filename,
             name=name,
             dir=dir,
