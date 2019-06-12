@@ -473,9 +473,12 @@ def _get_dtype_string(dtype):
     """
     dtype string for header
     """
-    dstr = dtype.descr[0][1]
-
-    s = "DTYPE = '%s'\n" % dstr
+    if dtype.names is not None:
+        dstr = str(dtype.descr)
+        s = "DTYPE = %s\n" % dstr
+    else:
+        dstr = dtype.descr[0][1]
+        s = "DTYPE = '%s'\n" % dstr
     return bytes(s, 'ascii')
 
 
