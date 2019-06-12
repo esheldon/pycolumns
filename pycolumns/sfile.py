@@ -132,6 +132,13 @@ class SimpleFile(object):
         self._dtype = None
 
     @property
+    def mmap(self):
+        """
+        get a reference to the mmap
+        """
+        return self._mmap
+
+    @property
     def size(self):
         """
         get the total number of elements

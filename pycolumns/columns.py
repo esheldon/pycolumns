@@ -1,4 +1,5 @@
 import os
+import bisect
 from glob import glob
 import pprint
 import json
@@ -1141,6 +1142,13 @@ class ArrayColumn(ColumnBase):
         """
         return self._has_index
 
+    def verify_index_available(self):
+        """
+        raises an exception of the index isn't available
+        """
+        if not self.has_index:
+            raise ValueError('no index exists for column %s' % self.name)
+
     def create_index(self):
         """
         Create an index for this column.
@@ -1213,6 +1221,50 @@ class ArrayColumn(ColumnBase):
         index_fname = '.'.join(self.filename.split('.')[0:-1])
         index_fname = index_fname+'__index.sf'
         return index_fname
+
+    # one-sided range operators
+    def __gt__(self, val):
+        """
+        bisect_right returns i such that data[i:] are all strictly > val
+        """
+        mmap = self._index.mmap
+        i = bisect.bisect_right(mmap['value'], val)
+        indices = mmap['index'][i:].copy()
+
+        return Index(indices)
+
+    def __ge__(self, val):
+        """
+        bisect_left returns i such that data[:i] are all strictly >= val
+        """
+        mmap = self._index.mmap
+        i = bisect.bisect_left(mmap['value'], val)
+        indices = mmap['index'][i:].copy()
+
+        return Index(indices)
+
+
+    def __lt__(self, val):
+        """
+        bisect_left returns i such that data[:i] are all strictly < val
+        """
+        mmap = self._index.mmap
+        i = bisect.bisect_left(mmap['value'], val)
+        indices = mmap['index'][:i].copy()
+
+        return Index(indices)
+
+    def __le__(self, val):
+        """
+        bisect_right returns i such that data[:i] are all strictly <= val
+        """
+        mmap = self._index.mmap
+        i = bisect.bisect_right(mmap['value'], val)
+        indices = mmap['index'][:i].copy()
+
+        return Index(indices)
+
+
 
     '''
     @property
@@ -1463,7 +1515,7 @@ class ArrayColumn(ColumnBase):
 
         self._has_index = False
         self._index_dtype = None
-    '''
+
     def match(self, values, select='values'):
         """
         Find all entries that match the requested value or values and return a
@@ -1746,6 +1798,8 @@ class ArrayColumn(ColumnBase):
             if os.path.exists(index_fname):
                 raise RuntimeError("index file already "
                                    "exists: '%s'" % index_fname)
+
+    '''
 
     def _get_repr_list(self, full=False):
         """
