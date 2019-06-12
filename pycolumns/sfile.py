@@ -51,10 +51,8 @@ class SimpleFile(object):
         data = sf[35:100]
         data = sf[ [35,66,22,23432] ]
         data = sf[ row_list ]
-        data =sf.read(rows=row_list)
 
-
-    with SimpleFile('test.rec','w+') as sf:
+    with SimpleFile('test.sf','w+') as sf:
         sf.write(data)
 
         # this appends data
@@ -64,7 +62,6 @@ class SimpleFile(object):
         sf[0]
 
         sf.write(more_data)
-
     """
     def __init__(self, filename=None, mode='r'):
         self.open(filename=filename, mode=mode)
