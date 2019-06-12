@@ -3,7 +3,6 @@ from glob import glob
 import pprint
 import json
 import numpy as np
-import shutil
 from .sfile import SimpleFile
 
 try:
@@ -999,7 +998,7 @@ class ArrayColumn(ColumnBase):
         self._open_file('r+')
 
         # get info for index if it exists
-        self.init_index()
+        self._init_index()
 
     def _open_file(self, mode):
         self._sf = SimpleFile(self.filename, mode=mode)
@@ -1142,16 +1141,90 @@ class ArrayColumn(ColumnBase):
         """
         return self._has_index
 
+    def create_index(self):
+        """
+        Create an index for this column.
+
+        Once the index is created, all data from the column will be put into
+        the index.  Also, after creation any data appended to the column are
+        automatically added to the index.
+        """
+
+        if self.has_index:
+            print('column %s already has an index')
+            return
+
+        if len(self.shape) > 1:
+            raise ValueError('cannot index a multi-dimensional column')
+
+        if self.verbose:
+            print('creating index for column %s' % self.name)
+
+        dt = [
+            ('index', 'i8'),
+            ('value', self.dtype.descr[0][1]),
+        ]
+        index_data = np.zeros(self.shape[0], dtype=dt)
+        index_data['index'] = np.arange(index_data.size)
+        index_data['value'] = self[:]
+
+        index_data.sort(order='value')
+
+        # set up file name and data type info
+        index_fname = self.index_filename
+        with SimpleFile(index_fname, mode='w+') as sf:
+            sf.write(index_data)
+
+        self._init_index()
+
+    def delete_index(self):
+        """
+        Delete the index for this column if it exists
+        """
+        if self.has_index:
+            index_fname = self.index_filename
+            if os.path.exists(index_fname):
+                print("Removing index for column: %s" % self.name)
+                os.remove(index_fname)
+
+        self._init_index()
+
+    def _init_index(self):
+        """
+        If index file exists, load some info
+        """
+        index_fname = self.index_filename
+        if os.path.exists(index_fname):
+            self._has_index = True
+            self._index = SimpleFile(index_fname, mode='r+')
+        else:
+            self._has_index = False
+            self._index = None
+
+    @property
+    def index_filename(self):
+        """
+        get the filename for the index of this column
+        """
+        if self.filename is None:
+            return None
+
+        # remove the final extension
+        index_fname = '.'.join(self.filename.split('.')[0:-1])
+        index_fname = index_fname+'__index.sf'
+        return index_fname
+
+    '''
     @property
     def index_dtype(self):
         """
-        returns True if an index exists for this column
+        get index dtype
         """
         if not self.has_index:
             raise RuntimeError('no index exists for this column')
         return self._index_dtype
 
-    def init_index(self):
+    def _init_index(self):
         """
         If index file exists, load some info
         """
@@ -1162,6 +1235,114 @@ class ArrayColumn(ColumnBase):
             # for the numerical indices
             self._index_dtype = db.data_dtype()
             db.close()
+
+
+    def index_filename(self, tempdir=None):
+        """
+        get the filename for the index of this column
+        """
+        if self.filename is None:
+            return None
+
+        # remove the final extension
+        index_fname = '.'.join(self.filename.split('.')[0:-1])
+        index_fname = index_fname+'__index.db'
+
+        if tempdir is not None:
+            bname = os.path.basename(index_fname)
+            index_fname = os.path.join(tempdir, bname)
+
+        return index_fname
+
+    def create_index(self, index_dtype='i8', force=False,
+                     tempdir=None, verbose=False, db_verbose=0):
+        """
+        Create an index for this column.  The index is created by the
+        numpydb package which uses a Berkeley DB B-tree.  The database file
+        will be named {columnfile}__index.db
+
+        Once the index is created, all data from the column will be put
+        into the index.  Also, after creation any data appended to the
+        column are automatically added to the index.
+
+        Parameters
+        ----------
+        index_dtype: str, optional
+            The data type for the index.  The default is 'i8' but can
+            also be 'i4'
+        force: bool, optional
+            If True, any existing index is deleted. If this keyword is not True
+            and the index exists, and exception is raised.  Default is False.
+        tempdir:
+            A temporary directory to write the index.  This is very useful when
+            the tempdir is for example a linux "tempfs" which is in memory,
+            e.g. /dev/shm.  This can speed up index creation by a large factor
+
+            Note if /dev/shm exists it will be used by default if you don't set
+            tempdir yourself.
+
+            After creation, the index will be moved to it's final destination.
+        verbose: bool, optional
+            This can override the overall verbosity.
+        db_verbose: int, optional
+            An integer indicating the verbosity of the db code.
+        """
+
+        if tempdir is None:
+            if os.path.exists('/dev/shm'):
+                tempdir = '/dev/shm'
+
+        # delete existing index?
+        if force:
+            self.delete_index()
+
+        # make sure we can create
+        self._verify_db_available('create')
+
+        # set up file name and data type info
+        index_fname = self.index_filename(tempdir=tempdir)
+
+        key_dtype = self.dtype.descr[0][1]
+
+        # basic create
+        if self.verbose or verbose:
+            print("Creating index for column '%s'" % self.name)
+            print("    db file: '%s'" % index_fname)
+
+        numpydb.create(
+            index_fname,
+            key_dtype,
+            index_dtype,
+            verbosity=db_verbose,
+        )
+
+        # this reloads metadata for column, so we know the index file
+        # exists (if not using a temp file)
+        self.reload()
+
+        # Write the data to the index.  We should do this in chunks of,
+        # say, 100 MB or something
+        data = self.read()
+        indices = np.arange(data.size, dtype=index_dtype)
+
+        # note sending filename= will prevent calling _verify_db_available
+        # which is good since we may be using a temp file
+        self._write_to_index(
+            data,
+            indices,
+            filename=index_fname,
+            verbose=db_verbose,
+        )
+        del data
+
+        if tempdir is not None:
+            # move to the final destination
+            final_fname = self.index_filename()
+            if self.verbose or verbose:
+                print("    Moving to final destination: '%s'" % final_fname)
+            shutil.move(index_fname, final_fname)
+
+        self.reload()
 
     def index_filename(self, tempdir=None):
         """
@@ -1282,7 +1463,7 @@ class ArrayColumn(ColumnBase):
 
         self._has_index = False
         self._index_dtype = None
-
+    '''
     def match(self, values, select='values'):
         """
         Find all entries that match the requested value or values and return a
@@ -1815,6 +1996,7 @@ def _extract_coltype(filename):
     """
     return filename.split('.')[-1]
 
+
 def _create_filename(dir, name, type):
 
     if dir is None:
@@ -1827,5 +2009,3 @@ def _create_filename(dir, name, type):
         raise ValueError('Cannot create column filename: type is None')
 
     return os.path.join(dir, name+'.'+type)
-
-
