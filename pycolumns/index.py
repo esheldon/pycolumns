@@ -4,24 +4,25 @@ this is not the index on a column, but set of indices
 import numpy as np
 
 
-class Index(np.ndarray):
+class Indices(np.ndarray):
     """
-    Represent an index into a database.  This object inherits from normal
-    numpy arrays, but behaves differently under the "&" and "|" operators.
-    These return the intersection or union of values in two Index objects.
+    Represent indices returned by querying a column index.  This object
+    inherits from normal numpy arrays, but behaves differently under the "&"
+    and "|" operators.  These return the intersection or union of values in two
+    Indices objects.
 
     Methods:
         The "&" and "|" operators are defined.
 
-        array(): Return an ordinary np.ndarray view of the Index.
+        array(): Return an ordinary np.ndarray view of the Indices.
 
     Examples:
-        >>> i1=Index([3,4,5])
-        >>> i2=Index([4,5,6])
+        >>> i1=Indices([3,4,5])
+        >>> i2=Indices([4,5,6])
         >>> (i1 & i2)
-        Index([4, 5])
+        Indices([4, 5])
         >>> (i1 | i2)
-        Index([3, 4, 5, 6])
+        Indices([3, 4, 5, 6])
 
     """
     def __new__(self, init_data, copy=False):
@@ -37,22 +38,22 @@ class Index(np.ndarray):
 
     def __and__(self, ind):
         # take the intersection
-        if isinstance(ind, Index):
+        if isinstance(ind, Indices):
             w = np.intersect1d(self, ind)
         else:
-            raise ValueError("comparison index must be an Index object")
-        return Index(w)
+            raise ValueError("comparison index must be an Indices object")
+        return Indices(w)
 
     def __or__(self, ind):
         # take the unique union
-        if isinstance(ind, Index):
+        if isinstance(ind, Indices):
             w = np.union1d(self, ind)
         else:
-            raise ValueError("comparison index must be an Index object")
+            raise ValueError("comparison index must be an Indices object")
 
-        return Index(w)
+        return Indices(w)
 
     def __repr__(self):
         rep = np.ndarray.__repr__(self)
-        rep = rep.replace('array', 'Index')
+        rep = rep.replace('array', 'Indices')
         return rep

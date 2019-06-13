@@ -4,7 +4,7 @@ import numpy as np
 
 from . import util
 from .sfile import SimpleFile
-from .index import Index
+from .indices import Indices
 
 
 class ColumnBase(object):
@@ -509,7 +509,7 @@ class ArrayColumn(ColumnBase):
         i = bisect.bisect_right(mmap['value'], val)
         indices = mmap['index'][i:].copy()
 
-        return Index(indices)
+        return Indices(indices)
 
     def __ge__(self, val):
         """
@@ -519,7 +519,7 @@ class ArrayColumn(ColumnBase):
         i = bisect.bisect_left(mmap['value'], val)
         indices = mmap['index'][i:].copy()
 
-        return Index(indices)
+        return Indices(indices)
 
     def __lt__(self, val):
         """
@@ -529,7 +529,7 @@ class ArrayColumn(ColumnBase):
         i = bisect.bisect_left(mmap['value'], val)
         indices = mmap['index'][:i].copy()
 
-        return Index(indices)
+        return Indices(indices)
 
     def __le__(self, val):
         """
@@ -539,7 +539,7 @@ class ArrayColumn(ColumnBase):
         i = bisect.bisect_right(mmap['value'], val)
         indices = mmap['index'][:i].copy()
 
-        return Index(indices)
+        return Indices(indices)
 
     def between(self, low, high, interval='[]'):
         """
@@ -612,7 +612,7 @@ class ArrayColumn(ColumnBase):
 
         indices = mmap['index'][ilow:ihigh].copy()
 
-        return Index(indices)
+        return Indices(indices)
 
     def _get_repr_list(self, full=False):
         """

@@ -12,6 +12,6 @@ from .column import (
     DictColumn,
 )
 from . import index
-from .index import Index
+from .indices import Indices
 
 __version__ = '0.1.0'
