@@ -27,7 +27,7 @@ Column Directory:
     ccd             array    <i2 True   (64348146,)
     dec             array    <f8 False  (64348146,)
     exposurename    array   |S20 True   (64348146,)
-    id              array    <i4 False  (64348146,)
+    id              array    <i8 False  (64348146,)
     imag            array    <f4 False  (64348146,)
     ra              array    <f8 False  (64348146,)
     x               array    <f4 False  (64348146,)
@@ -49,7 +49,7 @@ Column:
   type: col
   shape: (64348146,)
   has index: False
-  dtype: <i4
+  dtype: <i8
 
 # get the column names
 >>> c.colnames
@@ -88,9 +88,7 @@ Column:
 # specify columns
 >>> data = c.read(columns=['id', 'flux'], rows=rows)
 
-# or put different columns into fields of a dictionary instead of
-# packing them into a single array.  JSON columns can be loaded
-# this way with other data
+# JSON columns can be specified if asdict is True
 >>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
 
 # Create indexes for fast searching
@@ -107,8 +105,13 @@ Column:
 
 # composite searches over multiple columns
 >>> ind = (c['id'] == 25) & (col['ra'] < 15.23)
->>> ind = c['id'].between(15, 25) | (c['ra'] < 66)
+>>> ind = c['id'].between(15, 25) | (c['id'] == 55)
 >>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
+
+# update values for a column
+>>> c['id'][35] = 10
+>>> c['id'][35:35+3] = [8, 9, 10]
+>>> c['id'][rows] = idvalues
 
 # create a new column or append data to a column
 >>> c.write_column(name, data)

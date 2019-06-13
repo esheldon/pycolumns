@@ -6,6 +6,11 @@ todo
     - always use little endian dtype when writing
     - make sure copies are made rather than references, but don't copy twice in
       case where memmap getitem is already returning a copy
+    - can we loosen up the requirement of columns being same number of rows?
+      - if not, need to hide write_column and also put a check for this other
+        than verify
+    - need to be able to update all columns at once.
+        - probaby rename write to append and use write for replacing data
 """
 import os
 import bisect
@@ -121,6 +126,11 @@ class Columns(dict):
             (c['col2'] != 66) &
             (c['col3'] < 5)
         )
+
+        # update values for a column
+        >>> c['id'][35] = 10
+        >>> c['id'][35:35+3] = [8, 9, 10]
+        >>> c['id'][rows] = idvalues
 
         # create column or append data to a column
         >>> c.write_column(name, data)
@@ -1115,6 +1125,16 @@ class ArrayColumn(ColumnBase):
             raise ValueError('no file loaded yet')
 
         return self._sf[arg]
+
+    def __setitem__(self, arg, values):
+        """
+        Item lookup method, e.g. col[..] meaning slices or
+        sequences, etc.
+        """
+        if not hasattr(self, '_sf'):
+            raise ValueError('no file loaded yet')
+
+        self._sf._mmap[arg] = values
 
     def read(self, rows=None):
         """

@@ -42,7 +42,6 @@ class SimpleFile(object):
         #
 
         data = sf[:]
-        data = sf.read()
 
         # read a subset of rows.  Can use slices, single numbers for rows,
         # or list/array of row numbers.
@@ -247,6 +246,17 @@ class SimpleFile(object):
 
         return self._mmap[arg]
 
+    def __setitem__(self, arg, values):
+        """
+        write to the file
+
+        sf[35] = 10
+        sf[35:88] = ...
+        sf[[3, 234, 5551]] = [8, 9, 10]
+        """
+
+        self._mmap[arg] = values
+
     def _ensure_open(self):
         """
         check if a file is open, if not raise a RuntimeError
@@ -339,8 +349,7 @@ class SimpleFile(object):
     def _read_header(self):
         """
         Read the header from a simple self-describing file format with an
-        ascii header.  See the write() function for information about reading
-        this file format, and read() for reading.
+        ascii header.
 
         The file format:
           First line:
