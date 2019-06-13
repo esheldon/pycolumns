@@ -1,5 +1,6 @@
 import os
 import json
+import numpy as np
 
 
 def extract_colname(filename):
@@ -59,3 +60,30 @@ def write_json(obj, fname, pretty=True):
 
     with open(fname, 'w') as fobj:
         json.dump(obj, fobj, indent=1, separators=(',', ':'))
+
+
+def get_native_data(data):
+    """
+    get version of the structured array with native
+    byte ordering
+
+    This version works even when the byte ordering is
+    mixed
+    """
+    newdt = []
+    for n in data.dtype.names:
+        col = data[n]
+        dtstr = col.dtype.descr[0][1][1:]
+        shape = col.shape
+        if len(shape) > 1:
+            descr = (n, dtstr, shape[1:])
+        else:
+            descr = (n, dtstr)
+
+        newdt.append(descr)
+
+    new_data = np.zeros(data.size, dtype=newdt)
+    for n in data.dtype.names:
+        new_data[n] = data[n]
+
+    return new_data
