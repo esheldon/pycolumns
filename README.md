@@ -1,7 +1,9 @@
 A simple, efficient column-oriented, pythonic data store.
 
-The focus is currently on efficiency of reading and writing.  Basic consistency
-is ensured but the database is not fully ACID.
+The focus is currently on efficiency of reading and writing.  The code is pure
+python but searching and reading data is fast due to the use of numpy memory
+maps and column indexing.  Basic consistency is ensured but the database is not
+fully ACID.
 
 Examples
 --------
