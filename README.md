@@ -58,13 +58,13 @@ Column:
 # reload all columns or specified column/column list
 >>> c.reload(name=None)
 
-# read all data from column 'id'
-# alternative syntaxes
+# read all data from array column 'id'
+# alternative syntaxes, including numpy style slicing
 >>> id = c['id'][:]
 >>> id = c['id'].read()
 >>> id = c.read_column('id')
 
-# dict columns are read as a dict
+# dict columns are read as a dict. No slicing for dicts
 >>> meta = c['meta'].read()
 
 # read a subset of rows
@@ -127,6 +127,7 @@ Column:
 # add a dict column
 >>> c.create_column('meta')
 >>> c['meta'].write({'test': 'hello'})
+>>> d = c['meta'].read()
 ```
 
 Dependencies
