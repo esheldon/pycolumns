@@ -1,8 +1,8 @@
 """
 todo
 
-    - figure out when to sort the index for reading; this can make a big difference
-    in read speeds
+    - figure out when to sort the index for reading; this can make a big
+    difference in read speeds
     - use little endian dtype
     - make sure copies are made rather than references, but don't copy twice in
     case where memmap getitem is already returning a copy
@@ -260,6 +260,26 @@ class Columns(dict):
                     else:
                         self.load_column(filename=f)
 
+    def verify(self):
+        """
+        verify all array columns have the same length
+        """
+
+        first = True
+        for c in self.keys():
+            col = self[c]
+            if col.type == 'array':
+                this_nrows = col.nrows
+                if first:
+                    nrows = this_nrows
+                    first = False
+                else:
+                    if this_nrows != nrows:
+                        raise ValueError(
+                            'column size mismatch for %s '
+                            'got %d vs %d' % (c, this_nrows, nrows)
+                        )
+
     def load_column(self, name=None, filename=None, type=None):
         """
         Load the specified column
@@ -317,25 +337,27 @@ class Columns(dict):
         self.clear(name)
         self[name] = coldir
 
-    def reload(self, name=None):
+    def reload(self, columns=None):
         """
+        reload the database or a subset of columns
 
-        Reload an existing column or everything
-        Equivalent to self[name].reload()
-
+        parameters
+        ----------
+        columns: str or list of str, optional
+            If sent, just reload the given columns.  Can be scalar
         """
-        if name is not None:
-            if isinstance(name, str,):
-                name = [name]
-
-            for n in name:
-                if name not in self:
-                    raise ValueError("Unknown column '%s'" % name)
-                self[name].reload()
+        if columns is not None:
+            if isinstance(columns, str):
+                columns = [columns]
         else:
-            # just reload everything
-            for name in self:
-                self[name].reload()
+            columns = self.keys()
+
+        for column in columns:
+            if column not in self:
+                raise ValueError("Unknown column '%s'" % column)
+            self[column].reload()
+
+        self.verify()
 
     def colnames(self):
         """
@@ -606,29 +628,26 @@ class Columns(dict):
 
     def read(self,
              columns=None,
-             colnames=None,  # deprecated
              rows=None,
-             asdict=False,
-             verbose=False):
+             asdict=False):
         """
         read columns and rows
 
         Parameters
         ----------
         columns: sequence or string
-            Can be a scalar string or a sequence of strings.  Defaults to all.
+            Can be a scalar string or a sequence of strings.  Defaults to all
+            array columns if asdict is False, all if asdict is True
         rows: sequence or scalar
             Sequence of row numbers.  Defaults to all.
         asdict: bool, optional
             If True, read fixed length columns into numpy arrays and store
             each in a dictionary with key=colname.  When supported,
             variable length columns can also be stored in this type of
-            container as e.g.  strings.
+            container as e.g. json columns
 
             if asdict=False, only fixed length columns can be read and they
             are all packed into a single structured array (e.g. recarray).
-        verbose: bool, optional
-            Be verbose
 
         Notes
         ------
@@ -642,28 +661,61 @@ class Columns(dict):
         same length, an exception is raised.
         """
 
-        if columns is None and colnames is not None:
-            columns = colnames
+        columns = self._extract_columns(columns=columns, asdict=asdict)
 
-        if columns is None:
-            columns = sorted(list(self.keys()))
+        if len(columns) == 0:
+            return None
 
+        if asdict:
+            # Just putting the arrays into a dictionary.
+            data = {}
+
+            for colname in columns:
+
+                if self.verbose:
+                    print('\treading column: %s' % colname)
+
+                # just read the data and put in dict, simpler than below
+                col = self[colname]
+                if col.type == 'array':
+                    data[colname] = col.read(rows=rows)
+                else:
+                    data[colname] = col.read()
+
+        else:
+
+            if rows is not None:
+                try:
+                    n_rows2read = len(rows)
+                except TypeError:
+                    n_rows2read = 1
+            else:
+                for c in columns:
+                    col = self[c]
+                    if col.type == 'array':
+                        n_rows2read = col.nrows
+                        break
+
+            # copying into a single array with fields
+            dtype = self._extract_dtype(columns)
+
+            data = np.empty(n_rows2read, dtype=dtype)
+
+            for colname in columns:
+                if self.verbose:
+                    print('\treading column: %s' % colname)
+
+                col = self[colname]
+                data[colname][:] = col.read(rows=rows)
+
+        return data
+
+    def _extract_dtype(self, columns):
         dtype = []
-        if isinstance(columns, str):
-            columns = [columns]
 
-        ncol = len(columns)
-        nrows = np.zeros(ncol, dtype='i8')
-
-        i = 0
         for colname in columns:
-            if colname not in self:
-                raise ValueError("Column '%s' not found" % colname)
-
             col = self[colname]
             shape = col.shape
-
-            nrows[i] = shape[0]
 
             descr = col.dtype.descr[0][1]
 
@@ -673,51 +725,7 @@ class Columns(dict):
 
             dtype.append(dt)
 
-            i += 1
-
-        if ncol > 1 and rows is not None:
-            # make sure they really align properly
-            w, = np.where(nrows != nrows[0])
-            if w.size > 0:
-                raise ValueError("When using the rows= keyword with multiple "
-                                 "columns, the columns must be the same "
-                                 "length")
-
-        # if rows not sent, all are read
-        if rows is not None:
-            if np.isscalar(rows):
-                n_rows2read = 1
-            else:
-                n_rows2read = len(rows)
-        else:
-            n_rows2read = nrows[0]
-
-        if asdict:
-            # Just putting the arrays into a dictionary.
-            data = {}
-
-            for colname in columns:
-
-                if self.verbose or verbose:
-                    print('\tColumn: %s getting %d '
-                          'rows' % (colname, n_rows2read))
-
-                # just read the data and put in dict, simpler than below
-                data[colname] = self.read_column(colname, rows=rows)
-
-        else:
-            # copying into a single array with fields
-            data = np.empty(n_rows2read, dtype=dtype)
-
-            for colname in columns:
-
-                if self.verbose or verbose:
-                    print('\tColumn: %s getting %d '
-                          'rows' % (colname, n_rows2read))
-
-                data[colname][:] = self.read_column(colname, rows=rows)
-
-        return data
+        return dtype
 
     read_columns = read
 
@@ -737,6 +745,34 @@ class Columns(dict):
 
         return self[colname].read(rows=rows)
 
+    def _extract_columns(self, columns=None, asdict=False, rows=None):
+        if columns is None:
+
+            keys = sorted(self.keys())
+
+            if asdict:
+                columns = keys
+            else:
+                # just get the array columns
+                columns = [c for c in keys if self[c].type == 'array']
+
+        else:
+            if isinstance(columns, str):
+                columns = [columns]
+
+            for c in columns:
+                if c not in self:
+                    raise ValueError("Column '%s' not found" % c)
+
+                if not asdict and self[c].type != 'array':
+                    if not asdict:
+                        raise ValueError(
+                            "requested non-array column '%s.' "
+                            "Use asdict=True to read non-array "
+                            "columns with general read() method" % c
+                        )
+
+        return columns
 
 class ColumnBase(object):
     """
@@ -1053,6 +1089,15 @@ class ArrayColumn(ColumnBase):
         return self._sf.shape
 
     @property
+    def nrows(self):
+        """
+        get the shape of the column
+        """
+        self.ensure_has_data()
+
+        return self._sf.shape[0]
+
+    @property
     def size(self):
         """
         get the size of the columns
@@ -1346,255 +1391,6 @@ class ArrayColumn(ColumnBase):
         return Index(indices)
 
     '''
-    @property
-    def index_dtype(self):
-        """
-        get index dtype
-        """
-        if not self.has_index:
-            raise RuntimeError('no index exists for this column')
-        return self._index_dtype
-
-    def _init_index(self):
-        """
-        If index file exists, load some info
-        """
-        index_fname = self.index_filename()
-        if os.path.exists(index_fname):
-            self._has_index = True
-            db = numpydb.NumpyDB(index_fname)
-            # for the numerical indices
-            self._index_dtype = db.data_dtype()
-            db.close()
-
-
-    def index_filename(self, tempdir=None):
-        """
-        get the filename for the index of this column
-        """
-        if self.filename is None:
-            return None
-
-        # remove the final extension
-        index_fname = '.'.join(self.filename.split('.')[0:-1])
-        index_fname = index_fname+'__index.db'
-
-        if tempdir is not None:
-            bname = os.path.basename(index_fname)
-            index_fname = os.path.join(tempdir, bname)
-
-        return index_fname
-
-    def create_index(self, index_dtype='i8', force=False,
-                     tempdir=None, verbose=False, db_verbose=0):
-        """
-        Create an index for this column.  The index is created by the
-        numpydb package which uses a Berkeley DB B-tree.  The database file
-        will be named {columnfile}__index.db
-
-        Once the index is created, all data from the column will be put
-        into the index.  Also, after creation any data appended to the
-        column are automatically added to the index.
-
-        Parameters
-        ----------
-        index_dtype: str, optional
-            The data type for the index.  The default is 'i8' but can
-            also be 'i4'
-        force: bool, optional
-            If True, any existing index is deleted. If this keyword is not True
-            and the index exists, and exception is raised.  Default is False.
-        tempdir:
-            A temporary directory to write the index.  This is very useful when
-            the tempdir is for example a linux "tempfs" which is in memory,
-            e.g. /dev/shm.  This can speed up index creation by a large factor
-
-            Note if /dev/shm exists it will be used by default if you don't set
-            tempdir yourself.
-
-            After creation, the index will be moved to it's final destination.
-        verbose: bool, optional
-            This can override the overall verbosity.
-        db_verbose: int, optional
-            An integer indicating the verbosity of the db code.
-        """
-
-        if tempdir is None:
-            if os.path.exists('/dev/shm'):
-                tempdir = '/dev/shm'
-
-        # delete existing index?
-        if force:
-            self.delete_index()
-
-        # make sure we can create
-        self._verify_db_available('create')
-
-        # set up file name and data type info
-        index_fname = self.index_filename(tempdir=tempdir)
-
-        key_dtype = self.dtype.descr[0][1]
-
-        # basic create
-        if self.verbose or verbose:
-            print("Creating index for column '%s'" % self.name)
-            print("    db file: '%s'" % index_fname)
-
-        numpydb.create(
-            index_fname,
-            key_dtype,
-            index_dtype,
-            verbosity=db_verbose,
-        )
-
-        # this reloads metadata for column, so we know the index file
-        # exists (if not using a temp file)
-        self.reload()
-
-        # Write the data to the index.  We should do this in chunks of,
-        # say, 100 MB or something
-        data = self.read()
-        indices = np.arange(data.size, dtype=index_dtype)
-
-        # note sending filename= will prevent calling _verify_db_available
-        # which is good since we may be using a temp file
-        self._write_to_index(
-            data,
-            indices,
-            filename=index_fname,
-            verbose=db_verbose,
-        )
-        del data
-
-        if tempdir is not None:
-            # move to the final destination
-            final_fname = self.index_filename()
-            if self.verbose or verbose:
-                print("    Moving to final destination: '%s'" % final_fname)
-            shutil.move(index_fname, final_fname)
-
-        self.reload()
-
-    def index_filename(self, tempdir=None):
-        """
-        get the filename for the index of this column
-        """
-        if self.filename is None:
-            return None
-
-        # remove the final extension
-        index_fname = '.'.join(self.filename.split('.')[0:-1])
-        index_fname = index_fname+'__index.db'
-
-        if tempdir is not None:
-            bname = os.path.basename(index_fname)
-            index_fname = os.path.join(tempdir, bname)
-
-        return index_fname
-
-    def create_index(self, index_dtype='i8', force=False,
-                     tempdir=None, verbose=False, db_verbose=0):
-        """
-        Create an index for this column.  The index is created by the
-        numpydb package which uses a Berkeley DB B-tree.  The database file
-        will be named {columnfile}__index.db
-
-        Once the index is created, all data from the column will be put
-        into the index.  Also, after creation any data appended to the
-        column are automatically added to the index.
-
-        Parameters
-        ----------
-        index_dtype: str, optional
-            The data type for the index.  The default is 'i8' but can
-            also be 'i4'
-        force: bool, optional
-            If True, any existing index is deleted. If this keyword is not True
-            and the index exists, and exception is raised.  Default is False.
-        tempdir:
-            A temporary directory to write the index.  This is very useful when
-            the tempdir is for example a linux "tempfs" which is in memory,
-            e.g. /dev/shm.  This can speed up index creation by a large factor
-
-            Note if /dev/shm exists it will be used by default if you don't set
-            tempdir yourself.
-
-            After creation, the index will be moved to it's final destination.
-        verbose: bool, optional
-            This can override the overall verbosity.
-        db_verbose: int, optional
-            An integer indicating the verbosity of the db code.
-        """
-
-        if tempdir is None:
-            if os.path.exists('/dev/shm'):
-                tempdir = '/dev/shm'
-
-        # delete existing index?
-        if force:
-            self.delete_index()
-
-        # make sure we can create
-        self._verify_db_available('create')
-
-        # set up file name and data type info
-        index_fname = self.index_filename(tempdir=tempdir)
-
-        key_dtype = self.dtype.descr[0][1]
-
-        # basic create
-        if self.verbose or verbose:
-            print("Creating index for column '%s'" % self.name)
-            print("    db file: '%s'" % index_fname)
-
-        numpydb.create(
-            index_fname,
-            key_dtype,
-            index_dtype,
-            verbosity=db_verbose,
-        )
-
-        # this reloads metadata for column, so we know the index file
-        # exists (if not using a temp file)
-        self.reload()
-
-        # Write the data to the index.  We should do this in chunks of,
-        # say, 100 MB or something
-        data = self.read()
-        indices = np.arange(data.size, dtype=index_dtype)
-
-        # note sending filename= will prevent calling _verify_db_available
-        # which is good since we may be using a temp file
-        self._write_to_index(
-            data,
-            indices,
-            filename=index_fname,
-            verbose=db_verbose,
-        )
-        del data
-
-        if tempdir is not None:
-            # move to the final destination
-            final_fname = self.index_filename()
-            if self.verbose or verbose:
-                print("    Moving to final destination: '%s'" % final_fname)
-            shutil.move(index_fname, final_fname)
-
-        self.reload()
-
-    def delete_index(self):
-        """
-        Delete the index for this column if it exists
-        """
-        if self.has_index:
-            index_fname = self.index_filename()
-            if os.path.exists(index_fname):
-                print("Removing index for column: %s" % self.name)
-                os.remove(index_fname)
-
-        self._has_index = False
-        self._index_dtype = None
-
     def match(self, values, select='values'):
         """
         Find all entries that match the requested value or values and return a
@@ -1682,139 +1478,6 @@ class ArrayColumn(ColumnBase):
 
         return result
 
-    # one-sided range operators
-    def __gt__(self, val):
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename())
-        i = Index(db.range1(val, '>'))
-        db.close()
-        return i
-
-    def __ge__(self, val):
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename())
-        i = Index(db.range1(val, '>='))
-        db.close()
-        return i
-
-    def __lt__(self, val):
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename())
-        i = Index(db.range1(val, '<'))
-        db.close()
-        return i
-
-    def __le__(self, val):
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename())
-        i = Index(db.range1(val, '<='))
-        db.close()
-        return i
-
-    # equality operators
-    def __eq__(self, val):
-        return self.match(val)
-
-    def __ne__(self, val):
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename())
-        ind1 = Index(db.range1(val, '<'))
-        ind2 = Index(db.range1(val, '>'))
-        ind = ind1 | ind2
-        db.close()
-        return ind
-
-    def between(self, low, high, interval='[]', select='values'):
-        """
-        Find all entries in the range low,high, inclusive by default.  The
-        returned data is by default a columns.Index containing the indices (the
-        "values" of the key-value database) for the matches, which can be
-        combined with other queries to produce a final result, but this can be
-        controlled through the use of keywords.
-
-        Using between() requires that an index was created for this column
-        using create_index()
-
-        Parameters
-        ----------
-        low: number
-            the lower end of the range.  Must be convertible to the key data
-            type.
-        high: number
-            the upper end of the range.  Must be convertible to the key data
-            type.
-        interval: str, optional
-            '[]': Closed on both sides
-            '[)': Closed on the lower side, open on the high side.
-            '(]': Open on the lower side, closed on the high side
-            '()': Open on both sides.
-
-        select: str, optional
-            Which data to return.  Can be
-                'values': Return the values of the key-value pairs, which
-                    here is a set of indices. (Default)
-                'keys': Return the keys of the key-value pairs.
-                'both': Return a tuple (keys,values)
-                'count': Return the count of all matches.
-
-            Default behaviour is to return a Index of the key-value pairs in
-            the database.
-
-        examples
-        ---------
-
-        result=between(low,high,interval='[]', select='values')
-
-        # Extract the indices for values in the given range
-        >>> query_index = col.between(low,high)
-
-        # Extract from different types of intervals
-        >>> values = db.between(low, high,'[]')
-        >>> values = db.between(low, high,'[)')
-        >>> values = db.between(low, high,'(]')
-        >>> values = db.between(low, high,'()')
-
-        # combine with the results of another query and extract the
-        # index array
-        >>> ind = columns.where( (col1.between(low,high)) &
-                                 (col2 == value2) )
-
-        # Extract the key values for the range
-        >>> keys = col.between(low,high,select='keys')
-
-        # Extract both keys and values for the range of keys
-        >>> keys,indices = db.between(low,high,select='both')
-
-        # just return the count
-        >>> count = db.between(low,high,select='count')
-
-        # ways to get the underlying index array instead of an Index. The
-        # where() function simply returns .array().  Note you can use an
-        # Index just like a normal array, but it has different & and |
-        # properties
-
-        >>> ind=col.between(low,high).array()
-        >>> ind=columns.where( col.between(low,high) )
-        """
-
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename(), verbose=self.verbose)
-
-        verbosity = 0
-        if self.verbose:
-            verbosity = 1
-        db.set_verbosity(verbosity)
-
-        result = db.between(low, high, interval, select=select)
-        db.close()
-
-        if select == 'both':
-            result = (result[0], Index(result[1]))
-        elif select != 'count':
-            result = Index(result)
-
-        return result
-
     def _write_to_index(self,
                         data,
                         indices,
@@ -1856,28 +1519,6 @@ class ArrayColumn(ColumnBase):
         else:
             db.put(data, indices)
         db.close()
-
-    def _verify_db_available(self, action=None):
-        if not havedb:
-            raise ImportError("Could not import numpydb")
-
-        # for reading and writing, the file must already exist
-        if action == 'read' or action == 'write':
-            if not self.has_index:
-                raise RuntimeError(
-                    "No index file found for "
-                    "column '%s'.  Use create_index()" % self.name
-                )
-            index_fname = self.index_filename()
-            if not os.path.exists(index_fname):
-                raise RuntimeError("index file does not "
-                                   "exist: '%s'" % index_fname)
-        elif action == 'create':
-            index_fname = self.index_filename()
-            if os.path.exists(index_fname):
-                raise RuntimeError("index file already "
-                                   "exists: '%s'" % index_fname)
-
     '''
 
     def _get_repr_list(self, full=False):
