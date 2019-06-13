@@ -4,6 +4,7 @@ The focus is currently on efficiency of reading and writing.  Basic consistency
 is ensured but the database is not fully ACID.
 
 == Examples ==
+
 ```python
 >>> import pycolumns as pyc
 
