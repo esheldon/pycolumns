@@ -41,13 +41,13 @@ Column:
   "id"
   filename: ./id.array
   type: col
-  size: 64348146
+  shape: (64348146,)
   has index: False
   dtype: <i4
 
 # get the column names
->>> c.colnames()
-['ccd','dec','exposurename','id','imag','ra','x','y']
+>>> c.colnames
+['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g']
 
 # reload all columns or specified column/column list
 >>> c.reload(name=None)
@@ -63,36 +63,36 @@ Column:
 >>> id = c['id'][25:125]
 
 # specifying a set of rows
->>> rows=[3,225,1235]
+>>> rows=[3, 225, 1235]
 >>> id = c['id'][rows]
 >>> id = c.read_column('id', rows=rows)
 
 # read multiple columns into a single rec array
->>> data = c.read(columns=['id','flux'], rows=rows)
+>>> data = c.read(columns=['id', 'flux'], rows=rows)
 
 # or put different columns into fields of a dictionary instead of
 # packing them into a single array
->>> data = c.read(columns=['id','flux'], asdict=True)
+>>> data = c.read(columns=['id', 'flux'], asdict=True)
 
 # Create indexes for fast searching
 >>> c['col'].create_index()
 
 # get indices for some condition
 >>> ind = c['col'] > 25
->>> ind = c['col'].between(25,35)
+>>> ind = c['col'].between(25,3 5)
 >>> ind = c['col'] == 25
->>> ind = c['col'].match([25,77])
+>>> ind = c['col'].match([25, 77])
 
 # read the corresponding data
 >>> ccd=c['ccd'][ind]
->>> data=c.read_columns(['ra','dec'], rows=ind)
+>>> data=c.read_columns(['ra', 'dec'], rows=ind)
 
 # composite searches over multiple columns
 >>> ind = (c['col1'] == 25) & (col['col2'] < 15.23)
 >>> ind = c['col1'].between(15,25) | (c['col2'] != 66)
 >>> ind = c['col1'].between(15,25) & (c['col2'] != 66) & (c['col3'] < 5)
 
-# create column or append data to a column
+# create a new column or append data to a column
 >>> c.write_column(name, data)
 
 # append to existing column, alternative syntax
@@ -100,6 +100,9 @@ Column:
 
 # write multiple columns from the fields in a rec array
 # names in the data correspond to column names
+>>> c.write(recdata)
+
+# append more data
 >>> c.write(recdata)
 
 # write/append data from the fields in a FITS file

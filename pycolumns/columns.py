@@ -73,7 +73,7 @@ class Columns(dict):
 
 
         # get the column names
-        >>> c.colnames()
+        >>> c.colnames
         ['ccd','dec','exposurename','id','imag','ra','x','y']
 
         # reload all columns or specified column/column list
@@ -359,6 +359,7 @@ class Columns(dict):
 
         self.verify()
 
+    @property
     def colnames(self):
         """
         Return a list of all column names
