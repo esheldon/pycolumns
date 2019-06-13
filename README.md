@@ -60,21 +60,21 @@ Column:
 
 # read all data from array column 'id'
 # alternative syntaxes, including numpy style slicing
->>> id = c['id'][:]
->>> id = c['id'].read()
->>> id = c.read_column('id')
+>>> ind = c['id'][:]
+>>> ind = c['id'].read()
+>>> ind = c.read_column('id')
 
 # dict columns are read as a dict. No slicing for dicts
 >>> meta = c['meta'].read()
 
 # read a subset of rows
 # slicing
->>> id = c['id'][25:125]
+>>> ind = c['id'][25:125]
 
 # specifying a set of rows
 >>> rows=[3, 225, 1235]
->>> id = c['id'][rows]
->>> id = c.read_column('id', rows=rows)
+>>> ind = c['id'][rows]
+>>> ind = c.read_column('id', rows=rows)
 
 # read all columns into a single rec array.  By default the dict
 # columns are not loaded

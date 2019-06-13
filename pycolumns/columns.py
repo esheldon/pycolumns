@@ -88,21 +88,21 @@ class Columns(dict):
 
     # read all data from column 'id'
     # alternative syntaxes
-    >>> id = c['id'][:]
-    >>> id = c['id'].read()
-    >>> id = c.read_column('id')
+    >>> ind = c['id'][:]
+    >>> ind = c['id'].read()
+    >>> ind = c.read_column('id')
 
     # dict columns are read as a dict
     >>> meta = c['meta'].read()
 
     # read a subset of rows
     # slicing
-    >>> id = c['id'][25:125]
+    >>> ind = c['id'][25:125]
 
     # specifying a set of rows
     >>> rows=[3, 225, 1235]
-    >>> id = c['id'][rows]
-    >>> id = c.read_column('id', rows=rows)
+    >>> ind = c['id'][rows]
+    >>> ind = c.read_column('id', rows=rows)
 
     # read all columns into a single rec array.  By default the dict
     # columns are not loaded
@@ -1533,7 +1533,7 @@ def where(query_index):
 
         # now read some data from a set of columns using these
         # indices.  We can do this with individual columns:
-        >>> id = columns['id'][ind]
+        >>> ind = columns['id'][ind]
         >>> x = columns['x'][ind]
         >>> y = columns['y'][ind]
 
