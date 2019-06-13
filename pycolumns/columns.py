@@ -979,7 +979,6 @@ class ArrayColumn(ColumnBase):
     >>> ind = (col > 25)
     >>> ind = col.between(25,35)
     >>> ind = (col == 25)
-    >>> ind = col.match([25,77])
 
     # composite searches over multiple columns with the same number
     # of records
@@ -1364,93 +1363,6 @@ class ArrayColumn(ColumnBase):
         return Index(indices)
 
     '''
-    def match(self, values, select='values'):
-        """
-        Find all entries that match the requested value or values and return a
-        query index of the result.  The requested values can be a scalar,
-        sequence, or array, and must be convertible to the key data type.
-
-        The returned data is by default a columns.Index containing the indices
-        (the "values" of the key-value database) for the matches, which can be
-        combined with other queries to produce a final result, but this can be
-        controlled through the use of keywords.
-
-        Note if you just want to match a single value, you can also use the ==
-        operator.
-
-        Using match() requires that an index was created for this column using
-        create_index()
-
-        Parameters
-        ----------
-        values: scalar or sequence
-            Value(s) to match.  All entries that match are included in the
-            returned query index.  Must be convertible to the key data type.
-
-            Note, these values must be *unique*.
-
-        select: str
-            Which data to return.  Can be
-            'values':  Return the Index.  This is the values of the key-value
-              pairs, which here is a set of indices. (Default)
-            'keys': Return the keys of the key-value pairs.
-            'both': Return a tuple (keys,values)
-            'count': Return the count of all matches.
-
-            Default behaviour is to return a Index of the key-value pairs in
-            the database.
-
-        Returns
-        --------
-        An Index by default, see the select keyword
-
-        Examples
-        --------
-        # Find the matches and return a Index
-        >>> ind = col.match(value)
-        >>> ind = col.match([value1,value2,value3])
-
-
-        # combine with the results of another query
-        >>> ind = ( (col1.match(values)) & (col2 == value2) )
-
-        # Instead of indices, extract the key values that match, these will
-        # simply equal the requested values
-        >>> keys = col.match(values, select='keys')
-
-        # Extract both keys and values for the range of keys.  The data
-        # part is not a Index object in this case.
-        >>> keys,data = col.match(values,select='both')
-
-        # just return the count
-        >>> count = col.match(values,select='count')
-
-
-        # ways to get the underlying array instead of an Index. The where()
-        # function simply returns .array().  Note you can use an Index just
-        # like a normal array, but it has different & and | properties
-        >>> ind=col.match(value).array()
-        >>> ind=columns.where( col.match(values) )
-        """
-
-        self._verify_db_available('read')
-        db = numpydb.Open(self.index_filename())
-
-        verbosity = 0
-        if self.verbose:
-            verbosity = 1
-        db.set_verbosity(verbosity)
-
-        result = db.match(values, select=select)
-        db.close()
-
-        if select == 'both':
-            result = (result[0], Index(result[1]))
-        elif select != 'count':
-            result = Index(result)
-
-        return result
-
     def _write_to_index(self,
                         data,
                         indices,
@@ -1550,9 +1462,6 @@ class JSONColumn(ColumnBase):
              name=None,
              dir=None,
              verbose=False):
-        """
-        initialize the meta data, and possibly load the mmap
-        """
 
         self._type = 'json'
 
