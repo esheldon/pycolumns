@@ -6,11 +6,11 @@ todo
     - always use little endian dtype when writing
     - make sure copies are made rather than references, but don't copy twice in
       case where memmap getitem is already returning a copy
+    - need to check when appending that all array cols are being updated
+
     - can we loosen up the requirement of columns being same number of rows?
       - if not, need to hide write_column and also put a check for this other
         than verify
-    - need to be able to update all columns at once.
-        - probaby rename write to append and use write for replacing data
 """
 import os
 import bisect
@@ -132,16 +132,10 @@ class Columns(dict):
         >>> c['id'][35:35+3] = [8, 9, 10]
         >>> c['id'][rows] = idvalues
 
-        # create column or append data to a column
-        >>> c.write_column(name, data)
-
-        # append to existing column, alternative syntax
-        >>> c['id'].write(data)
-
-        # write multiple columns from the fields in a rec array
+        # append data to multiple columns from the fields in a rec array
         # names in the data correspond to column names
         >>> data = np.zeros(num, dtype=[('ra','f8'), ('dec','f8')])
-        >>> c.write(data)
+        >>> c.append(data)
 
         # write/append data from the fields in a .fits file
         >>> c.from_fits(fitsfile_name)
@@ -158,8 +152,7 @@ class Columns(dict):
         loaded.
         """
         self._set_dir(dir)
-        if self.dir_exists():
-            self.load()
+        self.load()
 
     @property
     def dir(self):
@@ -174,37 +167,8 @@ class Columns(dict):
 
         self._dir = dir
 
-        # from here on using the property
-        if self.verbose and self.dir is not None:
-            print('Database directory:', self.dir)
-            if not self.dir_exists():
-                print('  Directory does not yet exist. Use create()')
-
-    def ready(self, action=None):
-        if self.dir_exists():
-            return True
-
-    def dir_exists(self):
-        """
-        returns True of the database directory exists
-        """
-        if not os.path.exists(self.dir):
-            return False
-        else:
-            if not os.path.isdir(self.dir):
-                raise ValueError("Non-directory exists with that "
-                                 "name: '%s'" % self.dir)
-            return True
-
-    def create(self):
-        """
-        Create the database directory
-        """
-
-        if os.path.exists(self.dir):
-            raise RuntimeError("directory '%s' already exists" % self.dir)
-
-        os.makedirs(self.dir)
+        if not os.path.exists(dir):
+            os.makedirs(dir)
 
     def delete(self, yes=False):
         """
@@ -253,9 +217,6 @@ class Columns(dict):
 
         """
 
-        if not self.dir_exists():
-            raise ValueError("Database dir \n    '%s'\ndoes "
-                             "not exist. Use create()" % self.dir)
         # clear out the existing columns and start from scratch
         self.clear()
 
@@ -268,7 +229,15 @@ class Columns(dict):
                     if type == 'cols':
                         self.load_coldir(f)
                     else:
-                        self.load_column(filename=f)
+                        self._load_column(filename)
+        self.verify()
+
+    @property
+    def nrows(self):
+        """
+        number of rows in table
+        """
+        return self._nrows
 
     def verify(self):
         """
@@ -281,33 +250,22 @@ class Columns(dict):
             if col.type == 'array':
                 this_nrows = col.nrows
                 if first:
-                    nrows = this_nrows
+                    self._nrows = this_nrows
                     first = False
                 else:
-                    if this_nrows != nrows:
+                    if this_nrows != self.nrows:
                         raise ValueError(
                             'column size mismatch for %s '
-                            'got %d vs %d' % (c, this_nrows, nrows)
+                            'got %d vs %d' % (c, this_nrows, self.nrows)
                         )
 
-    def load_column(self, name=None, filename=None, type=None):
+    def _load_column(self, filename):
         """
         Load the specified column
         """
 
-        if filename is not None:
-
-            name = _extract_colname(filename)
-            type = _extract_coltype(filename)
-
-        elif name is not None and type is not None:
-            if self.dir is None:
-                raise ValueError("no dir is set for Columns db, can't "
-                                 "construct names")
-
-            filename = _create_filename(self.dir, name, type)
-        else:
-            raise ValueError('either send a filename or specify name, type')
+        name = _extract_colname(filename)
+        type = _extract_coltype(filename)
 
         if type not in ALLOWED_COL_TYPES:
             raise ValueError("bad column type: '%s'" % type)
@@ -333,11 +291,46 @@ class Columns(dict):
         self.clear(name)
         self[name] = col
 
-    def load_coldir(self, dir):
+    def _create_column(self, name, type):
+        """
+        Load the specified column
         """
 
-        Load a coldir under this coldir
+        if name in self:
+            raise ValueError("column '%s' already exists" % name)
 
+        if type not in ALLOWED_COL_TYPES:
+            raise ValueError("bad column type: '%s'" % type)
+
+        if self.dir is None:
+            raise ValueError("no dir is set for Columns db, can't "
+                             "construct names")
+
+        filename = _create_filename(self.dir, name, type)
+
+        if type == 'array':
+            col = ArrayColumn(
+                filename=filename,
+                dir=self.dir,
+                name=name,
+                verbose=self.verbose,
+            )
+        elif type == 'json':
+            col = JSONColumn(
+                filename=filename,
+                dir=self.dir,
+                name=name,
+                verbose=self.verbose,
+            )
+        else:
+            raise ValueError("bad column type '%s'" % type)
+
+        name = col.name
+        self[name] = col
+
+    def load_coldir(self, dir):
+        """
+        Load a coldir under this coldir
         """
         coldir = Columns(dir, verbose=self.verbose)
         if not os.path.exists(dir):
@@ -387,8 +380,6 @@ class Columns(dict):
             dbase = self._dirbase()
             s += [dbase]
             s += ['dir: '+self.dir]
-            if not self.dir_exists():
-                s += ['    Directory does not yet exist']
 
         subcols = []
         if len(self) > 0:
@@ -454,67 +445,31 @@ class Columns(dict):
             if name in self:
                 del self[name]
 
-    def write_column(self, name, data, type=None):
+    def append(self, data, verify=True):
         """
-        Write data to a column.
-
-        If the column does not already exist, it is created.  If the type is
-        'array' and the column exists, the data are appended.  For other types,
-        the file is always created or overwritten.
-        """
-
-        if name not in self:
-            if type is None:
-                if isinstance(data, np.ndarray):
-                    type = 'array'
-                elif isinstance(data, dict):
-                    type = 'json'
-                else:
-                    raise ValueError(
-                        'only support array and dict types for now'
-                    )
-            self.load_column(name=name, type=type)
-
-        self[name].write(data)
-
-    def write(self, data):
-        """
-        Write the fields of a structured array to columns
+        Append data for the fields of a structured array to columns
         """
 
         names = data.dtype.names
         if names is None:
-            raise ValueError('write() takes a structured array as '
-                             'input')
+            raise ValueError('append() takes a structured array as input')
+
         for name in names:
-            self.write_column(name, data[name])
+            self._append_column(name, data[name])
 
-    write_columns = write
+        # make sure the array columns all have the same length
+        if verify:
+            self.verify()
 
-    def delete_column(self, name, yes=False):
+    def _append_column(self, name, data):
         """
-        delete the specified column and reload
-
-        parameters
-        ----------
-        name: string
-            Name of column to delete
-        yes: bool
-            If True, don't prompt for confirmation
+        Append data to an array column.
         """
+
         if name not in self:
-            print("cannot delete column '%s', it does not exist" % name)
+            self._create_column(name, 'array')
 
-        if not yes:
-            answer = input('really delete all data? (y/n) ')
-            if answer.lower() == 'y':
-                yes = True
-
-        if not yes:
-            return
-
-        self[name].delete()
-        self.reload()
+        self[name]._append(data)
 
     def from_fits(self, filename, ext=1, lower=False):
         """
@@ -534,108 +489,67 @@ class Columns(dict):
 
         with fitsio.FITS(filename, lower=lower) as fits:
             hdu = fits[ext]
-            self._from_slicer(filename, hdu)
 
-    def _from_slicer(self, filename, slicer):
+            one = hdu[0:0+1]
+            nrows = hdu.get_nrows()
+            rowsize = one.itemsize
 
-        one = slicer[1:1+1]
-        nrows = slicer.get_nrows()
-        rowsize = one.itemsize
+            # step size in bytes
+            step_bytes = 100*1000000
 
-        # step size in bytes
-        step_bytes = 100*1000000
+            # step size in rows
+            step = step_bytes//rowsize
 
-        # step size in rows
-        step = step_bytes//rowsize
-
-        nstep = nrows//step
-        nleft = nrows % step
-        if nleft > 0:
-            nstep += 1
-
-        if self.verbose > 1:
-            print('Loading %s rows from file: %s' % (nrows, filename))
-            dp = pprint.pformat(one.dtype.descr)
-            print('Details of columns: \n%s' % dp)
-
-        for i in range(nstep):
-
-            start = i*step
-            stop = (i+1)*step
-            if stop > nrows:
-                stop = nrows
+            nstep = nrows//step
+            nleft = nrows % step
+            if nleft > 0:
+                nstep += 1
 
             if self.verbose > 1:
-                print('Writing slice: %s:%s out '
-                      'of %s' % (start, stop, nrows))
-            data = slicer[start:stop]
+                print('Loading %s rows from file: %s' % (nrows, filename))
+                dp = pprint.pformat(one.dtype.descr)
+                print('Details of columns: \n%s' % dp)
 
-            self.write(data)
+            for i in range(nstep):
 
-    def from_columns(self, coldir, create=False, indent=''):
+                start = i*step
+                stop = (i+1)*step
+                if stop > nrows:
+                    stop = nrows
+
+                if self.verbose > 1:
+                    print('Writing slice: %s:%s out '
+                          'of %s' % (start, stop, nrows))
+                data = hdu[start:stop]
+
+                self.append(data, verify=False)
+
+        self.verify()
+
+    def delete_column(self, name, yes=False):
         """
-        Load the columns of the input columns database into the current
-        database, breaking it up into chunks of ~100 MB
+        delete the specified column and reload
+
+        parameters
+        ----------
+        name: string
+            Name of column to delete
+        yes: bool
+            If True, don't prompt for confirmation
         """
+        if name not in self:
+            print("cannot delete column '%s', it does not exist" % name)
 
-        chunksize = 100  # Mb
-        step_bytes = chunksize*1000000
+        if not yes:
+            answer = input("really delete column '%s'? (y/n) " % name)
+            if answer.lower() == 'y':
+                yes = True
 
-        if create:
-            self.create()
-
-        if isinstance(coldir, (list, tuple)):
-            print('Processing list of', len(coldir), 'columns dirs')
-            for cdir in coldir:
-                self.from_columns(cdir, indent=indent+'    ')
-                print(indent+'    '+'-'*70)
+        if not yes:
             return
 
-        print(indent+"Loading columns from:", coldir)
-        c = Columns(coldir)
-
-        for colname in c:
-
-            print(indent+'column:', colname)
-
-            if isinstance(c[colname], Columns):
-                print(indent+'=> column is a Columns db, recursing')
-                dname = colname+'.cols'
-                inpath = os.path.join(coldir, dname)
-                thispath = os.path.join(self.dir, dname)
-                if colname not in self:
-                    self[colname] = Columns(thispath)
-                    self[colname].create()
-
-                self[colname].from_columns(inpath, indent=indent+'    ')
-            else:
-                nrows = c[colname].size
-                rowsize = c[colname].dtype.itemsize
-
-                # step size in rows
-                step = step_bytes/rowsize
-
-                nstep = nrows/step
-                nleft = nrows % step
-                if nleft > 0:
-                    nstep += 1
-
-                if nstep > 1:
-                    text = indent+"    Working in %d %d Mb chunks"
-                    print(text % (nstep, chunksize), end='')
-
-                for i in range(nstep):
-                    if nstep > 1:
-                        print('.', end='')
-                    start = i*step
-                    stop = (i+1)*step
-                    if stop > nrows:
-                        stop = nrows
-
-                    data = c[colname][start:stop]
-                    self.write_column(colname, data)
-                if nstep > 1:
-                    print()
+        self[name].delete()
+        self.reload()
 
     def read(self,
              columns=None,
@@ -866,12 +780,6 @@ class ColumnBase(object):
         self._dir = None
         self.verbose = False
 
-    def write(self, data):
-        """
-        Write data to a column.
-        """
-        raise NotImplementedError('implement write')
-
     def read(self, *args):
         """
         Read data from a column
@@ -1089,9 +997,9 @@ class ArrayColumn(ColumnBase):
 
         return self._sf.size
 
-    def write(self, data):
+    def _append(self, data):
         """
-        Write data to the column.  Data are appended if the file already
+        Append data to the column.  Data are appended if the file already
         exists.
 
         Parameters

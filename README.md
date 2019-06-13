@@ -113,18 +113,11 @@ Column:
 >>> c['id'][35:35+3] = [8, 9, 10]
 >>> c['id'][rows] = idvalues
 
-# create a new column or append data to a column
->>> c.write_column(name, data)
-
-# append to existing column, alternative syntax
->>> c['id'].write(data)
-
 # write multiple columns from the fields in a rec array
-# names in the data correspond to column names
->>> c.write(recdata)
-
-# append more data
->>> c.write(recdata)
+# names in the data correspond to column names.  All array
+# columns must be updated at the same time to maintain
+# consistency
+>>> c.append(recdata)
 
 # write/append data from the fields in a FITS file
 >>> c.from_fits(fitsfile_name)
