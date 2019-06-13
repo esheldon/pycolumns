@@ -244,7 +244,14 @@ class SimpleFile(object):
         data = sf[[3, 234, 5551]]
         """
 
-        return self._mmap[arg]
+        data = self._mmap[arg]
+
+        if isinstance(data, np.memmap):
+            # slices will return a view on the memmap
+            # this will force a copy
+            return np.array(data)
+        else:
+            return data
 
     def __setitem__(self, arg, values):
         """

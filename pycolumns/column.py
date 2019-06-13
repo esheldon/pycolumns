@@ -354,14 +354,7 @@ class ArrayColumn(ColumnBase):
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        data = self._sf[arg]
-
-        if isinstance(data, np.memmap):
-            # slices will return a view on the memmap
-            # this will force a copy
-            return np.array(data)
-        else:
-            return data
+        return self._sf[arg]
 
     def __setitem__(self, arg, values):
         """
