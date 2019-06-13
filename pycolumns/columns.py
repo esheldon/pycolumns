@@ -492,11 +492,37 @@ class Columns(dict):
                           'of %s' % (start, stop, nrows))
                 data = hdu[start:stop]
 
-                data.byteswap(inplace=True)
-                data.dtype = data.dtype.newbyteorder()
+                data = self._get_native_data(data)
+
                 self.append(data, verify=False)
 
         self.verify()
+
+    def _get_native_data(data):
+        """
+        get version of the structured array with native
+        byte ordering
+
+        This version works even when the byte ordering is
+        mixed
+        """
+        newdt = []
+        for n in data.dtype.names:
+            col = data[n]
+            dtstr = col.dtype.descr[0][1][1:]
+            shape = col.shape
+            if len(shape) > 1:
+                descr = (n, dtstr, shape[1:])
+            else:
+                descr = (n, dtstr)
+
+            newdt.append(descr)
+
+        new_data = np.zeros(data.size, dtype=newdt)
+        for n in data.dtype.names:
+            new_data[n] = data[n]
+
+        return new_data
 
     def delete_column(self, name, yes=False):
         """
