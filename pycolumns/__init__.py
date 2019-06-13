@@ -11,7 +11,7 @@ from .column import (
     ArrayColumn,
     DictColumn,
 )
-from . import index
+from . import indices
 from .indices import Indices
 
 __version__ = '0.1.0'

@@ -505,6 +505,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_right returns i such that data[i:] are all strictly > val
         """
+        self.verify_index_available()
+
         mmap = self._index.mmap
         i = bisect.bisect_right(mmap['value'], val)
         indices = mmap['index'][i:].copy()
@@ -515,6 +517,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_left returns i such that data[i:] are all strictly >= val
         """
+        self.verify_index_available()
+
         mmap = self._index.mmap
         i = bisect.bisect_left(mmap['value'], val)
         indices = mmap['index'][i:].copy()
@@ -525,6 +529,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_left returns i such that data[:i] are all strictly < val
         """
+        self.verify_index_available()
+
         mmap = self._index.mmap
         i = bisect.bisect_left(mmap['value'], val)
         indices = mmap['index'][:i].copy()
@@ -535,6 +541,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_right returns i such that data[:i] are all strictly <= val
         """
+        self.verify_index_available()
+
         mmap = self._index.mmap
         i = bisect.bisect_right(mmap['value'], val)
         indices = mmap['index'][:i].copy()
@@ -578,6 +586,8 @@ class ArrayColumn(ColumnBase):
         # index array
         ind = columns.where( (col1.between(low,high)) & (col2 == value2) )
         """
+
+        self.verify_index_available()
 
         mmap = self._index.mmap
         if interval == '[]':
