@@ -33,6 +33,8 @@ Column Directory:
     x               array    <f4 False  (64348146,)
     y               array    <f4 False  (64348146,)
     g               array    <f8 False  (64348146, 2)
+    meta             json
+
 
   Sub-Column Directories:
     name
@@ -51,7 +53,7 @@ Column:
 
 # get the column names
 >>> c.colnames
-['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g']
+['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g', 'meta']
 
 # reload all columns or specified column/column list
 >>> c.reload(name=None)
@@ -62,6 +64,9 @@ Column:
 >>> id = c['id'].read()
 >>> id = c.read_column('id')
 
+# json columns are read as a dict
+>>> meta = c['meta'].read()
+
 # read a subset of rows
 # slicing 
 >>> id = c['id'][25:125]
@@ -71,30 +76,39 @@ Column:
 >>> id = c['id'][rows]
 >>> id = c.read_column('id', rows=rows)
 
-# read multiple columns into a single rec array
+# read all columns into a single rec array.  By default the JSON
+# columns are not loaded
+
+>>> data = c.read()
+
+# using asdict=True puts the data into a dict.  The JSON data
+# are loaded in this case
+>>> data = c.read(asdict=True)
+
+# specify columns
 >>> data = c.read(columns=['id', 'flux'], rows=rows)
 
 # or put different columns into fields of a dictionary instead of
-# packing them into a single array
->>> data = c.read(columns=['id', 'flux'], asdict=True)
+# packing them into a single array.  JSON columns can be loaded
+# this way with other data
+>>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
 
 # Create indexes for fast searching
->>> c['col'].create_index()
+>>> c['id'].create_index()
 
 # get indices for some condition
->>> ind = c['col'] > 25
->>> ind = c['col'].between(25,3 5)
->>> ind = c['col'] == 25
->>> ind = c['col'].match([25, 77])
+>>> ind = c['id'] > 25
+>>> ind = c['id'].between(25, 35)
+>>> ind = c['id'] == 25
 
 # read the corresponding data
->>> ccd=c['ccd'][ind]
->>> data=c.read_columns(['ra', 'dec'], rows=ind)
+>>> ccd = c['ccd'][ind]
+>>> data = c.read(columns=['ra', 'dec'], rows=ind)
 
 # composite searches over multiple columns
->>> ind = (c['col1'] == 25) & (col['col2'] < 15.23)
->>> ind = c['col1'].between(15,25) | (c['col2'] != 66)
->>> ind = c['col1'].between(15,25) & (c['col2'] != 66) & (c['col3'] < 5)
+>>> ind = (c['id'] == 25) & (col['ra'] < 15.23)
+>>> ind = c['id'].between(15, 25) | (c['ra'] < 66)
+>>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
 
 # create a new column or append data to a column
 >>> c.write_column(name, data)
