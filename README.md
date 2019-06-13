@@ -128,6 +128,17 @@ Column:
 >>> c.create_column('meta')
 >>> c['meta'].write({'test': 'hello'})
 >>> d = c['meta'].read()
+
+# heirarchical sets of columns are also supported
+>>> c['psfstars']
+Column Directory:
+
+  dir: /some/path/mydata.cols/psfstars.cols
+  Columns:
+    name             type  dtype index  shape
+    --------------------------------------------------
+    ccd             array    <i2 True   (64348146,)
+    exposurename    array   |S20 True   (64348146,)
 ```
 
 Dependencies

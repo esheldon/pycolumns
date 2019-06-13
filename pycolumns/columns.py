@@ -23,12 +23,7 @@ ALLOWED_COL_TYPES = ['array', 'dict', 'cols']
 
 class Columns(dict):
     """
-    Manage a database of "columns" represented by simple flat files.  This
-    design is chosen to maximize efficiency of memory and speed.
-    Transactional robustness is not yet a priority.
-
-    If numpydb is available, indexes can be created for columns.  This
-    facilitates fast searching.
+    Manage a database of "columns" represented by simple flat files.
 
     Construction
     ------------
