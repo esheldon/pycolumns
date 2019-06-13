@@ -492,6 +492,8 @@ class Columns(dict):
                           'of %s' % (start, stop, nrows))
                 data = hdu[start:stop]
 
+                data.byteswap(inplace=True)
+                data.dtype = data.dtype.newbyteorder()
                 self.append(data, verify=False)
 
         self.verify()
