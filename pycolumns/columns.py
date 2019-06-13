@@ -1103,13 +1103,7 @@ class ArrayColumn(ColumnBase):
         self._sf.write(data)
 
         if self.has_index:
-            # create the new indices
-            new_indices = np.arange(
-                self.size-data.size,
-                self.size,
-                dtype=self.index_dtype,
-            )
-            self._write_to_index(data, new_indices)
+            self._update_index()
 
     def __getitem__(self, arg):
         """
@@ -1204,6 +1198,13 @@ class ArrayColumn(ColumnBase):
             sf.write(index_data)
 
         self._init_index()
+
+    def update_index(self):
+        """
+        re-create the index
+        """
+        self.delete_index()
+        self.create_index()
 
     def delete_index(self):
         """
@@ -1362,50 +1363,6 @@ class ArrayColumn(ColumnBase):
 
         return Index(indices)
 
-    '''
-    def _write_to_index(self,
-                        data,
-                        indices,
-                        cache=None,
-                        filename=None,
-                        verbose=False):
-
-        if filename is None:
-            self._verify_db_available('write')
-            index_fname = self.index_filename()
-        else:
-            index_fname = filename
-
-        db = numpydb.NumpyDB()
-        if cache is not None:
-            if not isinstance(cache, (tuple, list)):
-                raise ValueError('cache must be a sequence '
-                                 '[gbytes,bytes,ncache]')
-            gbytes = int(cache[0])
-            bytes = int(cache[1])
-            ncache = int(cache[2])
-            db.set_cachesize(gbytes, bytes, ncache)
-
-        db.open(index_fname, 'r+')
-
-        verbosity = 0
-        if self.verbose or verbose:
-            verbosity = 1
-        db.set_verbosity(verbosity)
-
-        if self.verbose:
-            print("Writing data to index for column '%s'" % self.name)
-        # if the sent data has names, use the name of
-        # this column
-        if data.dtype.names is not None:
-            if self.name not in data.dtype.names:
-                raise ValueError("No field '%s' in data" % self.name)
-            db.put(data[self.name], indices)
-        else:
-            db.put(data, indices)
-        db.close()
-    '''
-
     def _get_repr_list(self, full=False):
         """
 
@@ -1445,10 +1402,8 @@ class ArrayColumn(ColumnBase):
                 s += ['has index: %s' % self.has_index]
 
             if self.dtype is not None:
-                drepr = pprint.pformat(self.dtype.descr)
-                drepr = drepr.split('\n')
-                drepr = ['  '+d for d in drepr]
-                s += ["dtype: "] + drepr
+                c_dtype = self.dtype.descr[0][1]
+                s += ["dtype: %s" % c_dtype]
 
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
@@ -1612,7 +1567,7 @@ def where(query_index):
         >>> y = columns['y'][ind]
 
         # we can also extract multiple columns at once
-        >>> data = columns.read_columns(['x','y','mag','type'],rows=ind)
+        >>> data = columns.read(columns=['x','y','mag','type'], rows=ind)
     """
     return query_index.array()
 
