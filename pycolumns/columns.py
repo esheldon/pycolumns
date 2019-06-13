@@ -1,3 +1,10 @@
+"""
+todo
+
+    - use little endian dtype
+    - make sure copies are made rather than references, but don't copy twice in
+    case where memmap getitem is already returning a copy
+"""
 import os
 import bisect
 from glob import glob
@@ -5,12 +12,6 @@ import pprint
 import json
 import numpy as np
 from .sfile import SimpleFile
-
-try:
-    import numpydb
-    havedb = True
-except ImportError:
-    havedb = False
 
 ALLOWED_COL_TYPES = ['array', 'json', 'cols']
 
@@ -1235,14 +1236,13 @@ class ArrayColumn(ColumnBase):
 
     def __ge__(self, val):
         """
-        bisect_left returns i such that data[:i] are all strictly >= val
+        bisect_left returns i such that data[i:] are all strictly >= val
         """
         mmap = self._index.mmap
         i = bisect.bisect_left(mmap['value'], val)
         indices = mmap['index'][i:].copy()
 
         return Index(indices)
-
 
     def __lt__(self, val):
         """
@@ -1264,7 +1264,78 @@ class ArrayColumn(ColumnBase):
 
         return Index(indices)
 
+    def between(self, low, high, interval='[]'):
+        """
+        Find all entries in the range low,high, inclusive by default.
 
+        Using between() requires that an index was created for this column
+        using create_index()
+
+        Parameters
+        ----------
+        low: number
+            the lower end of the range.  Must be convertible to the key data
+            type.
+        high: number
+            the upper end of the range.  Must be convertible to the key data
+            type.
+        interval: str, optional
+            '[]': Closed on both sides
+            '[)': Closed on the lower side, open on the high side.
+            '(]': Open on the lower side, closed on the high side
+            '()': Open on both sides.
+
+        examples
+        ---------
+
+        # Extract the indices for values in the given range
+        query_index = col.between(low, high)
+
+        # Extract from different types of intervals
+        values = db.between(low, high,'[]')
+        values = db.between(low, high,'[)')
+        values = db.between(low, high,'(]')
+        values = db.between(low, high,'()')
+
+        # combine with the results of another query and extract the
+        # index array
+        ind = columns.where( (col1.between(low,high)) & (col2 == value2) )
+        """
+
+        mmap = self._index.mmap
+        if interval == '[]':
+            # bisect_left returns i such that data[i:] are all strictly >= val
+            ilow = bisect.bisect_left(mmap['value'], low)
+
+            # bisect_right returns i such that data[:i] are all strictly <= val
+            ihigh = bisect.bisect_right(mmap['value'], high)
+
+        elif interval == '(]':
+            # bisect_right returns i such that data[i:] are all strictly > val
+            ilow = bisect.bisect_right(mmap['value'], low)
+
+            # bisect_right returns i such that data[:i] are all strictly <= val
+            ihigh = bisect.bisect_right(mmap['value'], high)
+
+        elif interval == '[)':
+            # bisect_left returns i such that data[:i] are all strictly >= val
+            ilow = bisect.bisect_left(mmap['value'], low)
+
+            # bisect_left returns i such that data[:i] are all strictly < val
+            ihigh = bisect.bisect_left(mmap['value'], high)
+
+        elif interval == '()':
+            # bisect_right returns i such that data[i:] are all strictly > val
+            ilow = bisect.bisect_right(mmap['value'], low)
+
+            # bisect_left returns i such that data[:i] are all strictly < val
+            ihigh = bisect.bisect_left(mmap['value'], high)
+        else:
+            raise ValueError('bad interval type: %s' % interval)
+
+        indices = mmap['index'][ilow:ihigh].copy()
+
+        return Index(indices)
 
     '''
     @property
