@@ -1,3 +1,6 @@
+"""
+this is not the index on a column, but set of indices
+"""
 import numpy as np
 
 
