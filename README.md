@@ -108,6 +108,14 @@ Column:
 >>> ind = c['id'].between(15, 25) | (c['id'] == 55)
 >>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
 
+# speed up reads by sorting indices
+>>> ind.sort()
+>>> data = c.read(columns=['ra', 'dec'], rows=ind)
+
+# you can check if the index is already sorted
+>>> if not ind.is_sorted:
+>>>    ind.sort()
+
 # update values for a column
 >>> c['id'][35] = 10
 >>> c['id'][35:35+3] = [8, 9, 10]

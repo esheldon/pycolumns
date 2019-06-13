@@ -26,12 +26,27 @@ class Indices(np.ndarray):
 
     """
     def __new__(self, init_data, copy=False):
+        self._is_sorted = False
         arr = np.array(init_data, copy=copy)
         shape = arr.shape
 
         ret = np.ndarray.__new__(self, shape, arr.dtype,
                                  buffer=arr)
         return ret
+
+    @property
+    def is_sorted(self):
+        """
+        returns True if sort has been run
+        """
+        return self._is_sorted
+
+    def sort(self):
+        """
+        sort and set the is_sorted flag
+        """
+        super(Indices, self).sort()
+        self._is_sorted = True
 
     def array(self):
         return self.view(np.ndarray)
