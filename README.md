@@ -1,25 +1,20 @@
-A simple, efficient column-oriented, pythonic database.  Data are input and
-output as numerical python arrays, and indexing is provided by berkeley db
-through the numpydb package.
+A simple, efficient column-oriented, pythonic data store.
 
-The focus is currently on efficiency of reading and writing.  This is not yet
-a proper database in terms of transactional integrity.  I think of it as
-essentially a write once, ready many store.
+The focus is currently on efficiency of reading and writing.  The code is pure
+python but searching and reading data is fast due to the use of numpy memory
+maps and column indexing.  Basic consistency is ensured but the database is not
+fully ACID.
 
-Currently this package depends on fitsio
-    git@github.com:esheldon/fitsio.git
-and optionally numpydb
-    git@github.com:esheldon/numpydb.git
-for indexing.  A TODO is to examine copying the needed parts into pycolumns.
+The storage is a simple directory with files on disk.
 
-== Examples ==
+Examples
+--------
+
 ```python
->>> import columns
-
+>>> import pycolumns as pyc
 
 # instantiate a column database from the specified coldir
->>> c=columns.Columns('/some/path/mycols.cols')
-
+>>> c=pyc.Columns('/some/path/mycols.cols')
 
 # display some info about the columns
 >>> c
@@ -27,101 +22,137 @@ Column Directory:
 
   dir: /some/path/mydata.cols
   Columns:
-    name             type  dtype index  size
+    name             type  dtype index  shape
     --------------------------------------------------
-    ccd               col    <i2 True   64348146
-    dec               col    <f8 False  64348146
-    exposurename      col   |S20 True   64348146
-    id                col    <i4 False  64348146
-    imag              col    <f4 False  64348146
-    ra                col    <f8 False  64348146
-    x                 col    <f4 False  64348146
-    y                 col    <f4 False  64348146
+    ccd             array    <i2 True   (64348146,)
+    dec             array    <f8 False  (64348146,)
+    exposurename    array   |S20 True   (64348146,)
+    id              array    <i8 False  (64348146,)
+    imag            array    <f4 False  (64348146,)
+    ra              array    <f8 False  (64348146,)
+    x               array    <f4 False  (64348146,)
+    y               array    <f4 False  (64348146,)
+    g               array    <f8 False  (64348146, 2)
+    meta             dict
+
 
   Sub-Column Directories:
     name
     --------------------------------------------------
     psfstars
 
-
-  ...
-
 # display info about column 'id'
 >>> c['id']
 Column:
   "id"
-  filename: ./id.col
+  filename: ./id.array
   type: col
-  size: 64348146
+  shape: (64348146,)
   has index: False
-  dtype:
-    [('id', '<i4')]
-
+  dtype: <i8
 
 # get the column names
->>> c.colnames()
-['ccd','dec','exposurename','id','imag','ra','x','y']
+>>> c.colnames
+['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g', 'meta']
 
 # reload all columns or specified column/column list
 >>> c.reload(name=None)
 
-# read all data from column 'id'
-# alternative syntaxes
->>> id = c['id'][:]
->>> id = c['id'].read()
->>> id = c.read_column('id')
+# read all data from array column 'id'
+# alternative syntaxes, including numpy style slicing
+>>> ind = c['id'][:]
+>>> ind = c['id'].read()
+>>> ind = c.read_column('id')
 
-# Also get metadata
->>> id, id_meta = c.read_column('id', rows=rows, meta=True)
->>> meta=c['id'].read_meta()
+# dict columns are read as a dict. No slicing for dicts
+>>> meta = c['meta'].read()
 
 # read a subset of rows
-# slicing 
->>> id = c['id'][25:125]
+# slicing
+>>> ind = c['id'][25:125]
 
 # specifying a set of rows
->>> rows=[3,225,1235]
->>> id = c['id'][rows]
->>> id = c.read_column('id', rows=rows)
+>>> rows=[3, 225, 1235]
+>>> ind = c['id'][rows]
+>>> ind = c.read_column('id', rows=rows)
 
+# read all columns into a single rec array.  By default the dict
+# columns are not loaded
 
-# read multiple columns into a single rec array
->>> data = c.read_columns(['id','flux'], rows=rows)
+>>> data = c.read()
 
-# or put different columns into fields of a dictionary instead of
-# packing them into a single array
->>> data = c.read_columns(['id','flux'], asdict=True)
+# using asdict=True puts the data into a dict.  The dict data
+# are loaded in this case
+>>> data = c.read(asdict=True)
 
-# If numpydb is available, you can create indexes and
-# perform fast searching
->>> c['col'].create_index()
+# specify columns
+>>> data = c.read(columns=['id', 'flux'], rows=rows)
+
+# dict columns can be specified if asdict is True
+>>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
+
+# Create indexes for fast searching
+>>> c['id'].create_index()
 
 # get indices for some condition
->>> ind=(c['col'] > 25)
->>> ind=c['col'].between(25,35)
->>> ind=(c['col'] == 25)
->>> ind=c['col'].match([25,77])
+>>> ind = c['id'] > 25
+>>> ind = c['id'].between(25, 35)
+>>> ind = c['id'] == 25
 
 # read the corresponding data
->>> ccd=c['ccd'][ind]
->>> data=c.read_columns(['ra','dec'], rows=ind)
+>>> ccd = c['ccd'][ind]
+>>> data = c.read(columns=['ra', 'dec'], rows=ind)
 
 # composite searches over multiple columns
->>> ind = (c['col1'] == 25) & (col['col2'] < 15.23)
->>> ind = c['col1'].between(15,25) | (c['col2'] != 66)
->>> ind = c['col1'].between(15,25) & (c['col2'] != 66) & (c['col3'] < 5)
+>>> ind = (c['id'] == 25) & (col['ra'] < 15.23)
+>>> ind = c['id'].between(15, 25) | (c['id'] == 55)
+>>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
 
-# create column or append data to a column
->>> c.write_column(name, data)
+# speed up reads by sorting indices
+>>> ind.sort()
+>>> data = c.read(columns=['ra', 'dec'], rows=ind)
 
-# append to existing column, alternative syntax
->>> c['id'].write(data)
+# you can check if the index is already sorted
+>>> if not ind.is_sorted:
+>>>    ind.sort()
+
+# update values for a column
+>>> c['id'][35] = 10
+>>> c['id'][35:35+3] = [8, 9, 10]
+>>> c['id'][rows] = idvalues
 
 # write multiple columns from the fields in a rec array
-# names in the data correspond to column names
->>> c.write_columns(recdata)
+# names in the data correspond to column names.
+# If columns are not present, they are created
+# but row count consistency must be maintained for all array
+# columns and this is checked.
 
-# write/append data from the fields in a .rec file or .fits file
->>> c.from_rec(recfile_name)
+>>> c.append(recdata)
+
+# append data from the fields in a FITS file
 >>> c.from_fits(fitsfile_name)
+
+# add a dict column
+>>> c.create_column('meta')
+>>> c['meta'].write({'test': 'hello'})
+>>> d = c['meta'].read()
+
+# heirarchical sets of columns are also supported
+>>> c['psfstars']
+Column Directory:
+
+  dir: /some/path/mydata.cols/psfstars.cols
+  Columns:
+    name             type  dtype index  shape
+    --------------------------------------------------
+    ccd             array    <i2 True   (348146,)
+    exposurename    array   |S20 True   (348146,)
+    x               array    <f4 False  (348146,)
+    y               array    <f4 False  (348146,)
 ```
+
+Dependencies
+------------
+numpy
+
+
