@@ -769,20 +769,6 @@ class ColumnBase(object):
     Represent a column in a Columns database.  Facilitate opening, reading,
     writing of data.  This class can be instantiated alone, but is usually
     accessed through the Columns class.
-
-    Construction
-    ------------
-    >>> col=Column(filename=, name=, dir=, type=, verbose=False)
-
-    # there are alternative construction methods
-    # this method determins all info from the full path
-    >>> col=Column(filename='/full/path')
-
-    # this one uses directory, column name, type
-    >>> col=Column(
-            name='something', type='array',
-            dir='/some/path/dbname.cols',
-        )
     """
     def __init__(self,
                  filename=None,
@@ -961,33 +947,31 @@ class ArrayColumn(ColumnBase):
     """
     represents an array column in a Columns database
 
-    If the numpydb package is available, B-tree indexes can be created for
-    any column.  Searching can be done using standard ==, >, >=, <, <=
-    operators, as well as the .match() and between() functions.  The
-    functional forms are more powerful.
+    Construction
+    ------------
+    col=ArrayColumn(filename=, name=, dir=, verbose=False)
+
+    # there are alternative construction methods
+    # this method determins all info from the full path
+
+    col=ArrayColumn(filename='/full/path')
+
+    # this one uses directory, column name
+    col=ArrayColumn(name='something', dir='/path2o/dbname.cols')
 
     Slice and item lookup
     ---------------------
     # The Column class supports item lookup access, e.g. slices and
     # arrays representing a subset of rows
 
-    # Note true slices and row subset other than [:] are only supported
-    # by the 'array' type
+    col=Column(...)
+    data = col[25:22]
 
-    >>> col=Column(...)
-    >>> data = col[25:22]
-    >>> data = col[row_list]
-
-    # if the column itself contains multiple fields, you can access subsets
-    # of these
-    >>> id = col['id'][:]
-    >>> data = col[ ['id','flux'] ][ rows ]
+    rows = np.arange(100)
+    data = col[rows]
 
     Indexes on columns
     ------------------
-    If the numpydb package is available, you can create indexes on
-    columns and perform fast searches.
-
     # create the index
     >>> col.create_index()
 
@@ -1002,7 +986,6 @@ class ArrayColumn(ColumnBase):
     >>> ind = (col1 == 25) & (col2 < 15.23)
     >>> ind = col1.between(15,25) | (col2 != 66)
     >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
-
     """
     def init(self,
              filename=None,
