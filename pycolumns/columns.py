@@ -1,6 +1,8 @@
 """
 todo
 
+    - figure out when to sort the index for reading; this can make a big difference
+    in read speeds
     - use little endian dtype
     - make sure copies are made rather than references, but don't copy twice in
     case where memmap getitem is already returning a copy
@@ -1222,6 +1224,12 @@ class ArrayColumn(ColumnBase):
         index_fname = '.'.join(self.filename.split('.')[0:-1])
         index_fname = index_fname+'__index.sf'
         return index_fname
+
+    def __eq__(self, val):
+        """
+        get exact equality
+        """
+        return self.between(val, val)
 
     # one-sided range operators
     def __gt__(self, val):
