@@ -2,10 +2,10 @@
 todo
 
     - figure out when to sort the index for reading; this can make a big
-    difference in read speeds
-    - use little endian dtype
+      difference in read speeds
+    - always use little endian dtype when writing
     - make sure copies are made rather than references, but don't copy twice in
-    case where memmap getitem is already returning a copy
+      case where memmap getitem is already returning a copy
 """
 import os
 import bisect
@@ -631,34 +631,17 @@ class Columns(dict):
              rows=None,
              asdict=False):
         """
-        read columns and rows
+        read multiple columns from the database
 
         Parameters
         ----------
         columns: sequence or string
             Can be a scalar string or a sequence of strings.  Defaults to all
-            array columns if asdict is False, all if asdict is True
+            array columns if asdict is False, all columns if asdict is True
         rows: sequence or scalar
             Sequence of row numbers.  Defaults to all.
         asdict: bool, optional
-            If True, read fixed length columns into numpy arrays and store
-            each in a dictionary with key=colname.  When supported,
-            variable length columns can also be stored in this type of
-            container as e.g. json columns
-
-            if asdict=False, only fixed length columns can be read and they
-            are all packed into a single structured array (e.g. recarray).
-
-        Notes
-        ------
-            If a single column is desired, this can be read into a normal,
-            unstructured array using read_column or the [] notation.
-
-        Restrictions
-        -------------
-        If rows= keyword is sent, this is applied to all columns, and currently
-        only supports numpy fixed length types.  If all columns are not the
-        same length, an exception is raised.
+            If True, read the requested columns into a dict.
         """
 
         columns = self._extract_columns(columns=columns, asdict=asdict)
@@ -745,7 +728,13 @@ class Columns(dict):
 
         return self[colname].read(rows=rows)
 
-    def _extract_columns(self, columns=None, asdict=False, rows=None):
+    def _extract_columns(self, columns=None, asdict=False):
+        """
+        extract the columns to read.  If no columns are sent then the behavior
+        depends on the asdict parameter
+            - if asdict is False, read all array columns
+            - if asdict is True, read all columns
+        """
         if columns is None:
 
             keys = sorted(self.keys())
@@ -773,6 +762,7 @@ class Columns(dict):
                         )
 
         return columns
+
 
 class ColumnBase(object):
     """
