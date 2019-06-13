@@ -20,7 +20,7 @@ import json
 import numpy as np
 from .sfile import SimpleFile
 
-ALLOWED_COL_TYPES = ['array', 'json', 'cols']
+ALLOWED_COL_TYPES = ['array', 'dict', 'cols']
 
 
 class Columns(dict):
@@ -34,111 +34,127 @@ class Columns(dict):
 
     Construction
     ------------
-        >>> coldir='/some/path/mycols.cols
-        >>> c=Columns(coldir)
+    >>> coldir='/some/path/mycols.cols
+    >>> c=Columns(coldir)
 
     Examples
     ---------
-        # construct a column database from the specified coldir
-        >>> coldir='/some/path/mydata.cols'
-        >>> c=Columns(coldir)
+    >>> import pycolumns as pyc
 
-        # display some info about the columns
-        >>> c
-        Column Directory:
+    # instantiate a column database from the specified coldir
+    >>> c=pyc.Columns('/some/path/mycols.cols')
 
-          dir: /some/path/mydata.cols
-          Columns:
-            name             type  dtype index  size
-            --------------------------------------------------
-            ccd               col    <i2 True   64348146
-            dec               col    <f8 False  64348146
-            exposurename      col   |S20 True   64348146
-            id                col    <i4 False  64348146
-            imag              col    <f4 False  64348146
-            ra                col    <f8 False  64348146
-            x                 col    <f4 False  64348146
-            y                 col    <f4 False  64348146
+    # display some info about the columns
+    >>> c
+    Column Directory:
 
-          Sub-Column Directories:
-            name
-            --------------------------------------------------
-            psfstars
-
-        # display info about column 'id'
-        >>> c['id']
-        Column:
-          "id"
-          filename: ./id.col
-          type: array
-          size: 64348146
-          has index: False
-          dtype:
-            [('id', '<i4')]
+      dir: /some/path/mydata.cols
+      Columns:
+        name             type  dtype index  shape
+        --------------------------------------------------
+        ccd             array    <i2 True   (64348146,)
+        dec             array    <f8 False  (64348146,)
+        exposurename    array   |S20 True   (64348146,)
+        id              array    <i8 False  (64348146,)
+        imag            array    <f4 False  (64348146,)
+        ra              array    <f8 False  (64348146,)
+        x               array    <f4 False  (64348146,)
+        y               array    <f4 False  (64348146,)
+        g               array    <f8 False  (64348146, 2)
+        meta             dict
 
 
-        # get the column names
-        >>> c.colnames
-        ['ccd','dec','exposurename','id','imag','ra','x','y']
+      Sub-Column Directories:
+        name
+        --------------------------------------------------
+        psfstars
 
-        # reload all columns or specified column/column list
-        >>> c.reload(name=None)
+    # display info about column 'id'
+    >>> c['id']
+    Column:
+      "id"
+      filename: ./id.array
+      type: col
+      shape: (64348146,)
+      has index: False
+      dtype: <i8
 
-        # read all data from column 'id'
-        # alternative syntaxes
-        >>> id = c['id'][:]
-        >>> id = c['id'].read()
-        >>> id = c.read_column('id')
+    # get the column names
+    >>> c.colnames
+    ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g', 'meta']
 
-        # read a subset of rows
-        # slicing
-        >>> id = c['id'][25:125]
+    # reload all columns or specified column/column list
+    >>> c.reload(name=None)
 
-        # specifying a set of rows
-        >>> rows=[3,225,1235]
-        >>> id = c['id'][rows]
-        >>> id = c.read_column('id', rows=rows)
+    # read all data from column 'id'
+    # alternative syntaxes
+    >>> id = c['id'][:]
+    >>> id = c['id'].read()
+    >>> id = c.read_column('id')
 
+    # dict columns are read as a dict
+    >>> meta = c['meta'].read()
 
-        # read multiple columns into a single rec array
-        >>> data = c.read(columns=['id','flux'], rows=rows)
+    # read a subset of rows
+    # slicing
+    >>> id = c['id'][25:125]
 
-        # or put different columns into fields of a dictionary instead of
-        # packing them into a single array.  This allows reading from
-        # different-length columns and from dict types
-        >>> data = c.read(columns=['id','flux'], asdict=True)
+    # specifying a set of rows
+    >>> rows=[3, 225, 1235]
+    >>> id = c['id'][rows]
+    >>> id = c.read_column('id', rows=rows)
 
-        # If numpydb is available, you can create indexes and
-        # perform fast searching
-        >>> c['x'].create_index()
+    # read all columns into a single rec array.  By default the dict
+    # columns are not loaded
 
-        # get indices for some range.  Can also do
-        >>> ind=(c['x'] > 25)
-        >>> ind=c['x'].between(25,35)
-        >>> ind=(c['x'] == 25)
-        >>> ind=c['x'].match([25,77])
+    >>> data = c.read()
 
-        # composite searches over multiple columns
-        >>> ind = (c['col1'] == 25) & (col['col2'] < 15.23)
-        >>> ind = c['col1'].between(15,25) | (c['col2'] != 66)
-        >>> ind = (
-            c['col1'].between(15,25) &
-            (c['col2'] != 66) &
-            (c['col3'] < 5)
-        )
+    # using asdict=True puts the data into a dict.  The dict data
+    # are loaded in this case
+    >>> data = c.read(asdict=True)
 
-        # update values for a column
-        >>> c['id'][35] = 10
-        >>> c['id'][35:35+3] = [8, 9, 10]
-        >>> c['id'][rows] = idvalues
+    # specify columns
+    >>> data = c.read(columns=['id', 'flux'], rows=rows)
 
-        # append data to multiple columns from the fields in a rec array
-        # names in the data correspond to column names
-        >>> data = np.zeros(num, dtype=[('ra','f8'), ('dec','f8')])
-        >>> c.append(data)
+    # dict columns can be specified if asdict is True
+    >>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
 
-        # write/append data from the fields in a .fits file
-        >>> c.from_fits(fitsfile_name)
+    # Create indexes for fast searching
+    >>> c['id'].create_index()
+
+    # get indices for some condition
+    >>> ind = c['id'] > 25
+    >>> ind = c['id'].between(25, 35)
+    >>> ind = c['id'] == 25
+
+    # read the corresponding data
+    >>> ccd = c['ccd'][ind]
+    >>> data = c.read(columns=['ra', 'dec'], rows=ind)
+
+    # composite searches over multiple columns
+    >>> ind = (c['id'] == 25) & (col['ra'] < 15.23)
+    >>> ind = c['id'].between(15, 25) | (c['id'] == 55)
+    >>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
+
+    # update values for a column
+    >>> c['id'][35] = 10
+    >>> c['id'][35:35+3] = [8, 9, 10]
+    >>> c['id'][rows] = idvalues
+
+    # write multiple columns from the fields in a rec array
+    # names in the data correspond to column names.
+    # If columns are not present, they are created
+    # but row count consistency must be maintained for all array
+    # columns and this is checked.
+
+    >>> c.append(recdata)
+
+    # append data from the fields in a FITS file
+    >>> c.from_fits(fitsfile_name)
+
+    # add a dict column
+    >>> c.create_column('meta')
+    >>> c['meta'].write({'test': 'hello'})
     """
 
     def __init__(self, dir=None, verbose=False):
@@ -229,7 +245,7 @@ class Columns(dict):
                     if type == 'cols':
                         self.load_coldir(f)
                     else:
-                        self._load_column(filename)
+                        self._load_column(f)
         self.verify()
 
     @property
@@ -277,8 +293,8 @@ class Columns(dict):
                 name=name,
                 verbose=self.verbose,
             )
-        elif type == 'json':
-            col = JSONColumn(
+        elif type == 'dict':
+            col = DictColumn(
                 filename=filename,
                 dir=self.dir,
                 name=name,
@@ -291,9 +307,23 @@ class Columns(dict):
         self.clear(name)
         self[name] = col
 
-    def _create_column(self, name, type):
+    def create_column(self, name, type, verify=True):
         """
-        Load the specified column
+        create the specified column
+
+        You usually don't want to use this directly for array types if columns
+        already exist, because consistency will be broken, at least
+        temporarily. In fact an exception will be raised.  Better to use the
+        append method to ensure row length consistency
+
+        It is fine to use it for dict types
+
+        parameters
+        ----------
+        name: str
+            Column name
+        type: str
+            Column type, 'dict'
         """
 
         if name in self:
@@ -315,8 +345,8 @@ class Columns(dict):
                 name=name,
                 verbose=self.verbose,
             )
-        elif type == 'json':
-            col = JSONColumn(
+        elif type == 'dict':
+            col = DictColumn(
                 filename=filename,
                 dir=self.dir,
                 name=name,
@@ -327,6 +357,9 @@ class Columns(dict):
 
         name = col.name
         self[name] = col
+
+        if verify:
+            self.verify()
 
     def load_coldir(self, dir):
         """
@@ -369,69 +402,6 @@ class Columns(dict):
         """
         return list(self.keys())
 
-    def _get_repr_list(self):
-        """
-        Get a list of metadata for this columns directory and it's
-        columns
-        """
-        indent = '  '
-        s = []
-        if self.dir is not None:
-            dbase = self._dirbase()
-            s += [dbase]
-            s += ['dir: '+self.dir]
-
-        subcols = []
-        if len(self) > 0:
-            s += ['Columns:']
-            cnames = 'name', 'type', 'dtype', 'index', 'shape'
-            s += ['  %-15s %5s %6s %-6s %s' % cnames]
-            s += ['  '+'-'*(50)]
-
-            subcols = ['Sub-Column Directories:']
-            subcols += ['  %-15s' % ('name',)]
-            subcols += ['  '+'-'*(50)]
-
-            for name in sorted(self):
-                c = self[name]
-                if isinstance(c, ColumnBase):
-
-                    name = c.name
-
-                    if len(name) > 15:
-                        s += ['  %s' % name]
-                        s += ['%23s' % (c.type,)]
-                    else:
-                        s += ['  %-15s %5s' % (c.name, c.type)]
-
-                    if c.type == 'array':
-                        c_dtype = c.dtype.descr[0][1]
-                        s[-1] += ' %6s' % c_dtype
-                        s[-1] += ' %-6s' % self[name].has_index
-                        s[-1] += ' %s' % (self[name].shape,)
-
-                else:
-                    cdir = os.path.basename(c.dir).replace('.cols', '')
-                    subcols += ['  %s' % cdir]
-
-        s = [indent + tmp for tmp in s]
-        s = ['Column Directory: '] + s
-
-        if len(subcols) > 3:
-            s += [indent]
-            subcols = [indent + tmp for tmp in subcols]
-            s += subcols
-
-        return s
-
-    def __repr__(self):
-        """
-        The columns representation to the world
-        """
-        s = self._get_repr_list()
-        s = '\n'.join(s)
-        return s
-
     def clear(self, name=None):
         """
         Clear out the dictionary of column info
@@ -455,21 +425,30 @@ class Columns(dict):
             raise ValueError('append() takes a structured array as input')
 
         for name in names:
-            self._append_column(name, data[name])
+            self.append_column(name, data[name], verify=False)
 
         # make sure the array columns all have the same length
         if verify:
             self.verify()
 
-    def _append_column(self, name, data):
+    def append_column(self, name, data, verify=True):
         """
-        Append data to an array column.
+        Append data to an array column.  The column is created
+        if it doesn't exist
+
+        You usually don't want to use this directly in case the
+        row count consistency is broken, favor append() to append
+        multiple columns
         """
 
         if name not in self:
-            self._create_column(name, 'array')
+            self.create_column(name, 'array', verify=False)
 
         self[name]._append(data)
+
+        # make sure the array columns all have the same length
+        if verify:
+            self.verify()
 
     def from_fits(self, filename, ext=1, lower=False):
         """
@@ -687,6 +666,69 @@ class Columns(dict):
                         )
 
         return columns
+
+    def _get_repr_list(self):
+        """
+        Get a list of metadata for this columns directory and it's
+        columns
+        """
+        indent = '  '
+        s = []
+        if self.dir is not None:
+            dbase = self._dirbase()
+            s += [dbase]
+            s += ['dir: '+self.dir]
+
+        subcols = []
+        if len(self) > 0:
+            s += ['Columns:']
+            cnames = 'name', 'type', 'dtype', 'index', 'shape'
+            s += ['  %-15s %5s %6s %-6s %s' % cnames]
+            s += ['  '+'-'*(50)]
+
+            subcols = ['Sub-Column Directories:']
+            subcols += ['  %-15s' % ('name',)]
+            subcols += ['  '+'-'*(50)]
+
+            for name in sorted(self):
+                c = self[name]
+                if isinstance(c, ColumnBase):
+
+                    name = c.name
+
+                    if len(name) > 15:
+                        s += ['  %s' % name]
+                        s += ['%23s' % (c.type,)]
+                    else:
+                        s += ['  %-15s %5s' % (c.name, c.type)]
+
+                    if c.type == 'array':
+                        c_dtype = c.dtype.descr[0][1]
+                        s[-1] += ' %6s' % c_dtype
+                        s[-1] += ' %-6s' % self[name].has_index
+                        s[-1] += ' %s' % (self[name].shape,)
+
+                else:
+                    cdir = os.path.basename(c.dir).replace('.cols', '')
+                    subcols += ['  %s' % cdir]
+
+        s = [indent + tmp for tmp in s]
+        s = ['Column Directory: '] + s
+
+        if len(subcols) > 3:
+            s += [indent]
+            subcols = [indent + tmp for tmp in subcols]
+            s += subcols
+
+        return s
+
+    def __repr__(self):
+        """
+        The columns representation to the world
+        """
+        s = self._get_repr_list()
+        s = '\n'.join(s)
+        return s
 
 
 class ColumnBase(object):
@@ -1340,16 +1382,16 @@ class ArrayColumn(ColumnBase):
         return s
 
 
-class JSONColumn(ColumnBase):
+class DictColumn(ColumnBase):
     def init(self,
              filename=None,
              name=None,
              dir=None,
              verbose=False):
 
-        self._type = 'json'
+        self._type = 'dict'
 
-        super(JSONColumn, self).init(
+        super(DictColumn, self).init(
             filename=filename,
             name=name,
             dir=dir,
@@ -1358,7 +1400,7 @@ class JSONColumn(ColumnBase):
 
     def write(self, data):
         """
-        Write data to the JSON column.
+        Write data to the dict column.
 
         Parameters
         ----------
@@ -1398,7 +1440,7 @@ class JSONColumn(ColumnBase):
             if self.filename is not None:
                 s += ['filename: %s' % self.filename]
 
-            s += ['type: JSON']
+            s += ['type: dict']
 
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
@@ -1548,4 +1590,10 @@ def _create_filename(dir, name, type):
     if type is None:
         raise ValueError('Cannot create column filename: type is None')
 
-    return os.path.join(dir, name+'.'+type)
+    if type == 'dict':
+        ext = 'json'
+    elif type == 'array':
+        ext = 'array'
+    else:
+        raise ValueError("bad file type: '%s'" % type)
+    return os.path.join(dir, name+'.'+ext)

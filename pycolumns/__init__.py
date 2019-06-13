@@ -2,7 +2,7 @@ from . import columns
 from .columns import (
     Columns,
     ArrayColumn,
-    JSONColumn,
+    DictColumn,
     Index,
     where,
 )

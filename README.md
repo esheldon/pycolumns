@@ -33,7 +33,7 @@ Column Directory:
     x               array    <f4 False  (64348146,)
     y               array    <f4 False  (64348146,)
     g               array    <f8 False  (64348146, 2)
-    meta             json
+    meta             dict
 
 
   Sub-Column Directories:
@@ -64,11 +64,11 @@ Column:
 >>> id = c['id'].read()
 >>> id = c.read_column('id')
 
-# json columns are read as a dict
+# dict columns are read as a dict
 >>> meta = c['meta'].read()
 
 # read a subset of rows
-# slicing 
+# slicing
 >>> id = c['id'][25:125]
 
 # specifying a set of rows
@@ -76,19 +76,19 @@ Column:
 >>> id = c['id'][rows]
 >>> id = c.read_column('id', rows=rows)
 
-# read all columns into a single rec array.  By default the JSON
+# read all columns into a single rec array.  By default the dict
 # columns are not loaded
 
 >>> data = c.read()
 
-# using asdict=True puts the data into a dict.  The JSON data
+# using asdict=True puts the data into a dict.  The dict data
 # are loaded in this case
 >>> data = c.read(asdict=True)
 
 # specify columns
 >>> data = c.read(columns=['id', 'flux'], rows=rows)
 
-# JSON columns can be specified if asdict is True
+# dict columns can be specified if asdict is True
 >>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
 
 # Create indexes for fast searching
@@ -114,13 +114,19 @@ Column:
 >>> c['id'][rows] = idvalues
 
 # write multiple columns from the fields in a rec array
-# names in the data correspond to column names.  All array
-# columns must be updated at the same time to maintain
-# consistency
+# names in the data correspond to column names.
+# If columns are not present, they are created
+# but row count consistency must be maintained for all array
+# columns and this is checked.
+
 >>> c.append(recdata)
 
-# write/append data from the fields in a FITS file
+# append data from the fields in a FITS file
 >>> c.from_fits(fitsfile_name)
+
+# add a dict column
+>>> c.create_column('meta')
+>>> c['meta'].write({'test': 'hello'})
 ```
 
 Dependencies
