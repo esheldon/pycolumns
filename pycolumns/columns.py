@@ -3,9 +3,6 @@ todo
 
     - figure out when to sort the index for reading; this can make a big
       difference in read speeds
-    - always use little endian dtype when writing
-    - make sure copies are made rather than references, but don't copy twice in
-      case where memmap getitem is already returning a copy
     - need to check when appending that all array cols are being updated
 
     - can we loosen up the requirement of columns being same number of rows?
