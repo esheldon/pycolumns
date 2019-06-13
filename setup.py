@@ -5,6 +5,6 @@ from distutils.core import setup,Extension
 setup(
     name='pycolumns',
     version='0.1.0',
-    description='A simple, efficient, pythonic column database',
+    description='A simple, efficient, pythonic column data store',
     packages=['pycolumns'],
 )
