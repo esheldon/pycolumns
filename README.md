@@ -5,6 +5,8 @@ python but searching and reading data is fast due to the use of numpy memory
 maps and column indexing.  Basic consistency is ensured but the database is not
 fully ACID.
 
+The storage is a simple directory with files on disk.
+
 Examples
 --------
 
@@ -110,3 +112,9 @@ Column:
 # write/append data from the fields in a FITS file
 >>> c.from_fits(fitsfile_name)
 ```
+
+Dependencies
+------------
+numpy
+
+
