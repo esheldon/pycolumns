@@ -137,8 +137,10 @@ Column Directory:
   Columns:
     name             type  dtype index  shape
     --------------------------------------------------
-    ccd             array    <i2 True   (64348146,)
-    exposurename    array   |S20 True   (64348146,)
+    ccd             array    <i2 True   (348146,)
+    exposurename    array   |S20 True   (348146,)
+    x               array    <f4 False  (348146,)
+    y               array    <f4 False  (348146,)
 ```
 
 Dependencies
