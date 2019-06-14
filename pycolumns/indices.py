@@ -34,19 +34,75 @@ class Indices(np.ndarray):
                                  buffer=arr)
         return ret
 
-    @property
-    def is_sorted(self):
+    def set_sorted(self):
         """
-        returns True if sort has been run
+        set sorted indices
         """
-        return self._is_sorted
+        if not self.has_sort:
+            self._sort_indices = self.argsort()
+            self._sorted = self[self._sort_indices]
 
-    def sort(self):
+    @property
+    def has_sort(self):
         """
-        sort and set the is_sorted flag
+        check if the unsort indices are present
         """
-        super(Indices, self).sort()
-        self._is_sorted = True
+        if hasattr(self, '_sorted'):
+            return True
+        else:
+            return False
+
+    @property
+    def has_unsort(self):
+        """
+        check if the unsort indices are present
+        """
+        if hasattr(self, '_unsort_indices'):
+            return True
+        else:
+            return False
+
+    @property
+    def sorted(self):
+        """
+        indices that sort the array.  Only generated when running the sort()
+        method.  Equivalent to argsort() before sorting
+        """
+        if not self.has_sort:
+            self.set_sorted()
+
+        return self._sorted
+
+    '''
+    @property
+    def sort_indices(self):
+        """
+        indices that sort the array.  Only generated when running the sort()
+        method.  Equivalent to argsort() before sorting
+        """
+        if not self.has_sort:
+            self.set_sorted()
+
+        return self._sort_indices
+    '''
+
+    @property
+    def unsort_indices(self):
+        """
+        indices that unsort.  Only available after running the sort() method
+        """
+        if not self.has_unsort:
+            if not self.has_sort:
+                self.set_sorted()
+
+            si = self._sort_indices
+            tind = np.arange(self.size)
+            self._unsort_indices = tind[si].argsort()
+
+            # we don't need these any more
+            del self._sort_indices
+
+        return self._unsort_indices
 
     def array(self):
         return self.view(np.ndarray)

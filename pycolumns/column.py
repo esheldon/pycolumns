@@ -350,11 +350,18 @@ class ArrayColumn(ColumnBase):
         """
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
+
+        For slice, order is always preserved
         """
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        return self._sf[arg]
+        if isinstance(arg, Indices):
+            data = self._read_with_Indices(arg, preserve_order=True)
+        else:
+            data = self._sf[arg]
+
+        return data
 
     def __setitem__(self, arg, values):
         """
@@ -366,7 +373,7 @@ class ArrayColumn(ColumnBase):
 
         self._sf._mmap[arg] = values
 
-    def read(self, rows=None):
+    def read(self, rows=None, preserve_order=True):
         """
         read data from this column
 
@@ -379,9 +386,28 @@ class ArrayColumn(ColumnBase):
             raise ValueError('no file loaded yet')
 
         if rows is None:
-            return self._sf[:]
+            data = self._sf[:]
         else:
-            return self._sf[rows]
+            if isinstance(rows, Indices):
+                data = self._read_with_Indices(
+                    rows,
+                    preserve_order=preserve_order,
+                )
+            else:
+                data = self._sf[rows]
+
+        return data
+
+    def _read_with_Indices(self, rows, preserve_order=True):
+        """
+        read with Indices in sort order for i/o efficiency, but posibly
+        preserving order in the output
+        """
+        srows = rows.sorted
+        data = self._sf[srows]
+        if preserve_order:
+            data = data[rows.unsort_indices]
+        return data
 
     def delete(self):
         """
