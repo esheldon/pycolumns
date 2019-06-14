@@ -73,19 +73,6 @@ class Indices(np.ndarray):
 
         return self._sorted
 
-    '''
-    @property
-    def sort_indices(self):
-        """
-        indices that sort the array.  Only generated when running the sort()
-        method.  Equivalent to argsort() before sorting
-        """
-        if not self.has_sort:
-            self.set_sorted()
-
-        return self._sort_indices
-    '''
-
     @property
     def unsort_indices(self):
         """
