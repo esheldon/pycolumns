@@ -99,6 +99,9 @@ Column:
 >>> ind = c['id'].between(25, 35)
 >>> ind = c['id'] == 25
 
+# find all matches
+>>> ind = c['id'].match([35, 77])
+
 # read the corresponding data
 >>> ccd = c['ccd'][ind]
 >>> data = c.read(columns=['ra', 'dec'], rows=ind)
@@ -107,6 +110,7 @@ Column:
 >>> ind = (c['id'] == 25) & (col['ra'] < 15.23)
 >>> ind = c['id'].between(15, 25) | (c['id'] == 55)
 >>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
+>>> ind = c['id'].between(15, 250) & c['id'].match([35, 99])
 
 # speed up reads by sorting indices
 >>> ind.sort()
