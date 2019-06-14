@@ -494,6 +494,47 @@ class ArrayColumn(ColumnBase):
         index_fname = index_fname+'__index.sf'
         return index_fname
 
+    def match(self, values):
+        """
+        get indices of entries that match the input value or values
+
+        Parameters
+        ----------
+        values: scalar or array
+            Value or values to match.  These entries should be
+            unique to avoid unexpected results.
+
+        Returns
+        -------
+        Indices of matches
+        """
+
+        values = np.array(values, ndmin=1, copy=False)
+
+        # query each separately
+        ind_list = []
+        ntot = 0
+        for value in values:
+            ind = (self == value)
+            ntot += ind.size
+            if ind.size > 0:
+                ind_list.append(ind)
+
+        if len(ind_list) == 1:
+            return ind_list[0]
+
+        if len(ind_list) == 0:
+            ind_total = np.zeros(0, dtype='i8')
+        else:
+            ind_total = np.zeros(ntot, dtype='i8')
+
+            start = 0
+            for ind in ind_list:
+                ind_total[start:start+ind.size] = ind
+                start += ind.size
+
+        return Indices(ind_total)
+
     def __eq__(self, val):
         """
         get exact equality
