@@ -187,25 +187,30 @@ def _do_test(func, tmpdir, seed=999, num=1_000_000, chunksize_mbytes=500):
     with sfile.SimpleFile(infile, mode='w+') as sf:
         sf.write(data)
 
-    shutil.copy(infile, outfile)
+    if func == 'inplace':
+        outfile = infile
+        with sfile.SimpleFile(outfile, mode='r+') as sf:
+            sf._mmap.sort(order=valname)
+    else:
+        shutil.copy(infile, outfile)
 
-    with sfile.SimpleFile(infile, mode='r') as sfin:
-        with sfile.SimpleFile(outfile, mode='r+') as sfout:
+        with sfile.SimpleFile(infile, mode='r') as sfin:
+            with sfile.SimpleFile(outfile, mode='r+') as sfout:
 
-            chunksize_bytes = chunksize_mbytes * 1024 * 1024
+                chunksize_bytes = chunksize_mbytes * 1024 * 1024
 
-            bytes_per_element = sfin.dtype.itemsize
-            chunksize = chunksize_bytes//bytes_per_element
+                bytes_per_element = sfin.dtype.itemsize
+                chunksize = chunksize_bytes//bytes_per_element
 
-            print(f'num: {num} chunksize: {chunksize}')
+                print(f'num: {num} chunksize: {chunksize}')
 
-            func(
-                source=sfin._mmap,
-                sink=sfout._mmap,
-                order=valname,
-                chunksize=chunksize,
-                tmpdir=tmpdir,
-            )
+                func(
+                    source=sfin._mmap,
+                    sink=sfout._mmap,
+                    order=valname,
+                    chunksize=chunksize,
+                    tmpdir=tmpdir,
+                )
 
     sdata = sfile.read(outfile)
     data.sort(order=valname, kind='mergesort')
@@ -239,7 +244,7 @@ def test_cache(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
 
     if keep:
         _do_test(
-            func=mergesort_index,
+            func=cache_mergesort,
             tmpdir='.',
             seed=seed,
             num=num,
@@ -249,6 +254,28 @@ def test_cache(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
         with tempfile.TemporaryDirectory() as tmpdir:
             _do_test(
                 func=cache_mergesort,
+                tmpdir=tmpdir,
+                seed=seed,
+                num=num,
+                chunksize_mbytes=chunksize_mbytes,
+            )
+
+
+def test_inplace(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
+    import tempfile
+
+    if keep:
+        _do_test(
+            func='inplace',
+            tmpdir='.',
+            seed=seed,
+            num=num,
+            chunksize_mbytes=chunksize_mbytes,
+        )
+    else:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _do_test(
+                func='inplace',
                 tmpdir=tmpdir,
                 seed=seed,
                 num=num,
