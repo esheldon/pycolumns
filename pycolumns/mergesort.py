@@ -24,8 +24,7 @@ def mergesort_index(source, sink, order, chunksize, tmpdir):
         start = i*chunksize
         end = (i+1)*chunksize
 
-        # chunk_data = source[start:end].copy()
-        chunk_data = source[start:end]
+        chunk_data = source[start:end].copy()
         chunk_data.sort(order=order)
 
         tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
@@ -64,6 +63,215 @@ def mergesort_index(source, sink, order, chunksize, tmpdir):
         else:
             stack_tops[imin] = data['sf'][data['current_index']]
             data['current_index'] += 1
+
+
+class FileWrap(object):
+    def __init__(self, fname, data_start, size, dtype):
+        self.fobj = open(fname)
+        self.data_start = data_start
+        self.size = size
+        self.dtype = dtype
+        self.itemsize = dtype.itemsize
+
+    def close(self):
+        self.fobj.close()
+
+    def __getitem__(self, index):
+        import numpy as np
+
+        if isinstance(index, slice):
+            is_scalar = False
+            start = index.start
+            count = index.stop - index.start
+        else:
+            is_scalar = True
+            start = index
+            count = 1
+
+        self.fobj.seek(self.data_start + start * self.itemsize)
+        data = np.fromfile(self.fobj, dtype=self.dtype, count=count)
+        if is_scalar:
+            data = data[0]
+
+        return data
+
+
+def mergesort_fromfile(source, sink, order, chunksize, tmpdir):
+    """
+    just as fast
+    """
+    import tempfile
+    import numpy as np
+    from .sfile import SimpleFile
+
+    nchunks = source.size//chunksize
+    nleft = source.size % chunksize
+
+    if nleft > 0:
+        nchunks += 1
+
+    # store sorted chunks into files of size n
+    mergers = []
+
+    for i in range(nchunks):
+        start = i*chunksize
+        end = (i+1)*chunksize
+
+        chunk_data = source[start:end].copy()
+        chunk_data.sort(order=order)
+
+        tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
+        with SimpleFile(tmpf, mode='w') as tmpsf:
+            tmpsf.write(chunk_data)
+            data = {
+                'current_index': 0,
+                'data_start': tmpsf._data_start,
+                'size': chunk_data.size,
+            }
+
+        data['file'] = FileWrap(
+            fname=tmpf,
+            data_start=data['data_start'],
+            size=data['size'],
+            dtype=chunk_data.dtype,
+        )
+
+        # import IPython; IPython.embed()
+        del chunk_data
+        # data = {
+        #     'current_index': 0,
+        #     'sf': tmpsf,
+        # }
+        mergers.append(data)
+
+    # merge onto sink
+    stack_tops = np.zeros(len(mergers), dtype=source.dtype)
+
+    for i, data in enumerate(mergers):
+        stack_tops[i] = data['file'][data['current_index']]
+        data['current_index'] += 1
+
+    isink = 0
+
+    while len(mergers) > 0:
+
+        imin = stack_tops[order].argmin()
+
+        sink[isink] = stack_tops[imin]
+        isink += 1
+
+        data = mergers[imin]
+        if data['current_index'] == data['file'].size:
+            ind = [i for i in range(stack_tops.size) if i != imin]
+            stack_tops = stack_tops[ind]
+
+            del mergers[imin]
+        else:
+            stack_tops[imin] = data['file'][data['current_index']]
+            data['current_index'] += 1
+
+
+def cache_fromfile(source, sink, order, chunksize, tmpdir):
+    import tempfile
+    import numpy as np
+
+    nchunks = source.size//chunksize
+    nleft = source.size % chunksize
+
+    if nleft > 0:
+        nchunks += 1
+
+    cache_size = chunksize // nchunks
+
+    # store sorted chunks into files of size n
+    mergers = []
+
+    for i in range(nchunks):
+        start = i*chunksize
+        end = (i+1)*chunksize
+
+        chunk_data = source[start:end].copy()
+        chunk_data.sort(order=order)
+
+        tmpf = tempfile.mktemp(dir=tmpdir, suffix='.dat')
+        chunk_data.tofile(tmpf)
+
+        fwarp = FileWrap(
+            fname=tmpf,
+            data_start=0,
+            size=chunk_data.size,
+            dtype=chunk_data.dtype,
+        )
+
+        cache = chunk_data[:cache_size].copy()
+
+        del chunk_data
+
+        data = {
+            # location where we will start next cache chunk
+            'main_index': cache.size,
+            'cache_index': 0,
+            'file': fwarp,
+            'cache': cache,
+        }
+        mergers.append(data)
+
+    # merge onto sink
+    stack_tops = np.zeros(len(mergers), dtype=source.dtype)
+    scratch = np.zeros(chunksize, dtype=source.dtype)
+
+    for i, data in enumerate(mergers):
+        stack_tops[i] = data['cache'][data['cache_index']]
+        data['cache_index'] += 1
+
+    sink_start = 0
+    iscratch = 0
+
+    while len(mergers) > 0:
+
+        dowrite = False
+
+        imin = stack_tops[order].argmin()
+
+        scratch[iscratch] = stack_tops[imin]
+        iscratch += 1
+
+        data = mergers[imin]
+
+        copy_new_top = True
+        if data['cache_index'] == data['cache'].size:
+
+            if data['main_index'] == data['file'].size:
+                # there is no more data left for this chunk
+                ind = [i for i in range(stack_tops.size) if i != imin]
+                stack_tops = stack_tops[ind]
+
+                mergers[imin]['file'].close()
+                del mergers[imin]
+                copy_new_top = False
+            else:
+                # we have more data, lets load some into the cache
+                main_index = data['main_index']
+                next_index = main_index + cache_size
+                data['cache'] = (
+                    data['file'][main_index:next_index]
+                )
+                data['cache_index'] = 0
+                data['main_index'] = main_index + data['cache'].size
+
+        if copy_new_top:
+            stack_tops[imin] = data['cache'][data['cache_index']]
+            data['cache_index'] += 1
+
+        if iscratch == scratch.size or len(mergers) == 0:
+            dowrite = True
+
+        if dowrite:
+            num_wrote = iscratch
+            sink_end = sink_start + num_wrote
+            sink[sink_start:sink_end] = scratch[:num_wrote]
+            sink_start = sink_end
+            iscratch = 0
 
 
 def cache_mergesort(source, sink, order, chunksize, tmpdir):
@@ -279,6 +487,28 @@ def test_inplace(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
         with tempfile.TemporaryDirectory() as tmpdir:
             _do_test(
                 func='inplace',
+                tmpdir=tmpdir,
+                seed=seed,
+                num=num,
+                chunksize_mbytes=chunksize_mbytes,
+            )
+
+
+def test_fromfile(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
+    import tempfile
+
+    if keep:
+        _do_test(
+            func=mergesort_fromfile,
+            tmpdir='.',
+            seed=seed,
+            num=num,
+            chunksize_mbytes=chunksize_mbytes,
+        )
+    else:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            _do_test(
+                func=mergesort_fromfile,
                 tmpdir=tmpdir,
                 seed=seed,
                 num=num,

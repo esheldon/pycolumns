@@ -249,7 +249,7 @@ class SimpleFile(object):
         if isinstance(data, np.memmap):
             # slices will return a view on the memmap
             # this will force a copy
-            return np.array(data, copy=True)
+            return np.array(data)
         else:
             return data
 
