@@ -30,6 +30,7 @@ def mergesort_index(source, sink, order, chunksize, tmpdir):
         tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
         tmpsf = SimpleFile(tmpf, mode='w+')
         tmpsf.write(chunk_data)
+        del chunk_data
 
         data = {
             'current_index': 0,
