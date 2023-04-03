@@ -234,7 +234,7 @@ def test(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
             )
 
 
-def test_cache(seed=999, num=1_000_000, keep=False):
+def test_cache(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
     import tempfile
 
     if keep:
