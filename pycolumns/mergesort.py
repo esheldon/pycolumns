@@ -24,7 +24,8 @@ def mergesort_index(source, sink, order, chunksize, tmpdir):
         start = i*chunksize
         end = (i+1)*chunksize
 
-        chunk_data = source[start:end].copy()
+        # chunk_data = source[start:end].copy()
+        chunk_data = source[start:end]
         chunk_data.sort(order=order)
 
         tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
