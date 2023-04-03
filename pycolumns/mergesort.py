@@ -134,6 +134,7 @@ def cache_mergesort(source, sink, order, chunksize, tmpdir):
                 ind = [i for i in range(stack_tops.size) if i != imin]
                 stack_tops = stack_tops[ind]
 
+                mergers[imin]['sf'].close()
                 del mergers[imin]
                 copy_new_top = False
             else:
