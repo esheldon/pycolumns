@@ -12,3 +12,5 @@ from .column import ArrayColumn, DictColumn
 
 from . import indices
 from .indices import Indices
+
+from . import mergesort

@@ -48,5 +48,5 @@ def test(seed=999, num=1_000_000):
                 )
 
         sdata = sfile.read(outfile)
-        data.sort(order=valname)
+        data.sort(order=valname, kind='mergesort')
         assert eu.numpy_util.compare_arrays(sdata, data)
