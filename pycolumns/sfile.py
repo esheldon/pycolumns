@@ -232,7 +232,7 @@ class SimpleFile(object):
     def __getitem__(self, arg):
         """
 
-        # read subsets of columns and/or rows from the file.  This only works
+        # read subsets of rows from the file.  This only works
         # for record types
         sf = SimpleFile(....)
 
@@ -458,14 +458,36 @@ class SimpleFile(object):
         self.close()
 
 
-def write(outfile, data, append=False):
+def read(fname, rows=None):
+    """
+    Read a numpy array from a simple self-describing file format with an ascii
+    header.
+
+    Parameters
+    ----------
+    fname: string
+        The name of the file to read
+    rows: optional
+        Optional rows to read
+    """
+
+    with SimpleFile(fname) as sf:
+        if rows is not None:
+            data = sf[rows]
+        else:
+            data = sf[:]
+
+    return data
+
+
+def write(fname, data, append=False):
     """
     Write a numpy array into a simple self-describing file format with an ascii
     header.
 
     Parameters
     ----------
-    outfile: string
+    fname: string
         The filename to write
     data: array
         Numerical python array, a structured array with fields
@@ -477,7 +499,7 @@ def write(outfile, data, append=False):
     else:
         mode = 'w'
 
-    with SimpleFile(outfile, mode=mode) as sf:
+    with SimpleFile(fname, mode=mode) as sf:
         sf.write(data)
 
 
