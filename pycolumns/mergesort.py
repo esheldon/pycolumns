@@ -205,7 +205,7 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
                 tmpsf.write(chunk_data)
 
             # cache from lower chunk of data
-            cache = chunk_data[:cache_size]
+            cache = chunk_data[:cache_size].copy()
             del chunk_data
 
             slicer = Slicer(tmpf)
