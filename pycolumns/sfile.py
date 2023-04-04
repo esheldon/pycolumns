@@ -1,6 +1,10 @@
 """
 Read and write numpy arrays to a simple file format.  The format is a
 simple ascii header followed by data in binary format.
+
+TODO
+
+    - for full col read, or slices, use fromfile rather than mmap
 """
 import os
 import pprint
@@ -506,6 +510,10 @@ def write(fname, data, append=False):
 
 
 class Slicer(SimpleFile):
+    """
+    This version doesn't use memmap and thus only can do slices
+    Still supports writing/appending
+    """
     def _load_metadata(self):
         self._hdr = self._read_header()
 

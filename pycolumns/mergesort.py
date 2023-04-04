@@ -194,6 +194,7 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
         mergers = []
 
         for i in range(nchunks):
+            print(f'chunk {i+1}/{nchunks}')
             start = i*chunksize
             end = (i+1)*chunksize
 
@@ -201,14 +202,16 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
             chunk_data.sort(order=order)
 
             tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
-            with SimpleFile(tmpf, mode='w+') as tmpsf:
-                tmpsf.write(chunk_data)
+            slicer = Slicer(tmpf, mode='w+')
+            slicer.write(chunk_data)
+            # with Slicer(tmpf, mode='w+') as tmpsf:
+            #     tmpsf.write(chunk_data)
 
             # cache from lower chunk of data
             cache = chunk_data[:cache_size].copy()
             del chunk_data
 
-            slicer = Slicer(tmpf)
+            # slicer = Slicer(tmpf)
 
             data = {
                 # location where we will start next cache chunk
@@ -230,6 +233,7 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
     iscratch = 0
 
     with SimpleFile(outfile, mode='w+') as sink:
+        nwritten = 0
         while len(mergers) > 0:
 
             dowrite = False
@@ -271,6 +275,8 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
 
             if dowrite:
                 num2write = iscratch
+                nwritten += num2write
+                print(f'writing {nwritten}/{source.size}')
                 sink.write(scratch[:num2write])
                 iscratch = 0
 
