@@ -415,30 +415,22 @@ class Columns(dict):
             raise ValueError('append() takes a structured array as input')
 
         for name in names:
-            self.append_column(name, data[name], verify=False)
+            self._append_column(name, data[name])
 
         # make sure the array columns all have the same length
         if verify:
             self.verify()
 
-    def append_column(self, name, data, verify=True):
+    def _append_column(self, name, data):
         """
         Append data to an array column.  The column is created
         if it doesn't exist
-
-        You usually don't want to use this directly in case the
-        row count consistency is broken, favor append() to append
-        multiple columns
         """
 
         if name not in self:
             self.create_column(name, 'array', verify=False)
 
         self[name]._append(data)
-
-        # make sure the array columns all have the same length
-        if verify:
-            self.verify()
 
     def from_fits(self, filename, ext=1, lower=False):
         """
@@ -471,6 +463,7 @@ class Columns(dict):
 
             nstep = nrows//step
             nleft = nrows % step
+
             if nleft > 0:
                 nstep += 1
 
@@ -487,6 +480,7 @@ class Columns(dict):
                 if self.verbose > 1:
                     print('Writing slice: %s:%s out '
                           'of %s' % (start, stop, nrows))
+
                 data = hdu[start:stop]
 
                 data = util.get_native_data(data)

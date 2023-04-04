@@ -171,107 +171,108 @@ def mergesort_fromfile(source, sink, order, chunksize, tmpdir):
             data['current_index'] += 1
 
 
-def cache_fromfile(source, sink, order, chunksize, tmpdir):
+def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
     import tempfile
     import numpy as np
+    from .sfile import SimpleFile, Slicer
 
-    nchunks = source.size//chunksize
-    nleft = source.size % chunksize
+    with Slicer(infile) as source:
+        dtype = source.dtype
+        nchunks = source.size // chunksize
+        nleft = source.size % chunksize
 
-    if nleft > 0:
-        nchunks += 1
+        if nleft > 0:
+            nchunks += 1
+        print('size:', source.size)
+        print('nchunks:', nchunks)
 
-    cache_size = chunksize // nchunks
+        # TODO easy way to get a cache size but we should make this tunable
+        cache_size = chunksize // nchunks
+        print('cache size:', cache_size)
 
-    # store sorted chunks into files of size n
-    mergers = []
+        # store sorted chunks into files of size n
+        mergers = []
 
-    for i in range(nchunks):
-        start = i*chunksize
-        end = (i+1)*chunksize
+        for i in range(nchunks):
+            start = i*chunksize
+            end = (i+1)*chunksize
 
-        chunk_data = source[start:end].copy()
-        chunk_data.sort(order=order)
+            chunk_data = source[start:end]
+            chunk_data.sort(order=order)
 
-        tmpf = tempfile.mktemp(dir=tmpdir, suffix='.dat')
-        chunk_data.tofile(tmpf)
+            tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
+            with SimpleFile(tmpf, mode='w+') as tmpsf:
+                tmpsf.write(chunk_data)
 
-        fwarp = FileWrap(
-            fname=tmpf,
-            data_start=0,
-            size=chunk_data.size,
-            dtype=chunk_data.dtype,
-        )
+            # cache from lower chunk of data
+            cache = chunk_data[:cache_size]
+            del chunk_data
 
-        cache = chunk_data[:cache_size].copy()
+            slicer = Slicer(tmpf)
 
-        del chunk_data
-
-        data = {
-            # location where we will start next cache chunk
-            'main_index': cache.size,
-            'cache_index': 0,
-            'file': fwarp,
-            'cache': cache,
-        }
-        mergers.append(data)
+            data = {
+                # location where we will start next cache chunk
+                'main_index': cache.size,
+                'cache_index': 0,
+                'slicer': slicer,
+                'cache': cache,
+            }
+            mergers.append(data)
 
     # merge onto sink
-    stack_tops = np.zeros(len(mergers), dtype=source.dtype)
-    scratch = np.zeros(chunksize, dtype=source.dtype)
+    stack_tops = np.zeros(len(mergers), dtype=dtype)
+    scratch = np.zeros(chunksize, dtype=dtype)
 
     for i, data in enumerate(mergers):
         stack_tops[i] = data['cache'][data['cache_index']]
         data['cache_index'] += 1
 
-    sink_start = 0
     iscratch = 0
 
-    while len(mergers) > 0:
+    with SimpleFile(outfile, mode='w+') as sink:
+        while len(mergers) > 0:
 
-        dowrite = False
+            dowrite = False
 
-        imin = stack_tops[order].argmin()
+            imin = stack_tops[order].argmin()
 
-        scratch[iscratch] = stack_tops[imin]
-        iscratch += 1
+            scratch[iscratch] = stack_tops[imin]
+            iscratch += 1
 
-        data = mergers[imin]
+            data = mergers[imin]
 
-        copy_new_top = True
-        if data['cache_index'] == data['cache'].size:
+            copy_new_top = True
+            if data['cache_index'] == data['cache'].size:
 
-            if data['main_index'] == data['file'].size:
-                # there is no more data left for this chunk
-                ind = [i for i in range(stack_tops.size) if i != imin]
-                stack_tops = stack_tops[ind]
+                if data['main_index'] == data['slicer'].size:
+                    # there is no more data left for this chunk
+                    ind = [i for i in range(stack_tops.size) if i != imin]
+                    stack_tops = stack_tops[ind]
 
-                mergers[imin]['file'].close()
-                del mergers[imin]
-                copy_new_top = False
-            else:
-                # we have more data, lets load some into the cache
-                main_index = data['main_index']
-                next_index = main_index + cache_size
-                data['cache'] = (
-                    data['file'][main_index:next_index]
-                )
-                data['cache_index'] = 0
-                data['main_index'] = main_index + data['cache'].size
+                    mergers[imin]['slicer'].close()
+                    del mergers[imin]
+                    copy_new_top = False
+                else:
+                    # we have more data, lets load some into the cache
+                    main_index = data['main_index']
+                    next_index = main_index + cache_size
+                    data['cache'] = (
+                        data['slicer'][main_index:next_index]
+                    )
+                    data['cache_index'] = 0
+                    data['main_index'] = main_index + data['cache'].size
 
-        if copy_new_top:
-            stack_tops[imin] = data['cache'][data['cache_index']]
-            data['cache_index'] += 1
+            if copy_new_top:
+                stack_tops[imin] = data['cache'][data['cache_index']]
+                data['cache_index'] += 1
 
-        if iscratch == scratch.size or len(mergers) == 0:
-            dowrite = True
+            if iscratch == scratch.size or len(mergers) == 0:
+                dowrite = True
 
-        if dowrite:
-            num_wrote = iscratch
-            sink_end = sink_start + num_wrote
-            sink[sink_start:sink_end] = scratch[:num_wrote]
-            sink_start = sink_end
-            iscratch = 0
+            if dowrite:
+                num2write = iscratch
+                sink.write(scratch[:num2write])
+                iscratch = 0
 
 
 def cache_mergesort(source, sink, order, chunksize, tmpdir):
@@ -494,23 +495,56 @@ def test_inplace(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
             )
 
 
-def test_fromfile(seed=999, num=1_000_000, keep=False, chunksize_mbytes=500):
+def _do_test_cache_slicer(
+    tmpdir, seed=999, num=1_000_000, chunksize_mbytes=5,
+):
     import tempfile
+    import numpy as np
+    import esutil as eu
+    from . import sfile
 
+    valname = 'val'
+
+    rng = np.random.RandomState(seed)
+    data = np.zeros(num, dtype=[('index', 'i8'), (valname, 'f8')])
+    data['index'] = np.arange(num)
+    data['val'] = rng.uniform(size=num)
+
+    infile = tempfile.mktemp(dir=tmpdir, prefix='infile-', suffix='.sf')
+    outfile = tempfile.mktemp(dir=tmpdir, prefix='outfile-', suffix='.sf')
+
+    print('writing:', infile)
+    sfile.write(infile, data)
+
+    chunksize_bytes = chunksize_mbytes * 1024 * 1024
+
+    bytes_per_element = data.dtype.itemsize
+    chunksize = chunksize_bytes // bytes_per_element
+    print('chunksize:', chunksize)
+
+    mergesort_cache_slicer(
+        infile=infile,
+        outfile=outfile,
+        order=valname,
+        chunksize=chunksize,
+        tmpdir=tmpdir,
+    )
+
+    sdata = sfile.read(outfile)
+    data.sort(order=valname, kind='mergesort')
+    assert eu.numpy_util.compare_arrays(sdata, data)
+
+
+def test_cache_slicer(seed=999, num=1_000_000, chunksize_mbytes=5, keep=False):
+    import tempfile
     if keep:
-        _do_test(
-            func=mergesort_fromfile,
-            tmpdir='.',
-            seed=seed,
-            num=num,
+        _do_test_cache_slicer(
+            tmpdir='.', seed=seed, num=num,
             chunksize_mbytes=chunksize_mbytes,
         )
     else:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            _do_test(
-                func=mergesort_fromfile,
-                tmpdir=tmpdir,
-                seed=seed,
-                num=num,
+        with tempfile.TemporaryDirectory(dir='.') as tmpdir:
+            _do_test_cache_slicer(
+                tmpdir=tmpdir, seed=seed, num=num,
                 chunksize_mbytes=chunksize_mbytes,
             )

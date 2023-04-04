@@ -1,3 +1,10 @@
+"""
+TODO
+
+    - allow appending without updating index, which we would do at the end
+      of a series of appends
+
+"""
 import os
 import bisect
 import numpy as np

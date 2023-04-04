@@ -148,23 +148,25 @@ class SimpleFile(object):
         return self._mmap.size
 
     @property
+    def itemsize(self):
+        """
+        get the total number of elements
+        """
+        return self._dtype.itemsize
+
+    @property
     def shape(self):
         """
         get the shape of the data
         """
-        if self._mmap is None:
-            raise RuntimeError("no file has been opened for reading")
-
-        return self._mmap.shape
+        return self._shape
 
     @property
     def dtype(self):
         """
         get the number of rows in the file
         """
-        if self._mmap is None:
-            raise RuntimeError("no file has been opened for reading")
-        return self._mmap.dtype
+        return self._dtype
 
     @property
     def header(self):
@@ -501,6 +503,90 @@ def write(fname, data, append=False):
 
     with SimpleFile(fname, mode=mode) as sf:
         sf.write(data)
+
+
+class Slicer(SimpleFile):
+    def _load_metadata(self):
+        self._hdr = self._read_header()
+
+        self._shape = self._hdr['shape']
+        self._descr = self._hdr['dtype']
+        self._dtype = np.dtype(self._descr)
+        self._set_nrows()
+
+    def _set_nrows(self):
+        self._fobj.seek(0, 2)
+        data_size_bytes = self._fobj.tell() - self._data_start
+        self._nrows = data_size_bytes // self.itemsize
+        if data_size_bytes % self.itemsize != 0:
+            raise ValueError(
+                f'Data size {data_size_bytes} bytes not multiple '
+                f'of itemsize {self.itemsize}'
+            )
+
+    @property
+    def mmap(self):
+        raise ValueError('Slicer has no mmap')
+
+    @property
+    def nrows(self):
+        """
+        get the total number of rows
+        """
+
+        return self._nrows
+
+    @property
+    def size(self):
+        """
+        get the total number of elements
+        """
+
+        return self.nrows
+
+    @property
+    def shape(self):
+        """
+        get the shape of the data
+        """
+        return (self.nrows, )
+
+    @property
+    def dtype(self):
+        """
+        get the number of rows in the file
+        """
+        return self._dtype
+
+    @property
+    def header(self):
+        """
+        get a copy of the header
+        """
+        if self._hdr is None:
+            raise RuntimeError("no file has been opened for reading")
+        hdr = {}
+        hdr.update(self._hdr)
+        return hdr
+
+    def __getitem__(self, index):
+        import numpy as np
+
+        if isinstance(index, slice):
+            is_scalar = False
+            start = index.start
+            count = index.stop - index.start
+        else:
+            is_scalar = True
+            start = index
+            count = 1
+
+        self._fobj.seek(self._data_start + start * self.itemsize)
+        data = np.fromfile(self._fobj, dtype=self.dtype, count=count)
+        if is_scalar:
+            data = data[0]
+
+        return data
 
 
 def _get_shape_string(shape):
