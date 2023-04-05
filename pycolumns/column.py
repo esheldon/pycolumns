@@ -186,26 +186,37 @@ class ColumnBase(object):
 
 class ArrayColumn(ColumnBase):
     """
-    represents an array column in a Columns database
+    Represent an array column in a Columns database
+
+    Parameters
+    ----------
+    filename: str, optional
+        Path to the file
+    name: str, optional
+        Name of the column
+    dir: str, optional
+        Directory of column
+    cache_mem: number, optional
+        Memory for cache used when creating index in gigabytes. Default 1.0
+    verbose: bool, optional
+        If set to True print messages
 
     Construction
     ------------
-    col=ArrayColumn(filename=, name=, dir=, verbose=False)
-
     # there are alternative construction methods
-    # this method determins all info from the full path
+    # this method determines all info from the full path
 
-    col=ArrayColumn(filename='/full/path')
+    col = ArrayColumn(filename='/full/path')
 
     # this one uses directory, column name
-    col=ArrayColumn(name='something', dir='/path2o/dbname.cols')
+    col = ArrayColumn(name='something', dir='/path2o/dbname.cols')
 
     Slice and item lookup
     ---------------------
     # The Column class supports item lookup access, e.g. slices and
     # arrays representing a subset of rows
 
-    col=Column(...)
+    col = Column(fname)
     data = col[25:22]
 
     rows = np.arange(100)
@@ -807,7 +818,7 @@ class DictColumn(ColumnBase):
 
         Parameters
         ----------
-        data: array
+        data: dict or json supported object
             The data must be supported by the JSON format.
         """
 

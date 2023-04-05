@@ -22,17 +22,21 @@ class Columns(dict):
     """
     Manage a database of "columns" represented by simple flat files.
 
-    Construction
-    ------------
-    >>> coldir='/some/path/mycols.cols
-    >>> c=Columns(coldir)
+    Parameters
+    ----------
+    dir: str
+        Path to database
+    cache_mem: number, optional
+        Cache memory for index creation in gigabytes.  Default 1.0
+    verbose: bool, optional
+        If set to True, print messages
 
     Examples
     ---------
     >>> import pycolumns as pyc
 
     # instantiate a column database from the specified coldir
-    >>> c=pyc.Columns('/some/path/mycols.cols')
+    >>> c = pyc.Columns('/some/path/mycols.cols')
 
     # display some info about the columns
     >>> c
@@ -131,7 +135,7 @@ class Columns(dict):
     >>> c['id'][35:35+3] = [8, 9, 10]
     >>> c['id'][rows] = idvalues
 
-    # write multiple columns from the fields in a rec array
+    # write columns from the fields in a rec array
     # names in the data correspond to column names.
     # If columns are not present, they are created
     # but row count consistency must be maintained for all array
@@ -142,9 +146,15 @@ class Columns(dict):
     # append data from the fields in a FITS file
     >>> c.from_fits(fitsfile_name)
 
-    # add a dict column
-    >>> c.create_column('meta')
+    # add a dict column.
+    >>> c.create_column('meta', 'dict')
     >>> c['meta'].write({'test': 'hello'})
+
+    # you should not generally create array columns, since they
+    # can get out of sync with existing columns.  This will by default
+    # raise an exception, but you can send verify=False if you know
+    # what you are doing
+    >>> c.create_column('test', 'array')
     """
 
     def __init__(self, dir=None, cache_mem=1, verbose=False):
@@ -336,24 +346,6 @@ class Columns(dict):
             name=name,
             type=type,
         )
-
-        # if type == 'array':
-        #     col = ArrayColumn(
-        #         filename=filename,
-        #         dir=self.dir,
-        #         name=name,
-        #         verbose=self.verbose,
-        #         cache_mem=self._cache_mem_gb,
-        #     )
-        # elif type == 'dict':
-        #     col = DictColumn(
-        #         filename=filename,
-        #         dir=self.dir,
-        #         name=name,
-        #         verbose=self.verbose,
-        #     )
-        # else:
-        #     raise ValueError("bad column type '%s'" % type)
 
         name = col.name
         self[name] = col
