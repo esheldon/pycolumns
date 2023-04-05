@@ -171,7 +171,7 @@ def mergesort_fromfile(source, sink, order, chunksize, tmpdir):
             data['current_index'] += 1
 
 
-def create_mergesort_index(infile, outfile, chunksize, tmpdir):
+def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
     import tempfile
     import numpy as np
     from .sfile import Slicer
@@ -179,26 +179,27 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir):
 
     with Slicer(infile) as source:
         index_dtype = get_index_dtype(source.dtype)
-        print('index_dtype:', index_dtype)
 
         nchunks = source.size // chunksize
         nleft = source.size % chunksize
 
         if nleft > 0:
             nchunks += 1
-
-        print('size:', source.size)
-        print('nchunks:', nchunks)
-
         # TODO easy way to get a cache size but we should make this tunable
         cache_size = chunksize // nchunks
-        print('cache size:', cache_size)
+
+        if verbose:
+            print('index_dtype:', index_dtype)
+            print('size:', source.size)
+            print('nchunks:', nchunks)
+            print('cache size:', cache_size)
 
         # store sorted chunks into files of size n
         mergers = []
 
         for i in range(nchunks):
-            print(f'chunk {i+1}/{nchunks}')
+            if verbose:
+                print(f'chunk {i+1}/{nchunks}')
             start = i * chunksize
             end = (i + 1) * chunksize
 
@@ -286,7 +287,8 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir):
             if dowrite:
                 num2write = iscratch
                 nwritten += num2write
-                print(f'writing {nwritten}/{source.size}')
+                if verbose:
+                    print(f'writing {nwritten}/{source.size}')
                 sink.write(scratch[:num2write])
                 iscratch = 0
 

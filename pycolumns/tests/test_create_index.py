@@ -17,7 +17,7 @@ def test_create_index(cache_mem):
 
     with tempfile.TemporaryDirectory() as tmpdir:
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns(cdir, cache_mem=cache_mem)
+        cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
 
         rng = np.random.RandomState(seed)
         data = np.zeros(num, dtype=[('rand', 'f8')])

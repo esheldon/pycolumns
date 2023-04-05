@@ -470,9 +470,9 @@ class ArrayColumn(ColumnBase):
         automatically added to the index.
         """
 
-        if self.has_index:
-            print('column %s already has an index')
-            return
+        # if self.has_index:
+        #     print('column %s already has an index')
+        #     return
 
         if len(self.shape) > 1:
             raise ValueError('cannot index a multi-dimensional column')
@@ -491,6 +491,9 @@ class ArrayColumn(ColumnBase):
         self._init_index()
 
     def _write_index_memory(self):
+        if self.verbose:
+            print(f'creating index for {self.name} in memory')
+
         dt = self.index_dtype
         index_data = np.zeros(self.shape[0], dtype=dt)
         index_data['index'] = np.arange(index_data.size)
@@ -507,6 +510,9 @@ class ArrayColumn(ColumnBase):
         import tempfile
         from .mergesort import create_mergesort_index
 
+        if self.verbose:
+            print(f'creating index for {self.name} with mergesort on disk')
+
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
             chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
@@ -518,6 +524,7 @@ class ArrayColumn(ColumnBase):
                 outfile=self.index_filename,
                 chunksize=chunksize,
                 tmpdir=tmpdir,
+                verbose=self.verbose,
             )
 
     def update_index(self):
@@ -863,7 +870,7 @@ def _do_test_create_index(tmpdir, cache_mem, seed=999, num=1_000_000):
     from .columns import Columns
 
     cdir = os.path.join(tmpdir, 'test.cols')
-    cols = Columns(cdir, cache_mem=cache_mem)
+    cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
 
     rng = np.random.RandomState(seed)
     data = np.zeros(num, dtype=[('rand', 'f8')])
