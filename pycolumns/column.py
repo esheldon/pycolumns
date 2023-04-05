@@ -234,13 +234,29 @@ class ArrayColumn(ColumnBase):
     >>> ind = col1.between(15,25) | (col2 != 66)
     >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
     """
+    def __init__(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        cache_mem=1,
+        verbose=False,
+    ):
+        self.init(
+            filename=filename,
+            name=name,
+            dir=dir,
+            cache_mem=cache_mem,
+            verbose=verbose,
+        )
+
     def init(
         self,
         filename=None,
         name=None,
         dir=None,
         verbose=False,
-        cache_mem=0.5,
+        cache_mem=1,
     ):
         """
         initialize the meta data, and possibly load the mmap
@@ -250,7 +266,7 @@ class ArrayColumn(ColumnBase):
 
         self._cache_mem_gb = cache_mem
 
-        super(ArrayColumn, self).init(
+        super().init(
             filename=filename,
             name=name,
             dir=dir,
@@ -273,7 +289,7 @@ class ArrayColumn(ColumnBase):
         Clear out all the metadata for this column.
         """
 
-        super(ArrayColumn, self).clear()
+        super().clear()
 
         if self.has_data:
             del self._sf
@@ -422,7 +438,7 @@ class ArrayColumn(ColumnBase):
         if hasattr(self, '_sf'):
             del self._sf
 
-        super(ArrayColumn, self).delete()
+        super().delete()
 
         # remove index if it exists
         self.delete_index()
@@ -466,7 +482,7 @@ class ArrayColumn(ColumnBase):
 
         # would the index be within our mem budget?
         print('index size gb:', self.index_size_gb)
-        print('cache mem gb:', self.cache_mem_gb)
+        print('cache mem gb:', self._cache_mem_gb)
         if self.index_size_gb < self._cache_mem_gb:
             self._write_index_memory()
         else:
@@ -492,7 +508,7 @@ class ArrayColumn(ColumnBase):
         from .mergesort import create_mergesort_index
 
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
-            chunksize_bytes = int(self._cache_mem_gb / 1024**3)
+            chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
             bytes_per_element = self.index_dtype.itemsize
             chunksize = chunksize_bytes // bytes_per_element
@@ -776,7 +792,7 @@ class DictColumn(ColumnBase):
 
         self._type = 'dict'
 
-        super(DictColumn, self).init(
+        super().init(
             filename=filename,
             name=name,
             dir=dir,
@@ -838,3 +854,38 @@ def get_index_dtype(dtype):
         ('index', 'i8'),
         ('value', dtype.descr[0][1]),
     ])
+
+
+def _do_test_create_index(tmpdir, cache_mem, seed=999, num=1_000_000):
+    import os
+    import numpy as np
+    from . import sfile
+    from .columns import Columns
+
+    cdir = os.path.join(tmpdir, 'test.cols')
+    cols = Columns(cdir, cache_mem=cache_mem)
+
+    rng = np.random.RandomState(seed)
+    data = np.zeros(num, dtype=[('rand', 'f8')])
+    data['rand'] = rng.uniform(size=num)
+
+    cols.append(data)
+    cols['rand'].create_index()
+    ifile = cols['rand'].index_filename
+    idata = sfile.read(ifile)
+
+    s = data['rand'].argsort()
+    assert np.all(idata['value'] == data['rand'][s])
+
+
+def test_create_index(cache_mem=0.01, seed=999, num=1_000_000, keep=False):
+    import tempfile
+    if keep:
+        _do_test_create_index(
+            tmpdir='.', cache_mem=cache_mem, seed=seed, num=num,
+        )
+    else:
+        with tempfile.TemporaryDirectory(dir='.') as tmpdir:
+            _do_test_create_index(
+                tmpdir=tmpdir, cache_mem=cache_mem, seed=seed, num=num,
+            )

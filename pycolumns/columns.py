@@ -147,18 +147,11 @@ class Columns(dict):
     >>> c['meta'].write({'test': 'hello'})
     """
 
-    def __init__(self, dir=None, verbose=False):
+    def __init__(self, dir=None, cache_mem=1, verbose=False):
         self.verbose = verbose
-        self.init(dir=dir)
-
-    def init(self, dir=None):
-        """
-        Initialize the database.  This will create a new db directory if none
-        exists.  If it exists and contains column files their metadata will be
-        loaded.
-        """
+        self._cache_mem_gb = cache_mem
         self._set_dir(dir)
-        self.load()
+        self._load()
 
     @property
     def dir(self):
@@ -207,7 +200,7 @@ class Columns(dict):
         else:
             return None
 
-    def load(self):
+    def _load(self):
         """
 
         Load all existing columns in the
@@ -276,12 +269,41 @@ class Columns(dict):
         if type not in ALLOWED_COL_TYPES:
             raise ValueError("bad column type: '%s'" % type)
 
+        col = self._open_column(
+            filename=filename,
+            name=name,
+            type=type,
+        )
+        # if type == 'array':
+        #     col = ArrayColumn(
+        #         filename=filename,
+        #         dir=self.dir,
+        #         name=name,
+        #         verbose=self.verbose,
+        #         cache_mem=self._cache_mem_gb,
+        #     )
+        # elif type == 'dict':
+        #     col = DictColumn(
+        #         filename=filename,
+        #         dir=self.dir,
+        #         name=name,
+        #         verbose=self.verbose,
+        #     )
+        # else:
+        #     raise ValueError("bad column type '%s'" % type)
+
+        name = col.name
+        self.clear(name)
+        self[name] = col
+
+    def _open_column(self, filename, name, type):
         if type == 'array':
             col = ArrayColumn(
                 filename=filename,
                 dir=self.dir,
                 name=name,
                 verbose=self.verbose,
+                cache_mem=self._cache_mem_gb,
             )
         elif type == 'dict':
             col = DictColumn(
@@ -293,9 +315,7 @@ class Columns(dict):
         else:
             raise ValueError("bad column type '%s'" % type)
 
-        name = col.name
-        self.clear(name)
-        self[name] = col
+        return col
 
     def create_column(self, name, type, verify=True):
         """
@@ -328,22 +348,29 @@ class Columns(dict):
 
         filename = util.create_filename(self.dir, name, type)
 
-        if type == 'array':
-            col = ArrayColumn(
-                filename=filename,
-                dir=self.dir,
-                name=name,
-                verbose=self.verbose,
-            )
-        elif type == 'dict':
-            col = DictColumn(
-                filename=filename,
-                dir=self.dir,
-                name=name,
-                verbose=self.verbose,
-            )
-        else:
-            raise ValueError("bad column type '%s'" % type)
+        col = self._open_column(
+            filename=filename,
+            name=name,
+            type=type,
+        )
+
+        # if type == 'array':
+        #     col = ArrayColumn(
+        #         filename=filename,
+        #         dir=self.dir,
+        #         name=name,
+        #         verbose=self.verbose,
+        #         cache_mem=self._cache_mem_gb,
+        #     )
+        # elif type == 'dict':
+        #     col = DictColumn(
+        #         filename=filename,
+        #         dir=self.dir,
+        #         name=name,
+        #         verbose=self.verbose,
+        #     )
+        # else:
+        #     raise ValueError("bad column type '%s'" % type)
 
         name = col.name
         self[name] = col
