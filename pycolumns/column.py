@@ -234,16 +234,21 @@ class ArrayColumn(ColumnBase):
     >>> ind = col1.between(15,25) | (col2 != 66)
     >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
     """
-    def init(self,
-             filename=None,
-             name=None,
-             dir=None,
-             verbose=False):
+    def init(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+        cache_mem=0.5,
+    ):
         """
         initialize the meta data, and possibly load the mmap
         """
 
         self._type = 'array'
+
+        self._cache_mem_gb = cache_mem
 
         super(ArrayColumn, self).init(
             filename=filename,
@@ -274,7 +279,6 @@ class ArrayColumn(ColumnBase):
             del self._sf
 
         self._has_index = False
-        self._index_dtype = None
 
     @property
     def has_data(self):
@@ -298,6 +302,10 @@ class ArrayColumn(ColumnBase):
         self.ensure_has_data()
 
         return self._sf.dtype
+
+    @property
+    def index_dtype(self):
+        return get_index_dtype(self.dtype)
 
     @property
     def shape(self):
@@ -325,6 +333,22 @@ class ArrayColumn(ColumnBase):
         self.ensure_has_data()
 
         return self._sf.size
+
+    @property
+    def data_size_bytes(self):
+        return self.dtype.itemsize * self.size
+
+    @property
+    def data_size_gb(self):
+        return self.data_size_bytes / 1024**3
+
+    @property
+    def index_size_bytes(self):
+        return self.index_dtype.itemsize * self.size
+
+    @property
+    def index_size_gb(self):
+        return self.index_size_bytes / 1024**3
 
     def _append(self, data):
         """
@@ -440,10 +464,18 @@ class ArrayColumn(ColumnBase):
         if self.verbose:
             print('creating index for column %s' % self.name)
 
-        dt = [
-            ('index', 'i8'),
-            ('value', self.dtype.descr[0][1]),
-        ]
+        # would the index be within our mem budget?
+        print('index size gb:', self.index_size_gb)
+        print('cache mem gb:', self.cache_mem_gb)
+        if self.index_size_gb < self._cache_mem_gb:
+            self._write_index_memory()
+        else:
+            self._write_index_mergesort()
+
+        self._init_index()
+
+    def _write_index_memory(self):
+        dt = self.index_dtype
         index_data = np.zeros(self.shape[0], dtype=dt)
         index_data['index'] = np.arange(index_data.size)
         index_data['value'] = self[:]
@@ -455,7 +487,22 @@ class ArrayColumn(ColumnBase):
         with SimpleFile(index_fname, mode='w+') as sf:
             sf.write(index_data)
 
-        self._init_index()
+    def _write_index_mergesort(self):
+        import tempfile
+        from .mergesort import create_mergesort_index
+
+        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
+            chunksize_bytes = int(self._cache_mem_gb / 1024**3)
+
+            bytes_per_element = self.index_dtype.itemsize
+            chunksize = chunksize_bytes // bytes_per_element
+
+            create_mergesort_index(
+                infile=self.filename,
+                outfile=self.index_filename,
+                chunksize=chunksize,
+                tmpdir=tmpdir,
+            )
 
     def update_index(self):
         """
@@ -784,3 +831,10 @@ class DictColumn(ColumnBase):
             s = ['Column: '] + s
 
         return s
+
+
+def get_index_dtype(dtype):
+    return np.dtype([
+        ('index', 'i8'),
+        ('value', dtype.descr[0][1]),
+    ])

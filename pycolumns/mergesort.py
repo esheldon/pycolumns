@@ -171,18 +171,22 @@ def mergesort_fromfile(source, sink, order, chunksize, tmpdir):
             data['current_index'] += 1
 
 
-def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
+def create_mergesort_index(infile, outfile, chunksize, tmpdir):
     import tempfile
     import numpy as np
-    from .sfile import SimpleFile, Slicer
+    from .sfile import Slicer
+    from .column import get_index_dtype
 
     with Slicer(infile) as source:
-        dtype = source.dtype
+        index_dtype = get_index_dtype(source.dtype)
+        print('index_dtype:', index_dtype)
+
         nchunks = source.size // chunksize
         nleft = source.size % chunksize
 
         if nleft > 0:
             nchunks += 1
+
         print('size:', source.size)
         print('nchunks:', nchunks)
 
@@ -195,17 +199,23 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
 
         for i in range(nchunks):
             print(f'chunk {i+1}/{nchunks}')
-            start = i*chunksize
-            end = (i+1)*chunksize
+            start = i * chunksize
+            end = (i + 1) * chunksize
 
-            chunk_data = source[start:end]
-            chunk_data.sort(order=order)
+            chunk_value_data = source[start:end]
+            # might be fewer than requested in slice
+            chunk_num = chunk_value_data.size
+
+            chunk_data = np.zeros(chunk_num, dtype=index_dtype)
+            chunk_data['index'] = np.arange(start, start+chunk_num)
+            chunk_data['value'] = chunk_value_data
+            del chunk_value_data
+
+            chunk_data.sort(order='value')
 
             tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
             slicer = Slicer(tmpf, mode='w+')
             slicer.write(chunk_data)
-            # with Slicer(tmpf, mode='w+') as tmpsf:
-            #     tmpsf.write(chunk_data)
 
             # cache from lower chunk of data
             cache = chunk_data[:cache_size].copy()
@@ -223,8 +233,8 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
             mergers.append(data)
 
     # merge onto sink
-    stack_tops = np.zeros(len(mergers), dtype=dtype)
-    scratch = np.zeros(chunksize, dtype=dtype)
+    stack_tops = np.zeros(len(mergers), dtype=index_dtype)
+    scratch = np.zeros(chunksize, dtype=index_dtype)
 
     for i, data in enumerate(mergers):
         stack_tops[i] = data['cache'][data['cache_index']]
@@ -232,13 +242,13 @@ def mergesort_cache_slicer(infile, outfile, order, chunksize, tmpdir):
 
     iscratch = 0
 
-    with SimpleFile(outfile, mode='w+') as sink:
+    with Slicer(outfile, mode='w+') as sink:
         nwritten = 0
         while len(mergers) > 0:
 
             dowrite = False
 
-            imin = stack_tops[order].argmin()
+            imin = stack_tops['value'].argmin()
 
             scratch[iscratch] = stack_tops[imin]
             iscratch += 1
@@ -509,6 +519,53 @@ def _do_test_cache_slicer(
     import esutil as eu
     from . import sfile
 
+    valname = 'value'
+
+    rng = np.random.RandomState(seed)
+    values = rng.uniform(size=num)
+
+    check_data = np.zeros(num, dtype=[('index', 'i8'), (valname, 'f8')])
+    check_data['index'] = np.arange(num)
+    check_data[valname] = values
+
+    infile = tempfile.mktemp(dir=tmpdir, prefix='infile-', suffix='.sf')
+    outfile = tempfile.mktemp(dir=tmpdir, prefix='outfile-', suffix='.sf')
+
+    print('writing:', infile)
+    sfile.write(infile, values)
+
+    chunksize_bytes = chunksize_mbytes * 1024 * 1024
+
+    bytes_per_element = check_data.dtype.itemsize
+    chunksize = chunksize_bytes // bytes_per_element
+    print('chunksize:', chunksize)
+
+    create_mergesort_index(
+        infile=infile,
+        outfile=outfile,
+        chunksize=chunksize,
+        tmpdir=tmpdir,
+    )
+
+    sdata = sfile.read(outfile)
+    check_data.sort(order=valname, kind='mergesort')
+    assert eu.numpy_util.compare_arrays(
+        sdata,
+        check_data,
+        ignore_missing=False,
+        verbose=True,
+    )
+
+
+'''
+def _do_test_cache_slicer_old(
+    tmpdir, seed=999, num=1_000_000, chunksize_mbytes=5,
+):
+    import tempfile
+    import numpy as np
+    import esutil as eu
+    from . import sfile
+
     valname = 'val'
 
     rng = np.random.RandomState(seed)
@@ -539,6 +596,7 @@ def _do_test_cache_slicer(
     sdata = sfile.read(outfile)
     data.sort(order=valname, kind='mergesort')
     assert eu.numpy_util.compare_arrays(sdata, data)
+'''
 
 
 def test_cache_slicer(seed=999, num=1_000_000, chunksize_mbytes=5, keep=False):
