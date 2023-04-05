@@ -20,29 +20,33 @@ class ColumnBase(object):
     writing of data.  This class can be instantiated alone, but is usually
     accessed through the Columns class.
     """
-    def __init__(self,
-                 filename=None,
-                 name=None,
-                 dir=None,
-                 verbose=False):
+    def __init__(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+    ):
 
-        self.init(
+        self._do_init(
             filename=filename,
             name=name,
             dir=dir,
             verbose=verbose,
         )
 
-    def init(self,
-             filename=None,
-             name=None,
-             dir=None,
-             verbose=False):
+    def _do_init(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+    ):
         """
         See main docs for the Column class
         """
 
-        self.clear()
+        self._clear()
 
         self._filename = filename
         self._name = name
@@ -93,9 +97,9 @@ class ColumnBase(object):
         """
         if self.verbose:
             print('Reloading column metadata for: %s' % self.name)
-        self.init(filename=self.filename, verbose=self.verbose)
+        self._do_init(filename=self.filename, verbose=self.verbose)
 
-    def clear(self):
+    def _clear(self):
         """
         Clear out all the metadata for this column.
         """
@@ -110,17 +114,6 @@ class ColumnBase(object):
         Read data from a column
         """
         raise NotImplementedError('implement read')
-
-    def delete(self):
-        """
-        Attempt to delete the data file associated with this column
-        """
-        if self.filename is None:
-            return
-
-        if os.path.exists(self.filename):
-            print("Removing data for column: %s" % self.name)
-            os.remove(self.filename)
 
     #
     # setup methods
@@ -242,7 +235,7 @@ class ArrayColumn(ColumnBase):
         cache_mem=1,
         verbose=False,
     ):
-        self.init(
+        self._do_init(
             filename=filename,
             name=name,
             dir=dir,
@@ -250,7 +243,7 @@ class ArrayColumn(ColumnBase):
             verbose=verbose,
         )
 
-    def init(
+    def _do_init(
         self,
         filename=None,
         name=None,
@@ -266,7 +259,7 @@ class ArrayColumn(ColumnBase):
 
         self._cache_mem_gb = cache_mem
 
-        super().init(
+        super()._do_init(
             filename=filename,
             name=name,
             dir=dir,
@@ -284,12 +277,12 @@ class ArrayColumn(ColumnBase):
     def _open_file(self, mode):
         self._sf = SimpleFile(self.filename, mode=mode)
 
-    def clear(self):
+    def _clear(self):
         """
         Clear out all the metadata for this column.
         """
 
-        super().clear()
+        super()._clear()
 
         if self.has_data:
             del self._sf
@@ -430,7 +423,7 @@ class ArrayColumn(ColumnBase):
         else:
             return self._sf[rows]
 
-    def delete(self):
+    def _delete(self):
         """
         Attempt to delete the data file associated with this column
         """
@@ -438,7 +431,7 @@ class ArrayColumn(ColumnBase):
         if hasattr(self, '_sf'):
             del self._sf
 
-        super().delete()
+        super()._delete()
 
         # remove index if it exists
         self.delete_index()
@@ -791,15 +784,17 @@ class ArrayColumn(ColumnBase):
 
 
 class DictColumn(ColumnBase):
-    def init(self,
-             filename=None,
-             name=None,
-             dir=None,
-             verbose=False):
+    def _do_init(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+    ):
 
         self._type = 'dict'
 
-        super().init(
+        super()._do_init(
             filename=filename,
             name=name,
             dir=dir,

@@ -171,7 +171,7 @@ class Columns(dict):
 
     def delete(self, yes=False):
         """
-        delete all data in the directory
+        delete the entire Columns database
 
         Parameters
         ----------
@@ -217,7 +217,7 @@ class Columns(dict):
         """
 
         # clear out the existing columns and start from scratch
-        self.clear()
+        self._clear()
 
         for type in ALLOWED_COL_TYPES:
             if self.dir is not None:
@@ -226,7 +226,7 @@ class Columns(dict):
 
                 for f in fnames:
                     if type == 'cols':
-                        self.load_coldir(f)
+                        self._load_coldir(f)
                     else:
                         self._load_column(f)
         self.verify()
@@ -274,26 +274,9 @@ class Columns(dict):
             name=name,
             type=type,
         )
-        # if type == 'array':
-        #     col = ArrayColumn(
-        #         filename=filename,
-        #         dir=self.dir,
-        #         name=name,
-        #         verbose=self.verbose,
-        #         cache_mem=self._cache_mem_gb,
-        #     )
-        # elif type == 'dict':
-        #     col = DictColumn(
-        #         filename=filename,
-        #         dir=self.dir,
-        #         name=name,
-        #         verbose=self.verbose,
-        #     )
-        # else:
-        #     raise ValueError("bad column type '%s'" % type)
 
         name = col.name
-        self.clear(name)
+        self._clear(name)
         self[name] = col
 
     def _open_column(self, filename, name, type):
@@ -378,7 +361,7 @@ class Columns(dict):
         if verify:
             self.verify()
 
-    def load_coldir(self, dir):
+    def _load_coldir(self, dir):
         """
         Load a coldir under this coldir
         """
@@ -387,7 +370,7 @@ class Columns(dict):
             raise RuntimeError("coldir does not exists: '%s'" % dir)
 
         name = coldir._dirbase()
-        self.clear(name)
+        self._clear(name)
         self[name] = coldir
 
     def reload(self, columns=None):
@@ -419,7 +402,7 @@ class Columns(dict):
         """
         return list(self.keys())
 
-    def clear(self, name=None):
+    def _clear(self, name=None):
         """
         Clear out the dictionary of column info
         """
@@ -538,7 +521,11 @@ class Columns(dict):
         if not yes:
             return
 
-        self[name].delete()
+        fname = self[name].filename
+        if os.path.exists(fname):
+            print("Removing data for column: %s" % name)
+            os.remove(fname)
+
         self.reload()
 
     def read(self,
