@@ -48,7 +48,7 @@ class Columns(dict):
 
     # display some info about the columns
     >>> c
-    Column Directory:
+    Columns Directory:
 
       dir: /some/path/mydata.cols
       Columns:
@@ -66,7 +66,7 @@ class Columns(dict):
         meta             dict
 
 
-      Sub-Column Directories:
+      Sub-Columns Directories:
         name
         --------------------------------------------------
         psfstars
@@ -775,7 +775,7 @@ class Columns(dict):
             s += ['  %-15s %5s %6s %-6s %s' % cnames]
             s += ['  '+'-'*(50)]
 
-            subcols = ['Sub-Column Directories:']
+            subcols = ['Sub-Columns Directories:']
             subcols += ['  %-15s' % ('name',)]
             subcols += ['  '+'-'*(50)]
 
@@ -802,7 +802,7 @@ class Columns(dict):
                     subcols += ['  %s' % cdir]
 
         s = [indent + tmp for tmp in s]
-        s = ['Column Directory: '] + s
+        s = ['Columns Directory: '] + s
 
         if len(subcols) > 3:
             s += [indent]
