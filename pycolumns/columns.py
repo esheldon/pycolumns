@@ -2,8 +2,14 @@
 todo
 
     - Maybe add option "unsort" to put indices back in original unsorted order
+    - add updating a set of columns with indices= and data=
+        - already can do column by itself
+        - Would need to think carefully if we wanted to optimize by sorting
+          etc. to keep things consistent
     - note if we move to not using memmap, will need to maybe think about when
       there are duplicates in the requested indices.
+    - there will be no column set value method without mmap, would need to
+      add that functionality
     - make it possible to add_column for array if we then eventually verify
     - if reading single row, scalar, doing from column gives a number but
       on columns with read gives length 1 array

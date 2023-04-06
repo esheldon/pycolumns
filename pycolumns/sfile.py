@@ -237,11 +237,8 @@ class SimpleFile(object):
 
     def __getitem__(self, arg):
         """
-
-        # read subsets of rows from the file.  This only works
-        # for record types
+        # read subsets from the file.
         sf = SimpleFile(....)
-
 
         # read subsets of rows
         data = sf[35]

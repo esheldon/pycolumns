@@ -412,7 +412,8 @@ class ArrayColumn(ColumnBase):
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        return self._sf[arg]
+        use_arg = util.extract_rows(arg, sort=True)
+        return self._sf[use_arg]
 
     def __setitem__(self, arg, values):
         """
@@ -422,7 +423,7 @@ class ArrayColumn(ColumnBase):
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        self._sf._mmap[arg] = values
+        self._sf[arg] = values
 
     def read(self, rows=None):
         """
@@ -430,17 +431,18 @@ class ArrayColumn(ColumnBase):
 
         Parameters
         ----------
-        rows: sequence or slice object, optional
+        rows: sequence, slice, Indices or None, optional
             A subset of the rows to read.
         """
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        if rows is None:
-            return self._sf[:]
-        else:
-            use_rows = util.extract_rows(rows, sort=True)
-            return self._sf[use_rows]
+        return self[rows]
+        # if rows is None:
+        #     return self._sf[:]
+        # else:
+        #     use_rows = util.extract_rows(rows, sort=True)
+        #     return self._sf[use_rows]
 
     def _delete(self):
         """

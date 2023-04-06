@@ -4,6 +4,20 @@ import numpy as np
 
 
 def extract_rows(rows, sort=True):
+    """
+    extract rows for reading
+
+    Parameters
+    ----------
+    rows: sequence, Indices, slice or None
+        Possible rows to extract
+    sort: bool, optional
+        Whether to sort when converted to Indices
+
+    Returns
+    -------
+    Indices, possibly sorted.  Note this does not make a copy of the data
+    """
     from .indices import Indices
 
     if (
