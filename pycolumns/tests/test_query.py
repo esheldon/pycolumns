@@ -58,21 +58,18 @@ def test_query():
 
         # tests on two columns with &
         ind = (cols['id'] > 10) & (cols['rand'] > 10)
-        ind.sort()
         w, = np.where((data['id'] > 10) & (data['rand'] > 10))
 
         assert w.size > 0
         assert np.all(ind == w)
 
         ind = (cols['id'] >= 10) & (cols['rand'] > 10)
-        ind.sort()
         w, = np.where((data['id'] >= 10) & (data['rand'] > 10))
 
         assert w.size > 0
         assert np.all(ind == w)
 
         ind = (cols['id'] <= 10) & (cols['rand'] > 10)
-        ind.sort()
         w, = np.where((data['id'] <= 10) & (data['rand'] > 10))
 
         assert w.size > 0
@@ -80,7 +77,6 @@ def test_query():
 
         # test on two columns with |
         ind = (cols['id'] < 10) | (cols['rand'] > 10)
-        ind.sort()
         w, = np.where((data['id'] < 10) | (data['rand'] > 10))
 
         assert w.size > 0

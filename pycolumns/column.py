@@ -430,7 +430,7 @@ class ArrayColumn(ColumnBase):
 
         Parameters
         ----------
-        rows: sequence, optional
+        rows: sequence or slice object, optional
             A subset of the rows to read.
         """
         if not hasattr(self, '_sf'):
@@ -439,7 +439,8 @@ class ArrayColumn(ColumnBase):
         if rows is None:
             return self._sf[:]
         else:
-            return self._sf[rows]
+            use_rows = util.extract_rows(rows, sort=True)
+            return self._sf[use_rows]
 
     def _delete(self):
         """

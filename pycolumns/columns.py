@@ -1,14 +1,12 @@
 """
 todo
 
-    - figure out when to sort the index for reading; this can make a big
-      difference in read speeds
-    - support rows= as a slice
-    - need to check when appending that all array cols are being updated
-
-    - can we loosen up the requirement of columns being same number of rows?
-      - if not, need to hide write_column and also put a check for this other
-        than verify
+    - Maybe add option "unsort" to put indices back in original unsorted order
+    - note if we move to not using memmap, will need to maybe think about when
+      there are duplicates in the requested indices.
+    - make it possible to add_column for array if we then eventually verify
+    - if reading single row, scalar, doing from column gives a number but
+      on columns with read gives length 1 array
 """
 import os
 from glob import glob
@@ -546,10 +544,12 @@ class Columns(dict):
 
         self.reload()
 
-    def read(self,
-             columns=None,
-             rows=None,
-             asdict=False):
+    def read(
+        self,
+        columns=None,
+        rows=None,
+        asdict=False,
+    ):
         """
         read multiple columns from the database
 
@@ -558,16 +558,18 @@ class Columns(dict):
         columns: sequence or string
             Can be a scalar string or a sequence of strings.  Defaults to all
             array columns if asdict is False, all columns if asdict is True
-        rows: sequence or scalar
+        rows: sequence, slice or scalar
             Sequence of row numbers.  Defaults to all.
         asdict: bool, optional
-            If True, read the requested columns into a dict.
+            If set to True, read the requested columns into a dict.
         """
 
         columns = self._extract_columns(columns=columns, asdict=asdict)
 
         if len(columns) == 0:
             return None
+
+        rows = util.extract_rows(rows=rows, sort=True)
 
         if asdict:
             # Just putting the arrays into a dictionary.
@@ -588,10 +590,13 @@ class Columns(dict):
         else:
 
             if rows is not None:
-                try:
-                    n_rows2read = len(rows)
-                except TypeError:
-                    n_rows2read = 1
+                if isinstance(rows, slice):
+                    n_rows2read = rows.stop - rows.start
+                else:
+                    try:
+                        n_rows2read = rows.size
+                    except TypeError:
+                        n_rows2read = 1
             else:
                 for c in columns:
                     col = self[c]

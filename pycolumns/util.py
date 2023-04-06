@@ -3,6 +3,24 @@ import json
 import numpy as np
 
 
+def extract_rows(rows, sort=True):
+    from .indices import Indices
+
+    if (
+        rows is not None
+        and not isinstance(rows, slice)
+        and not isinstance(rows, Indices)
+    ):
+        output = Indices(rows)
+    else:
+        output = rows
+
+    if isinstance(rows, Indices) and sort:
+        output.sort()
+
+    return output
+
+
 def extract_colname(filename):
     """
     Extract the column name from the file name
