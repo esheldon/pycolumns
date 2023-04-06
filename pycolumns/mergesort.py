@@ -4,12 +4,13 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
     import numpy as np
     from .sfile import Slicer
     from .column import get_index_dtype
+    import time
 
     with Slicer(infile) as source:
         index_dtype = get_index_dtype(source.dtype)
 
-        nchunks = source.size // chunksize
-        nleft = source.size % chunksize
+        nchunks = source.nrows // chunksize
+        nleft = source.nrows % chunksize
 
         if nleft > 0:
             nchunks += 1
@@ -18,7 +19,8 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
 
         if verbose:
             print('index_dtype:', index_dtype)
-            print('size:', source.size)
+            print('nrows:', source.nrows)
+            print('chunksize:', chunksize)
             print('nchunks:', nchunks)
             print('cache size:', cache_size)
 
@@ -26,31 +28,46 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
         mergers = []
 
         for i in range(nchunks):
+            tm0 = time.time()
+
             if verbose:
                 print(f'chunk {i+1}/{nchunks}')
             start = i * chunksize
             end = (i + 1) * chunksize
 
+            if verbose:
+                print('    reading')
             chunk_value_data = source[start:end]
             # might be fewer than requested in slice
             chunk_num = chunk_value_data.size
 
+            if verbose:
+                print('    copying to index chunk data')
             chunk_data = np.zeros(chunk_num, dtype=index_dtype)
-            chunk_data['index'] = np.arange(start, start+chunk_num)
-            chunk_data['value'] = chunk_value_data
+            if verbose:
+                print('    argsort')
+            s = chunk_value_data.argsort()
+            # chunk_data['index'] = np.arange(start, start+chunk_num)
+            # chunk_data['value'] = chunk_value_data
+            chunk_data['index'] = np.arange(start, start+chunk_num)[s]
+            chunk_data['value'] = chunk_value_data[s]
+            del s
             del chunk_value_data
 
-            chunk_data.sort(order='value')
+            # print('    sorting chunk')
+            # chunk_data.sort(order='value')
 
+            if verbose:
+                print('    writing')
             tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
             slicer = Slicer(tmpf, mode='w+')
             slicer.write(chunk_data)
 
             # cache from lower chunk of data
+            if verbose:
+                print('    copying cache')
             cache = chunk_data[:cache_size].copy()
             del chunk_data
-
-            # slicer = Slicer(tmpf)
 
             data = {
                 # location where we will start next cache chunk
@@ -60,6 +77,8 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
                 'cache': cache,
             }
             mergers.append(data)
+            if verbose:
+                print('    time:', time.time() - tm0)
 
     # merge onto sink
     stack_tops = np.zeros(len(mergers), dtype=index_dtype)
@@ -71,12 +90,14 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
 
     iscratch = 0
 
+    if verbose:
+        print('Doing mergesort')
+
     with Slicer(outfile, mode='w+') as sink:
         nwritten = 0
+        it = 0
         while len(mergers) > 0:
-
-            dowrite = False
-
+            it += 1
             imin = stack_tops['value'].argmin()
 
             scratch[iscratch] = stack_tops[imin]
@@ -110,15 +131,15 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
                 data['cache_index'] += 1
 
             if iscratch == scratch.size or len(mergers) == 0:
-                dowrite = True
-
-            if dowrite:
                 num2write = iscratch
                 nwritten += num2write
                 if verbose:
-                    print(f'writing {nwritten}/{source.size}')
+                    print(f'\nwriting {nwritten}/{source.size}')
                 sink.write(scratch[:num2write])
                 iscratch = 0
+            else:
+                if verbose and it % (chunksize // 20) == 0:
+                    print('.', end='', flush=True)
 
 
 def _do_test(
