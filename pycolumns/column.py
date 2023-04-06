@@ -51,7 +51,7 @@ class ColumnBase(object):
         self._filename = filename
         self._name = name
         self._dir = dir
-        self.verbose = verbose
+        self._verbose = verbose
 
         # make sure we have something to work with before continuing
         if not self._init_args_sufficient(filename, dir, name):
@@ -62,6 +62,10 @@ class ColumnBase(object):
 
         elif self.name is not None:
             self._set_meta_from_name()
+
+    @property
+    def verbose(self):
+        return self._verbose
 
     @property
     def dir(self):
@@ -107,7 +111,6 @@ class ColumnBase(object):
         self._filename = None
         self._name = None
         self._dir = None
-        self.verbose = False
 
     def read(self, *args):
         """
@@ -268,7 +271,7 @@ class ArrayColumn(ColumnBase):
 
         self._type = 'array'
 
-        self._cache_mem_gb = cache_mem
+        self._cache_mem_gb = float(cache_mem)
 
         super()._do_init(
             filename=filename,
@@ -369,6 +372,10 @@ class ArrayColumn(ColumnBase):
     @property
     def index_size_gb(self):
         return self.index_size_bytes / 1024**3
+
+    @property
+    def cache_mem(self):
+        return self._cache_mem_gb
 
     def _append(self, data):
         """

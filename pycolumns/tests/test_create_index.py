@@ -25,6 +25,8 @@ def test_create_index(cache_mem):
 
         cols.append(data)
         cols['rand'].create_index()
+        assert cols['rand'].has_index
+
         ifile = cols['rand'].index_filename
         idata = sfile.read(ifile)
 

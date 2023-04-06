@@ -3,6 +3,7 @@ todo
 
     - figure out when to sort the index for reading; this can make a big
       difference in read speeds
+    - support rows= as a slice
     - need to check when appending that all array cols are being updated
 
     - can we loosen up the requirement of columns being same number of rows?
@@ -158,14 +159,22 @@ class Columns(dict):
     """
 
     def __init__(self, dir=None, cache_mem=1, verbose=False):
-        self.verbose = verbose
-        self._cache_mem_gb = cache_mem
+        self._verbose = verbose
+        self._cache_mem_gb = float(cache_mem)
         self._set_dir(dir)
         self._load()
 
     @property
     def dir(self):
         return self._dir
+
+    @property
+    def verbose(self):
+        return self._verbose
+
+    @property
+    def cache_mem(self):
+        return self._cache_mem_gb
 
     def _set_dir(self, dir=None):
         """
@@ -296,7 +305,7 @@ class Columns(dict):
                 dir=self.dir,
                 name=name,
                 verbose=self.verbose,
-                cache_mem=self._cache_mem_gb,
+                cache_mem=self.cache_mem,
             )
         elif type == 'dict':
             col = DictColumn(
@@ -390,9 +399,16 @@ class Columns(dict):
     @property
     def colnames(self):
         """
-        Return a list of all column names
+        Get a list of all column names
         """
         return list(self.keys())
+
+    @property
+    def array_colnames(self):
+        """
+        Get a list of the array column names
+        """
+        return [c for c in self.keys() if self[c].type == 'array']
 
     def _clear(self, name=None):
         """
@@ -415,6 +431,16 @@ class Columns(dict):
         names = data.dtype.names
         if names is None:
             raise ValueError('append() takes a structured array as input')
+
+        if len(self) > 0:
+            # make sure the input data matches the existing column names
+            in_names = set(names)
+            a_names = set(self.array_colnames)
+            if in_names != a_names:
+                raise ValueError(
+                    f'input columns {in_names}'
+                    f'do not match existing array columns {a_names}'
+                )
 
         for name in names:
             self._append_column(name, data[name])
