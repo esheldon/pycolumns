@@ -1,6 +1,7 @@
 """
 todo
 
+    - tests for sub columns
     - Maybe add option "unsort" to put indices back in original unsorted order
     - add updating a set of columns with indices= and data=
         - already can do column by itself

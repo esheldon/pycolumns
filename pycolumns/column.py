@@ -539,7 +539,9 @@ class ArrayColumn(ColumnBase):
         chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
         bytes_per_element = self.index_dtype.itemsize
-        chunksize = chunksize_bytes // bytes_per_element
+        # need factor of two because we keep both the cache and the scratch in
+        # mergesort
+        chunksize = chunksize_bytes // (bytes_per_element * 2)
 
         create_mergesort_index(
             infile=self.filename,
