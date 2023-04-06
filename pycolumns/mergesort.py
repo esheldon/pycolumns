@@ -6,6 +6,7 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
     from .column import get_index_dtype
     import time
 
+    atm0 = time.time()
     with Slicer(infile) as source:
         index_dtype = get_index_dtype(source.dtype)
 
@@ -21,7 +22,6 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
             print('index_dtype:', index_dtype)
             print('nrows:', source.nrows)
             print('chunksize:', chunksize)
-            print('nchunks:', nchunks)
             print('cache size:', cache_size)
 
         # store sorted chunks into files of size n
@@ -31,21 +31,17 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
             tm0 = time.time()
 
             if verbose:
-                print(f'chunk {i+1}/{nchunks}')
+                print(f'chunk {i+1}/{nchunks} ', end='', flush=True)
+
             start = i * chunksize
             end = (i + 1) * chunksize
 
-            if verbose:
-                print('    reading')
             chunk_value_data = source[start:end]
             # might be fewer than requested in slice
             chunk_num = chunk_value_data.size
 
-            if verbose:
-                print('    copying to index chunk data')
             chunk_data = np.zeros(chunk_num, dtype=index_dtype)
-            if verbose:
-                print('    argsort')
+
             s = chunk_value_data.argsort()
             # chunk_data['index'] = np.arange(start, start+chunk_num)
             # chunk_data['value'] = chunk_value_data
@@ -54,18 +50,11 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
             del s
             del chunk_value_data
 
-            # print('    sorting chunk')
-            # chunk_data.sort(order='value')
-
-            if verbose:
-                print('    writing')
             tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
             slicer = Slicer(tmpf, mode='w+')
             slicer.write(chunk_data)
 
             # cache from lower chunk of data
-            if verbose:
-                print('    copying cache')
             cache = chunk_data[:cache_size].copy()
             del chunk_data
 
@@ -78,7 +67,7 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
             }
             mergers.append(data)
             if verbose:
-                print('    time:', time.time() - tm0)
+                print('time: %.3g sec' % (time.time() - tm0))
 
     # merge onto sink
     stack_tops = np.zeros(len(mergers), dtype=index_dtype)
@@ -93,6 +82,7 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
     if verbose:
         print('Doing mergesort')
 
+    mtm0 = time.time()
     with Slicer(outfile, mode='w+') as sink:
         nwritten = 0
         it = 0
@@ -140,6 +130,10 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
             else:
                 if verbose and it % (chunksize // 20) == 0:
                     print('.', end='', flush=True)
+
+    if verbose:
+        print('merge time: %.3g sec' % (time.time() - mtm0))
+        print('total time: %.3g sec' % (time.time() - atm0))
 
 
 def _do_test(

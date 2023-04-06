@@ -473,28 +473,39 @@ class ArrayColumn(ColumnBase):
         the index.  Also, after creation any data appended to the column are
         automatically added to the index.
         """
+        import tempfile
+        import shutil
 
-        # if self.has_index:
-        #     print('column %s already has an index')
-        #     return
+        if self.has_index:
+            print('column %s already has an index')
+            return
 
         if len(self.shape) > 1:
             raise ValueError('cannot index a multi-dimensional column')
 
         if self.verbose:
             print('creating index for column %s' % self.name)
+            print('index size gb:', self.index_size_gb)
+            print('cache mem gb:', self._cache_mem_gb)
 
-        # would the index be within our mem budget?
-        print('index size gb:', self.index_size_gb)
-        print('cache mem gb:', self._cache_mem_gb)
-        if self.index_size_gb < self._cache_mem_gb:
-            self._write_index_memory()
-        else:
-            self._write_index_mergesort()
+        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
+            tfile = os.path.join(
+                tmpdir,
+                os.path.basename(self.index_filename),
+            )
+            if self.index_size_gb < self._cache_mem_gb:
+                self._write_index_memory(tfile)
+            else:
+                self._write_index_mergesort(tmpdir, tfile)
+
+            if self.verbose:
+                print(f'{tfile} -> {self.index_filename}')
+
+            shutil.move(tfile, self.index_filename)
 
         self._init_index()
 
-    def _write_index_memory(self):
+    def _write_index_memory(self, fname):
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
@@ -506,30 +517,27 @@ class ArrayColumn(ColumnBase):
         index_data.sort(order='value')
 
         # set up file name and data type info
-        index_fname = self.index_filename
-        with SimpleFile(index_fname, mode='w+') as sf:
+        with SimpleFile(fname, mode='w+') as sf:
             sf.write(index_data)
 
-    def _write_index_mergesort(self):
-        import tempfile
+    def _write_index_mergesort(self, tmpdir, fname):
         from .mergesort import create_mergesort_index
 
         if self.verbose:
             print(f'creating index for {self.name} with mergesort on disk')
 
-        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
-            chunksize_bytes = int(self._cache_mem_gb * 1024**3)
+        chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
-            bytes_per_element = self.index_dtype.itemsize
-            chunksize = chunksize_bytes // bytes_per_element
+        bytes_per_element = self.index_dtype.itemsize
+        chunksize = chunksize_bytes // bytes_per_element
 
-            create_mergesort_index(
-                infile=self.filename,
-                outfile=self.index_filename,
-                chunksize=chunksize,
-                tmpdir=tmpdir,
-                verbose=self.verbose,
-            )
+        create_mergesort_index(
+            infile=self.filename,
+            outfile=fname,
+            chunksize=chunksize,
+            tmpdir=tmpdir,
+            verbose=self.verbose,
+        )
 
     def update_index(self):
         """
