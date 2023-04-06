@@ -13,6 +13,9 @@ todo
     - make it possible to add_column for array if we then eventually verify
     - if reading single row, scalar, doing from column gives a number but
       on columns with read gives length 1 array
+    - support update on dict column, which would be like a normal dict
+      update
+    - better from_fits that uses cache_mem
 """
 import os
 from glob import glob
@@ -54,7 +57,7 @@ class Columns(dict):
         ccd             array    <i2 True   (64348146,)
         dec             array    <f8 False  (64348146,)
         exposurename    array   |S20 True   (64348146,)
-        id              array    <i8 False  (64348146,)
+        id              array    <i8 True   (64348146,)
         imag            array    <f4 False  (64348146,)
         ra              array    <f8 False  (64348146,)
         x               array    <f4 False  (64348146,)
@@ -78,30 +81,8 @@ class Columns(dict):
       has index: False
       dtype: <i8
 
-    # get the column names
-    >>> c.colnames
-    ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g', 'meta']
-
-    # reload all columns or specified column/column list
-    >>> c.reload(name=None)
-
-    # read all data from column 'id'
-    # alternative syntaxes
-    >>> ind = c['id'][:]
-    >>> ind = c['id'].read()
-    >>> ind = c.read_column('id')
-
-    # dict columns are read as a dict
-    >>> meta = c['meta'].read()
-
-    # read a subset of rows
-    # slicing
-    >>> ind = c['id'][25:125]
-
-    # specifying a set of rows
-    >>> rows=[3, 225, 1235]
-    >>> ind = c['id'][rows]
-    >>> ind = c.read_column('id', rows=rows)
+    # number of rows in table
+    >>> c.nrows
 
     # read all columns into a single rec array.  By default the dict
     # columns are not loaded
@@ -113,15 +94,38 @@ class Columns(dict):
     >>> data = c.read(asdict=True)
 
     # specify columns
-    >>> data = c.read(columns=['id', 'flux'], rows=rows)
+    >>> data = c.read(columns=['id', 'flux'])
 
-    # dict columns can be specified if asdict is True
+    # dict columns can be specified if asdict is True.  Dicts can also
+    # be read as single columns, see below
     >>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
+
+    # specifying a set of rows as sequence/array or slice
+    >>> data = c.read(columns=['id', 'flux'], rows=[3, 225, 1235])
+    >>> data = c.read(columns=['id', 'flux'], rows=slice(10, 20))
+
+    # read all data from column 'id' as an array rather than recarray
+    # alternative syntaxes
+    >>> ind = c['id'][:]
+    >>> ind = c['id'].read()
+    >>> ind = c.read_column('id')
+
+    # read a subset of rows
+    # slicing
+    >>> ind = c['id'][25:125]
+
+    # specifying a set of rows
+    >>> rows = [3, 225, 1235]
+    >>> ind = c['id'][rows]
+    >>> ind = c.read_column('id', rows=rows)
+
+    # reading a dict column
+    >>> meta = c['meta'].read()
 
     # Create indexes for fast searching
     >>> c['id'].create_index()
 
-    # get indices for some condition
+    # get indices for some conditions
     >>> ind = c['id'] > 25
     >>> ind = c['id'].between(25, 35)
     >>> ind = c['id'] == 25
@@ -135,38 +139,124 @@ class Columns(dict):
     >>> ind = c['id'].between(15, 25) | (c['id'] == 55)
     >>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
 
-    # update values for a column
-    >>> c['id'][35] = 10
-    >>> c['id'][35:35+3] = [8, 9, 10]
-    >>> c['id'][rows] = idvalues
-
-    # write columns from the fields in a rec array
-    # names in the data correspond to column names.
-    # If columns are not present, they are created
-    # but row count consistency must be maintained for all array
-    # columns and this is checked.
+    # write columns from the fields in a rec array names in the data correspond
+    # to column names.  If this is the first time writing data, the columns are
+    # created, and on subsequent writes, the columns must match
 
     >>> c.append(recdata)
+    >>> c.append(new_data)
 
     # append data from the fields in a FITS file
     >>> c.from_fits(fitsfile_name)
 
     # add a dict column.
-    >>> c.create_column('meta', 'dict')
-    >>> c['meta'].write({'test': 'hello'})
+    >>> c.create_column('weather', 'dict')
+    >>> c['weather'].write({'temp': 30.1, 'humid': 0.5})
+
+    # overwrite dict column
+    >>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})
 
     # you should not generally create array columns, since they
     # can get out of sync with existing columns.  This will by default
     # raise an exception, but you can send verify=False if you know
-    # what you are doing
+    # what you are doing.  In the future support will be added for this.
     >>> c.create_column('test', 'array')
+
+    # update values for an array column
+    >>> c['id'][35] = 10
+    >>> c['id'][35:35+3] = [8, 9, 10]
+    >>> c['id'][rows] = idvalues
+
+    # get the column names
+    >>> c.colnames
+    ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g',
+     'meta', 'psfstars']
+    # only array columns
+    >>> c.array_colnames
+    ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g']
+    # only dict columns
+    >>> c.dict_colnames
+    ['meta', 'weather']
+    # only sub pycolumns directories
+    >>> c.cols_colnames
+    ['psfstars']
+
+    # reload all columns or specified column/column list
+    >>> c.reload()
+
+    # delete all data.  This will ask for confirmation
+    >>> c.delete()
+
+    # delete column and its data
+    >>> c.delete_column('ra')
+
+    # to modify the amount of memory used during index creation, specify
+    # cache_mem in gigabytes.  Default 1 gig
+    >>> cols = pyc.Columns(fname, cache_mem=0.5)
+
+    # columns can actually be another pycolumns directory
+    >>> psfcols = cols['psfstars']
+    >>> psfcols
+      dir: /some/path/mydata.cols/psfstars.cols
+      Columns:
+        name             type  dtype index  shape
+        --------------------------------------------------
+        ccd             array    <i2 True   (64348146,)
+        id              array    <i8 True   (64348146,)
+        imag            array    <f4 False  (64348146,)
+        x               array    <f4 False  (64348146,)
+        y               array    <f4 False  (64348146,)
+        ...etc
     """
 
     def __init__(self, dir=None, cache_mem=1, verbose=False):
+        self._type = 'cols'
         self._verbose = verbose
         self._cache_mem_gb = float(cache_mem)
         self._set_dir(dir)
         self._load()
+
+    @property
+    def nrows(self):
+        """
+        number of rows in table
+        """
+        return self._nrows
+
+    @property
+    def colnames(self):
+        """
+        Get a list of all column names
+        """
+        return list(self.keys())
+
+    @property
+    def array_colnames(self):
+        """
+        Get a list of the array column names
+        """
+        return [c for c in self.keys() if self[c].type == 'array']
+
+    @property
+    def dict_colnames(self):
+        """
+        Get a list of the array column names
+        """
+        return [c for c in self.keys() if self[c].type == 'dict']
+
+    @property
+    def cols_colnames(self):
+        """
+        Get a list of the array column names
+        """
+        return [c for c in self.keys() if self[c].type == 'cols']
+
+    @property
+    def type(self):
+        """
+        get the data type of the column
+        """
+        return self._type
 
     @property
     def dir(self):
@@ -253,13 +343,6 @@ class Columns(dict):
                     else:
                         self._load_column(f)
         self.verify()
-
-    @property
-    def nrows(self):
-        """
-        number of rows in table
-        """
-        return self._nrows
 
     def verify(self):
         """
@@ -399,20 +482,6 @@ class Columns(dict):
             self[column].reload()
 
         self.verify()
-
-    @property
-    def colnames(self):
-        """
-        Get a list of all column names
-        """
-        return list(self.keys())
-
-    @property
-    def array_colnames(self):
-        """
-        Get a list of the array column names
-        """
-        return [c for c in self.keys() if self[c].type == 'array']
 
     def _clear(self, name=None):
         """
@@ -649,13 +718,6 @@ class Columns(dict):
         """
         if colname not in self:
             raise ValueError("Column '%s' not found" % colname)
-
-        if self.verbose:
-            if rows is not None:
-                print("Reading %d rows from "
-                      "column: '%s'" % (len(rows), colname))
-            else:
-                print("Reading column: '%s'" % colname)
 
         return self[colname].read(rows=rows)
 
