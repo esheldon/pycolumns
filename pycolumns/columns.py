@@ -599,17 +599,19 @@ class Columns(dict):
             dbase = self._dirbase()
             s += [dbase]
             s += ['dir: '+self.dir]
+            s += ['nrows: %s' % self.nrows]
 
+        s += ['']
         subcols = []
         if len(self) > 0:
             s += ['Columns:']
-            cnames = 'name', 'type', 'dtype', 'index', 'shape'
-            s += ['  %-15s %5s %6s %-6s %s' % cnames]
-            s += ['  '+'-'*(50)]
+            cnames = 'name', 'type', 'dtype', 'index'
+            s += ['  %-15s %5s %6s %-6s' % cnames]
+            s += ['  '+'-'*(40)]
 
             subcols = ['Sub-Columns Directories:']
             subcols += ['  %-15s' % ('name',)]
-            subcols += ['  '+'-'*(50)]
+            subcols += ['  '+'-'*(40)]
 
             for name in sorted(self):
                 c = self[name]
@@ -627,7 +629,7 @@ class Columns(dict):
                         c_dtype = c.dtype.descr[0][1]
                         s[-1] += ' %6s' % c_dtype
                         s[-1] += ' %-6s' % self[name].has_index
-                        s[-1] += ' %s' % (self[name].shape,)
+                        # s[-1] += ' %s' % self[name].nrows
 
                 else:
                     cdir = os.path.basename(c.dir).replace('.cols', '')

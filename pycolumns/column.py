@@ -270,6 +270,7 @@ class ArrayColumn(ColumnBase):
         """
 
         self._type = 'array'
+        self._ext = 1
 
         self._cache_mem_gb = float(cache_mem)
 
@@ -280,16 +281,21 @@ class ArrayColumn(ColumnBase):
             verbose=verbose,
         )
 
-        if self.filename is None or not os.path.exists(self.filename):
+        # if self.filename is None or not os.path.exists(self.filename):
+        if self.filename is None:
             return
 
-        self._open_file('r+')
+        self._open_file()
 
         # get info for index if it exists
         self._init_index()
 
-    def _open_file(self, mode):
-        self._sf = SimpleFile(self.filename, mode=mode)
+    def _open_file(self):
+        import fitsio
+        self._fits = fitsio.FITS(self.filename, 'rw')
+
+    def _get_hdu(self):
+        return self._fits[self._ext]
 
     def _clear(self):
         """
@@ -299,7 +305,8 @@ class ArrayColumn(ColumnBase):
         super()._clear()
 
         if self.has_data:
-            del self._sf
+            del self._fits
+            del self._dtype
 
         self._has_index = False
 
@@ -308,7 +315,15 @@ class ArrayColumn(ColumnBase):
         """
         returns True if this column has some data
         """
-        return hasattr(self, '_sf')
+        has_data = False
+
+        if hasattr(self, '_fits'):
+            if len(self._fits) > 1:
+                hdu = self._get_hdu()
+                if hdu.has_data():
+                    has_data = True
+        # import IPython; IPython.embed()
+        return has_data
 
     def ensure_has_data(self):
         """
@@ -324,20 +339,19 @@ class ArrayColumn(ColumnBase):
         """
         self.ensure_has_data()
 
-        return self._sf.dtype
+        if not hasattr(self, '_dtype'):
+            hdu = self._get_hdu()
+            dtype, _, _ = hdu.get_rec_dtype()
+            descr = dtype.descr
+            assert len(descr) == 1
+            assert descr[0][0] == 'data'
+            self._dtype = dtype
+
+        return self._dtype
 
     @property
     def index_dtype(self):
         return get_index_dtype(self.dtype)
-
-    @property
-    def shape(self):
-        """
-        get the shape of the column
-        """
-        self.ensure_has_data()
-
-        return self._sf.shape
 
     @property
     def nrows(self):
@@ -346,16 +360,24 @@ class ArrayColumn(ColumnBase):
         """
         self.ensure_has_data()
 
-        return self._sf.shape[0]
+        hdu = self._get_hdu()
+        return hdu.get_nrows()
+
+    @property
+    def shape(self):
+        """
+        get the shape of the column
+        """
+        self.ensure_has_data()
+
+        return (self.nrows, )
 
     @property
     def size(self):
         """
         get the size of the columns
         """
-        self.ensure_has_data()
-
-        return self._sf.size
+        return self.nrows
 
     @property
     def data_size_bytes(self):
@@ -396,34 +418,56 @@ class ArrayColumn(ColumnBase):
         if data.dtype.names is not None:
             raise ValueError('do not enter data with fields')
 
-        if not self.has_data:
-            self._open_file('w+')
+        if data.ndim > 1:
+            raise ValueError('data must be one dimensional array')
 
-        self._sf.write(data)
+        self._write_data_as_rec(data)
 
         if self.has_index:
             self._update_index()
+
+    def _write_data_as_rec(self, data):
+        view_data = self._get_rec_view(data)
+
+        if not self.has_data:
+            self._fits.write(view_data)
+        else:
+            hdu = self._fits[self._ext]
+            hdu.append(view_data)
+
+    def _get_rec_view(self, data):
+        view_dtype = [('data', data.dtype.descr[0][1])]
+        return data.view(view_dtype)
 
     def __getitem__(self, arg):
         """
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        if not hasattr(self, '_sf'):
-            raise ValueError('no file loaded yet')
 
-        use_arg = util.extract_rows(arg, sort=True)
-        return self._sf[use_arg]
+        self.ensure_has_data()
+
+        hdu = self._get_hdu()
+
+        rows = util.extract_rows(arg, sort=True)
+
+        if rows is None or isinstance(rows, slice):
+            data = hdu[rows]
+        else:
+            array = np.zeros(rows.size, dtype=self.dtype)
+            hdu._FITS.read_rows_as_rec(self._ext+1, array, rows)
+
+        return data['data']
 
     def __setitem__(self, arg, values):
         """
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        if not hasattr(self, '_sf'):
-            raise ValueError('no file loaded yet')
+        raise RuntimeError('fix writing')
 
-        self._sf[arg] = values
+        if not hasattr(self, '_fits'):
+            raise ValueError('no file loaded yet')
 
     def read(self, rows=None):
         """
@@ -434,15 +478,10 @@ class ArrayColumn(ColumnBase):
         rows: sequence, slice, Indices or None, optional
             A subset of the rows to read.
         """
-        if not hasattr(self, '_sf'):
+        if not hasattr(self, '_fits'):
             raise ValueError('no file loaded yet')
 
         return self[rows]
-        # if rows is None:
-        #     return self._sf[:]
-        # else:
-        #     use_rows = util.extract_rows(rows, sort=True)
-        #     return self._sf[use_rows]
 
     def _delete(self):
         """
@@ -450,7 +489,7 @@ class ArrayColumn(ColumnBase):
         """
 
         if hasattr(self, '_sf'):
-            del self._sf
+            del self._fits
 
         super()._delete()
 
@@ -780,12 +819,14 @@ class ArrayColumn(ColumnBase):
                 s += 'Column: %-15s' % self.name
 
             s += ' type: %10s' % self.type
+            if self.has_data:
 
-            if self.shape is not None:
-                s += ' shape: %12s' % (self.shape,)
+                # if self.shape is not None:
+                #     s += ' shape: %12s' % (self.shape,)
+                s += ' nrows: %12s' % self.nrows
 
-            if self.name is not None:
-                s += ' has index: %s' % self.has_index
+                if self.name is not None:
+                    s += ' has index: %s' % self.has_index
 
             s = [s]
         else:
@@ -798,15 +839,15 @@ class ArrayColumn(ColumnBase):
 
             s += ['type: array']
 
-            if self.shape is not None:
-                s += ['shape: %s' % (self.shape,)]
-
-            if self.name is not None:
+            if self.has_data:
                 s += ['has index: %s' % self.has_index]
 
-            if self.dtype is not None:
                 c_dtype = self.dtype.descr[0][1]
-                s += ["dtype: %s" % c_dtype]
+                s += ['dtype: %s' % c_dtype]
+
+                # if self.shape is not None:
+                #     s += ['shape: %s' % (self.shape,)]
+                s += ['nrows: %s' % self.nrows]
 
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
