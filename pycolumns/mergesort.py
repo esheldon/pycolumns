@@ -132,8 +132,8 @@ def create_mergesort_index(infile, outfile, chunksize, tmpdir, verbose=False):
                     print('.', end='', flush=True)
 
     if verbose:
-        print('merge time: %.3g sec' % (time.time() - mtm0))
-        print('total time: %.3g sec' % (time.time() - atm0))
+        print('merge time: %.3g min' % ((time.time() - mtm0)/60))
+        print('total time: %.3g min' % ((time.time() - atm0)/60))
 
 
 def _do_test(
