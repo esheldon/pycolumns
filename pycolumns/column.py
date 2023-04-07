@@ -451,7 +451,9 @@ class ArrayColumn(ColumnBase):
 
         rows = util.extract_rows(arg, sort=True)
 
-        if rows is None or isinstance(rows, slice):
+        if rows is None:
+            data = hdu[:]
+        elif isinstance(rows, slice):
             data = hdu[rows]
         else:
             data = np.zeros(rows.size, dtype=self.dtype)
@@ -559,6 +561,7 @@ class ArrayColumn(ColumnBase):
             print(f'creating index for {self.name} in memory')
 
         dt = self.index_dtype
+
         index_data = np.zeros(self.shape[0], dtype=dt)
         index_data['index'] = np.arange(index_data.size)
         index_data['value'] = self[:]
@@ -578,12 +581,14 @@ class ArrayColumn(ColumnBase):
         chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
         bytes_per_element = self.index_dtype.itemsize
+
         # need factor of two because we keep both the cache and the scratch in
         # mergesort
         chunksize = chunksize_bytes // (bytes_per_element * 2)
 
+        hdu = self._get_hdu()
         create_mergesort_index(
-            infile=self.filename,
+            source=hdu,
             outfile=fname,
             chunksize=chunksize,
             tmpdir=tmpdir,

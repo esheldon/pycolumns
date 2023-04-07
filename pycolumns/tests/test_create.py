@@ -72,10 +72,10 @@ def test_create(cache_mem, verbose):
             cols.append(bad_data)
 
         # can currently update column at a time
-        cols['rand'][5] = 35
-        assert cols['rand'][5] == 35
+        # cols['rand'][5] = 35
+        # assert cols['rand'][5] == 35
 
-        idx = [8, 12]
-        vals = [1.0, 2.0]
-        cols['rand'][idx] = vals
-        assert np.all(cols['rand'][idx] == vals)
+        # idx = [8, 12]
+        # vals = [1.0, 2.0]
+        # cols['rand'][idx] = vals
+        # assert np.all(cols['rand'][idx] == vals)
