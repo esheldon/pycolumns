@@ -11,8 +11,6 @@ pth = os.path.join(
 with open(pth, 'r') as fp:
     exec(fp.read())
 
-
-# data_files copies the ups/esutil.table into prefix/ups
 setup(
     name='pycolumns',
     version=__version__,
