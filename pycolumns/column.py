@@ -454,8 +454,8 @@ class ArrayColumn(ColumnBase):
         if rows is None or isinstance(rows, slice):
             data = hdu[rows]
         else:
-            array = np.zeros(rows.size, dtype=self.dtype)
-            hdu._FITS.read_rows_as_rec(self._ext+1, array, rows)
+            data = np.zeros(rows.size, dtype=self.dtype)
+            hdu._FITS.read_rows_as_rec(self._ext+1, data, rows)
 
         return data['data']
 
