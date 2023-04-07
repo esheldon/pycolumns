@@ -11,9 +11,17 @@ pth = os.path.join(
 with open(pth, 'r') as fp:
     exec(fp.read())
 
+with open(os.path.join(os.path.dirname(__file__), "README.md")) as fp:
+    long_description = fp.read()
+
 setup(
     name='pycolumns',
+    packages=find_packages(),
+    license='MIT',
+    url='https://github.com/esheldon/pycolumns',
     version=__version__,
     description='A simple, efficient, pythonic column data store',
-    packages=find_packages(),
+    long_description=long_description,
+    long_description_content_type='text/markdown; charset=UTF-8; variant=GFM',
+    install_requires=['numpy'],
 )
