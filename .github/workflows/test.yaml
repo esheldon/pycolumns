@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+    branches:
+      - master
+  pull_request: null
+
+jobs:
+  tests:
+    name: tests
+    strategy:
+      matrix:
+        pyver: ["3.8", "3.9", "3.10"]
+
+    runs-on: "ubuntu-latest"
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          python-version: ${{ matrix.pyver }}
+          channels: conda-forge,defaults
+          channel-priority: strict
+          show-channel-urls: true
+          miniforge-version: latest
+          miniforge-variant: Mambaforge
+
+      - name: configure conda and install code
+        shell: bash -l {0}
+        run: |
+          mamba config --set always_yes yes
+          mamba install --quiet \
+            pip \
+            setuptools \
+            numpy \
+            flake8 \
+            pytest \
+            esutil
+
+          python -m pip install -e .
+
+      - name: lint
+        shell: bash -l {0}
+        run: |
+          flake8 pycolumns
+
+      - name: test
+        shell: bash -l {0}
+        run: |
+          pytest -vv pycolumns/tests

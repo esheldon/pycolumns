@@ -1,3 +1,10 @@
+"""
+TODO
+
+    - allow appending without updating index, which we would do at the end
+      of a series of appends
+
+"""
 import os
 import bisect
 import numpy as np
@@ -13,34 +20,38 @@ class ColumnBase(object):
     writing of data.  This class can be instantiated alone, but is usually
     accessed through the Columns class.
     """
-    def __init__(self,
-                 filename=None,
-                 name=None,
-                 dir=None,
-                 verbose=False):
+    def __init__(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+    ):
 
-        self.init(
+        self._do_init(
             filename=filename,
             name=name,
             dir=dir,
             verbose=verbose,
         )
 
-    def init(self,
-             filename=None,
-             name=None,
-             dir=None,
-             verbose=False):
+    def _do_init(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+    ):
         """
         See main docs for the Column class
         """
 
-        self.clear()
+        self._clear()
 
         self._filename = filename
         self._name = name
         self._dir = dir
-        self.verbose = verbose
+        self._verbose = verbose
 
         # make sure we have something to work with before continuing
         if not self._init_args_sufficient(filename, dir, name):
@@ -51,6 +62,10 @@ class ColumnBase(object):
 
         elif self.name is not None:
             self._set_meta_from_name()
+
+    @property
+    def verbose(self):
+        return self._verbose
 
     @property
     def dir(self):
@@ -86,9 +101,9 @@ class ColumnBase(object):
         """
         if self.verbose:
             print('Reloading column metadata for: %s' % self.name)
-        self.init(filename=self.filename, verbose=self.verbose)
+        self._do_init(filename=self.filename, verbose=self.verbose)
 
-    def clear(self):
+    def _clear(self):
         """
         Clear out all the metadata for this column.
         """
@@ -96,24 +111,12 @@ class ColumnBase(object):
         self._filename = None
         self._name = None
         self._dir = None
-        self.verbose = False
 
     def read(self, *args):
         """
         Read data from a column
         """
         raise NotImplementedError('implement read')
-
-    def delete(self):
-        """
-        Attempt to delete the data file associated with this column
-        """
-        if self.filename is None:
-            return
-
-        if os.path.exists(self.filename):
-            print("Removing data for column: %s" % self.name)
-            os.remove(self.filename)
 
     #
     # setup methods
@@ -186,26 +189,37 @@ class ColumnBase(object):
 
 class ArrayColumn(ColumnBase):
     """
-    represents an array column in a Columns database
+    Represent an array column in a Columns database
+
+    Parameters
+    ----------
+    filename: str, optional
+        Path to the file
+    name: str, optional
+        Name of the column
+    dir: str, optional
+        Directory of column
+    cache_mem: number, optional
+        Memory for cache used when creating index in gigabytes. Default 1.0
+    verbose: bool, optional
+        If set to True print messages
 
     Construction
     ------------
-    col=ArrayColumn(filename=, name=, dir=, verbose=False)
-
     # there are alternative construction methods
-    # this method determins all info from the full path
+    # this method determines all info from the full path
 
-    col=ArrayColumn(filename='/full/path')
+    col = ArrayColumn(filename='/full/path')
 
     # this one uses directory, column name
-    col=ArrayColumn(name='something', dir='/path2o/dbname.cols')
+    col = ArrayColumn(name='something', dir='/path2o/dbname.cols')
 
     Slice and item lookup
     ---------------------
     # The Column class supports item lookup access, e.g. slices and
     # arrays representing a subset of rows
 
-    col=Column(...)
+    col = Column(fname)
     data = col[25:22]
 
     rows = np.arange(100)
@@ -227,18 +241,39 @@ class ArrayColumn(ColumnBase):
     >>> ind = col1.between(15,25) | (col2 != 66)
     >>> ind = col1.between(15,25) & (col2 != 66) & (col3 > 5)
     """
-    def init(self,
-             filename=None,
-             name=None,
-             dir=None,
-             verbose=False):
+    def __init__(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        cache_mem=1,
+        verbose=False,
+    ):
+        self._do_init(
+            filename=filename,
+            name=name,
+            dir=dir,
+            cache_mem=cache_mem,
+            verbose=verbose,
+        )
+
+    def _do_init(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+        cache_mem=1,
+    ):
         """
         initialize the meta data, and possibly load the mmap
         """
 
         self._type = 'array'
 
-        super(ArrayColumn, self).init(
+        self._cache_mem_gb = float(cache_mem)
+
+        super()._do_init(
             filename=filename,
             name=name,
             dir=dir,
@@ -256,18 +291,17 @@ class ArrayColumn(ColumnBase):
     def _open_file(self, mode):
         self._sf = SimpleFile(self.filename, mode=mode)
 
-    def clear(self):
+    def _clear(self):
         """
         Clear out all the metadata for this column.
         """
 
-        super(ArrayColumn, self).clear()
+        super()._clear()
 
         if self.has_data:
             del self._sf
 
         self._has_index = False
-        self._index_dtype = None
 
     @property
     def has_data(self):
@@ -291,6 +325,10 @@ class ArrayColumn(ColumnBase):
         self.ensure_has_data()
 
         return self._sf.dtype
+
+    @property
+    def index_dtype(self):
+        return get_index_dtype(self.dtype)
 
     @property
     def shape(self):
@@ -318,6 +356,26 @@ class ArrayColumn(ColumnBase):
         self.ensure_has_data()
 
         return self._sf.size
+
+    @property
+    def data_size_bytes(self):
+        return self.dtype.itemsize * self.size
+
+    @property
+    def data_size_gb(self):
+        return self.data_size_bytes / 1024**3
+
+    @property
+    def index_size_bytes(self):
+        return self.index_dtype.itemsize * self.size
+
+    @property
+    def index_size_gb(self):
+        return self.index_size_bytes / 1024**3
+
+    @property
+    def cache_mem(self):
+        return self._cache_mem_gb
 
     def _append(self, data):
         """
@@ -354,7 +412,8 @@ class ArrayColumn(ColumnBase):
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        return self._sf[arg]
+        use_arg = util.extract_rows(arg, sort=True)
+        return self._sf[use_arg]
 
     def __setitem__(self, arg, values):
         """
@@ -364,7 +423,7 @@ class ArrayColumn(ColumnBase):
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        self._sf._mmap[arg] = values
+        self._sf[arg] = values
 
     def read(self, rows=None):
         """
@@ -372,18 +431,20 @@ class ArrayColumn(ColumnBase):
 
         Parameters
         ----------
-        rows: sequence, optional
+        rows: sequence, slice, Indices or None, optional
             A subset of the rows to read.
         """
         if not hasattr(self, '_sf'):
             raise ValueError('no file loaded yet')
 
-        if rows is None:
-            return self._sf[:]
-        else:
-            return self._sf[rows]
+        return self[rows]
+        # if rows is None:
+        #     return self._sf[:]
+        # else:
+        #     use_rows = util.extract_rows(rows, sort=True)
+        #     return self._sf[use_rows]
 
-    def delete(self):
+    def _delete(self):
         """
         Attempt to delete the data file associated with this column
         """
@@ -391,7 +452,7 @@ class ArrayColumn(ColumnBase):
         if hasattr(self, '_sf'):
             del self._sf
 
-        super(ArrayColumn, self).delete()
+        super()._delete()
 
         # remove index if it exists
         self.delete_index()
@@ -422,6 +483,8 @@ class ArrayColumn(ColumnBase):
         the index.  Also, after creation any data appended to the column are
         automatically added to the index.
         """
+        import tempfile
+        import shutil
 
         if self.has_index:
             print('column %s already has an index')
@@ -432,11 +495,31 @@ class ArrayColumn(ColumnBase):
 
         if self.verbose:
             print('creating index for column %s' % self.name)
+            print('index size gb:', self.index_size_gb)
+            print('cache mem gb:', self._cache_mem_gb)
 
-        dt = [
-            ('index', 'i8'),
-            ('value', self.dtype.descr[0][1]),
-        ]
+        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
+            tfile = os.path.join(
+                tmpdir,
+                os.path.basename(self.index_filename),
+            )
+            if self.index_size_gb < self._cache_mem_gb:
+                self._write_index_memory(tfile)
+            else:
+                self._write_index_mergesort(tmpdir, tfile)
+
+            if self.verbose:
+                print(f'{tfile} -> {self.index_filename}')
+
+            shutil.move(tfile, self.index_filename)
+
+        self._init_index()
+
+    def _write_index_memory(self, fname):
+        if self.verbose:
+            print(f'creating index for {self.name} in memory')
+
+        dt = self.index_dtype
         index_data = np.zeros(self.shape[0], dtype=dt)
         index_data['index'] = np.arange(index_data.size)
         index_data['value'] = self[:]
@@ -444,11 +527,29 @@ class ArrayColumn(ColumnBase):
         index_data.sort(order='value')
 
         # set up file name and data type info
-        index_fname = self.index_filename
-        with SimpleFile(index_fname, mode='w+') as sf:
+        with SimpleFile(fname, mode='w+') as sf:
             sf.write(index_data)
 
-        self._init_index()
+    def _write_index_mergesort(self, tmpdir, fname):
+        from .mergesort import create_mergesort_index
+
+        if self.verbose:
+            print(f'creating index for {self.name} with mergesort on disk')
+
+        chunksize_bytes = int(self._cache_mem_gb * 1024**3)
+
+        bytes_per_element = self.index_dtype.itemsize
+        # need factor of two because we keep both the cache and the scratch in
+        # mergesort
+        chunksize = chunksize_bytes // (bytes_per_element * 2)
+
+        create_mergesort_index(
+            infile=self.filename,
+            outfile=fname,
+            chunksize=chunksize,
+            tmpdir=tmpdir,
+            verbose=self.verbose,
+        )
 
     def update_index(self):
         """
@@ -714,15 +815,17 @@ class ArrayColumn(ColumnBase):
 
 
 class DictColumn(ColumnBase):
-    def init(self,
-             filename=None,
-             name=None,
-             dir=None,
-             verbose=False):
+    def _do_init(
+        self,
+        filename=None,
+        name=None,
+        dir=None,
+        verbose=False,
+    ):
 
         self._type = 'dict'
 
-        super(DictColumn, self).init(
+        super()._do_init(
             filename=filename,
             name=name,
             dir=dir,
@@ -735,7 +838,7 @@ class DictColumn(ColumnBase):
 
         Parameters
         ----------
-        data: array
+        data: dict or json supported object
             The data must be supported by the JSON format.
         """
 
@@ -777,3 +880,45 @@ class DictColumn(ColumnBase):
             s = ['Column: '] + s
 
         return s
+
+
+def get_index_dtype(dtype):
+    return np.dtype([
+        ('index', 'i8'),
+        ('value', dtype.descr[0][1]),
+    ])
+
+
+def _do_test_create_index(tmpdir, cache_mem, seed=999, num=1_000_000):
+    import os
+    import numpy as np
+    from . import sfile
+    from .columns import Columns
+
+    cdir = os.path.join(tmpdir, 'test.cols')
+    cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
+
+    rng = np.random.RandomState(seed)
+    data = np.zeros(num, dtype=[('rand', 'f8')])
+    data['rand'] = rng.uniform(size=num)
+
+    cols.append(data)
+    cols['rand'].create_index()
+    ifile = cols['rand'].index_filename
+    idata = sfile.read(ifile)
+
+    s = data['rand'].argsort()
+    assert np.all(idata['value'] == data['rand'][s])
+
+
+def test_create_index(cache_mem=0.01, seed=999, num=1_000_000, keep=False):
+    import tempfile
+    if keep:
+        _do_test_create_index(
+            tmpdir='.', cache_mem=cache_mem, seed=seed, num=num,
+        )
+    else:
+        with tempfile.TemporaryDirectory(dir='.') as tmpdir:
+            _do_test_create_index(
+                tmpdir=tmpdir, cache_mem=cache_mem, seed=seed, num=num,
+            )

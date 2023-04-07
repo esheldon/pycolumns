@@ -45,8 +45,10 @@ class Indices(np.ndarray):
         """
         sort and set the is_sorted flag
         """
-        super(Indices, self).sort()
-        self._is_sorted = True
+        if not self.is_sorted:
+            if self.ndim > 0:
+                super(Indices, self).sort()
+            self._is_sorted = True
 
     def array(self):
         return self.view(np.ndarray)

@@ -1,10 +1,19 @@
-from distutils.core import setup,Extension
+import os
+from setuptools import setup, find_packages
 
+__version__ = None
+pth = os.path.join(
+    os.path.dirname(os.path.realpath(__file__)),
+    'pycolumns',
+    'version.py',
+)
 
-# data_files copies the ups/esutil.table into prefix/ups
+with open(pth, 'r') as fp:
+    exec(fp.read())
+
 setup(
     name='pycolumns',
-    version='0.1.0',
+    version=__version__,
     description='A simple, efficient, pythonic column data store',
-    packages=['pycolumns'],
+    packages=find_packages(),
 )

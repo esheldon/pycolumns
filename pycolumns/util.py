@@ -3,6 +3,38 @@ import json
 import numpy as np
 
 
+def extract_rows(rows, sort=True):
+    """
+    extract rows for reading
+
+    Parameters
+    ----------
+    rows: sequence, Indices, slice or None
+        Possible rows to extract
+    sort: bool, optional
+        Whether to sort when converted to Indices
+
+    Returns
+    -------
+    Indices, possibly sorted.  Note this does not make a copy of the data
+    """
+    from .indices import Indices
+
+    if (
+        rows is not None
+        and not isinstance(rows, slice)
+        and not isinstance(rows, Indices)
+    ):
+        output = Indices(rows)
+    else:
+        output = rows
+
+    if isinstance(rows, Indices) and sort:
+        output.sort()
+
+    return output
+
+
 def extract_colname(filename):
     """
     Extract the column name from the file name
