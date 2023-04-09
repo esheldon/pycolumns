@@ -636,7 +636,7 @@ class ArrayColumn(ColumnBase):
 
         # remove the final extension
         index_fname = '.'.join(self.filename.split('.')[0:-1])
-        index_fname = index_fname+'__index.sf'
+        index_fname = index_fname+'.index'
         return index_fname
 
     def match(self, values):
