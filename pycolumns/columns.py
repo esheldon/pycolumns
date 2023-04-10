@@ -64,7 +64,7 @@ class Columns(dict):
         return list(self.keys())
 
     @property
-    def table_names(self):
+    def column_names(self):
         """
         Get a list of all column names
         """
@@ -341,11 +341,11 @@ class Columns(dict):
         if len(self) > 0:
             # make sure the input data matches the existing column names
             in_names = set(names)
-            table_names = set(self.table_names)
-            if in_names != table_names:
+            column_names = set(self.column_names)
+            if in_names != column_names:
                 raise ValueError(
                     f'input columns {in_names}'
-                    f'do not match existing table columns {table_names}'
+                    f'do not match existing table columns {column_names}'
                 )
 
         for name in names:
@@ -568,7 +568,7 @@ class Columns(dict):
                 keys = sorted(self.keys())
                 columns = keys
             else:
-                columns = self.table_names
+                columns = self.column_names
 
         else:
             if isinstance(columns, str):
@@ -605,13 +605,17 @@ class Columns(dict):
         subcols = []
         if len(self) > 0:
             s += ['Columns:']
-            cnames = 'name', 'type', 'dtype', 'index'
-            s += ['  %-15s %5s %6s %-6s' % cnames]
-            s += ['  '+'-'*(40)]
+            cnames = 'name', 'dtype', 'index'
+            s += ['  %-15s %6s %-6s' % cnames]
+            s += ['  '+'-'*(28)]
+
+            dicts = ['Dictionaries:']
+            dicts += ['  %-15s' % ('name',)]
+            dicts += ['  '+'-'*(28)]
 
             subcols = ['Sub-Columns Directories:']
             subcols += ['  %-15s' % ('name',)]
-            subcols += ['  '+'-'*(40)]
+            subcols += ['  '+'-'*(28)]
 
             for name in sorted(self):
                 c = self[name]
@@ -620,23 +624,32 @@ class Columns(dict):
                     name = c.name
 
                     if len(name) > 15:
-                        s += ['  %s' % name]
-                        s += ['%23s' % (c.type,)]
+                        name_entry = ['  %s' % name]
+                        # s += ['%23s' % (c.type,)]
                     else:
-                        s += ['  %-15s %5s' % (c.name, c.type)]
+                        name_entry = ['  %-15s' % c.name]
 
                     if c.type == 'array':
+                        s += name_entry
                         c_dtype = c.dtype.descr[0][1]
                         s[-1] += ' %6s' % c_dtype
                         s[-1] += ' %-6s' % self[name].has_index
                         # s[-1] += ' %s' % self[name].nrows
-
+                    elif c.type == 'dict':
+                        dicts += name_entry
+                    else:
+                        raise ValueError(f'bad type: {c.type}')
                 else:
                     cdir = os.path.basename(c.dir).replace('.cols', '')
                     subcols += ['  %s' % cdir]
 
         s = [indent + tmp for tmp in s]
         s = ['Columns Directory: '] + s
+
+        if len(dicts) > 3:
+            s += [indent]
+            dicts = [indent + tmp for tmp in dicts]
+            s += dicts
 
         if len(subcols) > 3:
             s += [indent]

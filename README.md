@@ -1,9 +1,9 @@
 A simple, efficient column-oriented, pythonic data store.
 
 The focus is currently on efficiency of reading and writing.  The code is pure
-python but searching and reading data is fast due to the use of numpy memory
-maps and column indexing.  Basic consistency is ensured but the database is not
-fully ACID.
+python but searching and reading data is fast due to the use of the fitsio
+package for column data and index data.  Basic consistency is ensured for
+the columns in the table, but the database is not fully ACID.
 
 The storage is a simple directory with files on disk.
 
@@ -20,36 +20,41 @@ Examples
 >>> c
 Columns Directory:
 
+  mydata
   dir: /some/path/mydata.cols
+  nrows: 64348146
   Columns:
-    name             type  dtype index  shape
-    --------------------------------------------------
-    ccd             array    <i2 True   (64348146,)
-    dec             array    <f8 False  (64348146,)
-    exposurename    array   |S20 True   (64348146,)
-    id              array    <i8 True   (64348146,)
-    imag            array    <f4 False  (64348146,)
-    ra              array    <f8 False  (64348146,)
-    x               array    <f4 False  (64348146,)
-    y               array    <f4 False  (64348146,)
-    g               array    <f8 False  (64348146, 2)
-    meta             dict
+    name             dtype index
+    -----------------------------
+    ccd                <i2 True
+    dec                <f8 False
+    exposurename      |S20 True
+    id                 <i8 True
+    imag               <f4 False
+    ra                 <f8 False
+    x                  <f4 False
+    y                  <f4 False
+    g                  <f8 False
 
+  Dictionaries
+    name
+    -----------------------------
+    meta
 
   Sub-Columns Directories:
     name
-    --------------------------------------------------
+    -----------------------------
     psfstars
 
 # display info about column 'id'
 >>> c['id']
 Column:
-  "id"
+  name: id
   filename: ./id.array
-  type: col
-  shape: (64348146,)
-  has index: False
+  type: array
   dtype: <i8
+  has index: False
+  nrows: 64348146
 
 # number of rows in table
 >>> c.nrows
@@ -60,7 +65,7 @@ Column:
 >>> data = c.read()
 
 # using asdict=True puts the data into a dict.  The dict data
-# are loaded in this case
+# are also loaded in this case
 >>> data = c.read(asdict=True)
 
 # specify columns
@@ -89,7 +94,7 @@ Column:
 >>> ind = c['id'][rows]
 >>> ind = c.read_column('id', rows=rows)
 
-# reading a dict column
+# reading a dictionary column
 >>> meta = c['meta'].read()
 
 # Create indexes for fast searching
@@ -119,7 +124,7 @@ Column:
 # append data from the fields in a FITS file
 >>> c.from_fits(fitsfile_name)
 
-# add a dict column.
+# add a dictionary column.
 >>> c.create_column('weather', 'dict')
 >>> c['weather'].write({'temp': 30.1, 'humid': 0.5})
 
@@ -129,7 +134,8 @@ Column:
 # you should not generally create array columns, since they
 # can get out of sync with existing columns.  This will by default
 # raise an exception, but you can send verify=False if you know
-# what you are doing.  In the future support will be added for this.
+# what you are doing.  In the future special support will be added for
+# adding new columns
 >>> c.create_column('test', 'array')
 
 # update values for an array column
@@ -137,12 +143,13 @@ Column:
 >>> c['id'][35:35+3] = [8, 9, 10]
 >>> c['id'][rows] = idvalues
 
-# get all names, including dict and sub Columns
+# get all names, including dictionary and sub Columns
+# same as list(c.keys())
 >>> c.names
 ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g',
  'meta', 'psfstars']
 
-# only array columns
+# only array column names
 >>> c.column_names
 ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g']
 
@@ -163,7 +170,7 @@ Column:
 # delete column and its data
 >>> c.delete_column('ra')
 
-# to modify the amount of memory used during index creation, specify
+# to configure the amount of memory used during index creation, specify
 # cache_mem in gigabytes.  Default 1 gig
 >>> cols = pyc.Columns(fname, cache_mem=0.5)
 
