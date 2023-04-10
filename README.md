@@ -137,18 +137,21 @@ Column:
 >>> c['id'][35:35+3] = [8, 9, 10]
 >>> c['id'][rows] = idvalues
 
-# get the column names
->>> c.colnames
+# get all names, including dict and sub Columns
+>>> c.names
 ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g',
  'meta', 'psfstars']
+
 # only array columns
->>> c.array_colnames
+>>> c.column_names
 ['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g']
+
 # only dict columns
->>> c.dict_colnames
+>>> c.dict_names
 ['meta', 'weather']
-# only sub pycolumns directories
->>> c.cols_colnames
+
+# only sub Columns directories
+>>> c.subcols_names
 ['psfstars']
 
 # reload all columns or specified column/column list

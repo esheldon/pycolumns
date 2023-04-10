@@ -6,11 +6,9 @@ TODO
 
 """
 import os
-import bisect
 import numpy as np
 
 from . import util
-from .sfile import SimpleFile
 from .indices import Indices
 
 
@@ -557,6 +555,8 @@ class ArrayColumn(ColumnBase):
         self._init_index()
 
     def _write_index_memory(self, fname):
+        import fitsio
+
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
@@ -569,8 +569,8 @@ class ArrayColumn(ColumnBase):
         index_data.sort(order='value')
 
         # set up file name and data type info
-        with SimpleFile(fname, mode='w+') as sf:
-            sf.write(index_data)
+        with fitsio.FITS(fname, mode='rw', clobber=True) as output:
+            output.write(index_data)
 
     def _write_index_mergesort(self, tmpdir, fname):
         from .mergesort import create_mergesort_index
@@ -618,10 +618,13 @@ class ArrayColumn(ColumnBase):
         """
         If index file exists, load some info
         """
+        import fitsio
+
         index_fname = self.index_filename
         if os.path.exists(index_fname):
             self._has_index = True
-            self._index = SimpleFile(index_fname, mode='r+')
+            self._index = fitsio.FITS(index_fname, 'rw')
+            self._iarr1 = np.zeros(1, dtype=self.index_dtype)
         else:
             self._has_index = False
             self._index = None
@@ -686,16 +689,39 @@ class ArrayColumn(ColumnBase):
         """
         return self.between(val, val)
 
+    def _read_one_from_index(self, index):
+        iarr1 = self._iarr1
+        self._index._FITS.read_as_rec(self._ext+1, index+1, index+1, iarr1)
+        return iarr1['value'][0]
+
+    def _bisect_right(self, val):
+        return _bisect_right(
+            func=self._read_one_from_index,
+            x=val,
+            lo=0,
+            hi=self.nrows,
+        )
+
+    def _bisect_left(self, val):
+        return _bisect_left(
+            func=self._read_one_from_index,
+            x=val,
+            lo=0,
+            hi=self.nrows,
+        )
+
     # one-sided range operators
     def __gt__(self, val):
         """
         bisect_right returns i such that data[i:] are all strictly > val
         """
         self.verify_index_available()
+        i = self._bisect_right(val)
+        indices = self._index[1]['index'][i:].copy()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_right(mmap['value'], val)
-        indices = mmap['index'][i:].copy()
+        # mmap = self._index.mmap
+        # i = bisect.bisect_right(mmap['value'], val)
+        # indices = mmap['index'][i:].copy()
 
         return Indices(indices)
 
@@ -705,9 +731,12 @@ class ArrayColumn(ColumnBase):
         """
         self.verify_index_available()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_left(mmap['value'], val)
-        indices = mmap['index'][i:].copy()
+        i = self._bisect_left(val)
+        indices = self._index[1]['index'][i:].copy()
+
+        # mmap = self._index.mmap
+        # i = bisect.bisect_left(mmap['value'], val)
+        # indices = mmap['index'][i:].copy()
 
         return Indices(indices)
 
@@ -717,9 +746,12 @@ class ArrayColumn(ColumnBase):
         """
         self.verify_index_available()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_left(mmap['value'], val)
-        indices = mmap['index'][:i].copy()
+        i = self._bisect_left(val)
+        indices = self._index[1]['index'][:i].copy()
+
+        # mmap = self._index.mmap
+        # i = bisect.bisect_left(mmap['value'], val)
+        # indices = mmap['index'][:i].copy()
 
         return Indices(indices)
 
@@ -729,9 +761,12 @@ class ArrayColumn(ColumnBase):
         """
         self.verify_index_available()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_right(mmap['value'], val)
-        indices = mmap['index'][:i].copy()
+        i = self._bisect_right(val)
+        indices = self._index[1]['index'][:i].copy()
+
+        # mmap = self._index.mmap
+        # i = bisect.bisect_right(mmap['value'], val)
+        # indices = mmap['index'][:i].copy()
 
         return Indices(indices)
 
@@ -775,38 +810,47 @@ class ArrayColumn(ColumnBase):
 
         self.verify_index_available()
 
-        mmap = self._index.mmap
+        # mmap = self._index.mmap
         if interval == '[]':
             # bisect_left returns i such that data[i:] are all strictly >= val
-            ilow = bisect.bisect_left(mmap['value'], low)
+            # ilow = bisect.bisect_left(mmap['value'], low)
+            ilow = self._bisect_left(low)
 
             # bisect_right returns i such that data[:i] are all strictly <= val
-            ihigh = bisect.bisect_right(mmap['value'], high)
+            # ihigh = bisect.bisect_right(mmap['value'], high)
+            ihigh = self._bisect_right(high)
 
         elif interval == '(]':
             # bisect_right returns i such that data[i:] are all strictly > val
-            ilow = bisect.bisect_right(mmap['value'], low)
+            # ilow = bisect.bisect_right(mmap['value'], low)
+            ilow = self._bisect_right(low)
 
             # bisect_right returns i such that data[:i] are all strictly <= val
-            ihigh = bisect.bisect_right(mmap['value'], high)
+            # ihigh = bisect.bisect_right(mmap['value'], high)
+            ihigh = self._bisect_right(high)
 
         elif interval == '[)':
             # bisect_left returns i such that data[:i] are all strictly >= val
-            ilow = bisect.bisect_left(mmap['value'], low)
+            # ilow = bisect.bisect_left(mmap['value'], low)
+            ilow = self._bisect_left(low)
 
             # bisect_left returns i such that data[:i] are all strictly < val
-            ihigh = bisect.bisect_left(mmap['value'], high)
+            # ihigh = bisect.bisect_left(mmap['value'], high)
+            ihigh = self._bisect_left(high)
 
         elif interval == '()':
             # bisect_right returns i such that data[i:] are all strictly > val
-            ilow = bisect.bisect_right(mmap['value'], low)
+            # ilow = bisect.bisect_right(mmap['value'], low)
+            ilow = self._bisect_right(low)
 
             # bisect_left returns i such that data[:i] are all strictly < val
-            ihigh = bisect.bisect_left(mmap['value'], high)
+            # ihigh = bisect.bisect_left(mmap['value'], high)
+            ihigh = self._bisect_left(high)
         else:
             raise ValueError('bad interval type: %s' % interval)
 
-        indices = mmap['index'][ilow:ihigh].copy()
+        # indices = mmap['index'][ilow:ihigh].copy()
+        indices = self._index[1]['index'][ilow:ihigh]
 
         return Indices(indices)
 
@@ -935,36 +979,31 @@ def get_index_dtype(dtype):
     ])
 
 
-def _do_test_create_index(tmpdir, cache_mem, seed=999, num=1_000_000):
-    import os
-    import numpy as np
-    from . import sfile
-    from .columns import Columns
+def _bisect_right(func, x, lo, hi):
+    """
+    bisect right with function call to get value
+    """
 
-    cdir = os.path.join(tmpdir, 'test.cols')
-    cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if x < func(mid):
+            hi = mid
+        else:
+            lo = mid + 1
 
-    rng = np.random.RandomState(seed)
-    data = np.zeros(num, dtype=[('rand', 'f8')])
-    data['rand'] = rng.uniform(size=num)
-
-    cols.append(data)
-    cols['rand'].create_index()
-    ifile = cols['rand'].index_filename
-    idata = sfile.read(ifile)
-
-    s = data['rand'].argsort()
-    assert np.all(idata['value'] == data['rand'][s])
+    return lo
 
 
-def test_create_index(cache_mem=0.01, seed=999, num=1_000_000, keep=False):
-    import tempfile
-    if keep:
-        _do_test_create_index(
-            tmpdir='.', cache_mem=cache_mem, seed=seed, num=num,
-        )
-    else:
-        with tempfile.TemporaryDirectory(dir='.') as tmpdir:
-            _do_test_create_index(
-                tmpdir=tmpdir, cache_mem=cache_mem, seed=seed, num=num,
-            )
+def _bisect_left(func, x, lo, hi):
+    """
+    bisect left with function call to get value
+    """
+
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if func(mid) < x:
+            lo = mid + 1
+        else:
+            hi = mid
+
+    return lo

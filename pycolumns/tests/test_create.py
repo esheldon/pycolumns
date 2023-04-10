@@ -20,7 +20,7 @@ def test_create(cache_mem, verbose):
     with tempfile.TemporaryDirectory() as tmpdir:
         cdir = os.path.join(tmpdir, 'test.cols')
         cols = Columns(cdir, cache_mem=cache_mem, verbose=verbose)
-        assert len(cols.colnames) == 0
+        assert len(cols.names) == 0
 
         assert cols.dir == cdir
         assert cols.verbose == verbose
@@ -32,7 +32,7 @@ def test_create(cache_mem, verbose):
 
         cols.append(data)
 
-        assert len(cols.colnames) == len(data.dtype.names)
+        assert len(cols.names) == len(data.dtype.names)
         meta = {'version': '0.1', 'seeing': 0.9}
         cols.create_column('meta', 'dict')
         cols['meta'].write(meta)

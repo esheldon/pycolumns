@@ -57,37 +57,37 @@ class Columns(dict):
         return self._nrows
 
     @property
-    def colnames(self):
+    def names(self):
         """
         Get a list of all column names
         """
         return list(self.keys())
 
     @property
-    def array_colnames(self):
+    def table_names(self):
         """
-        Get a list of the array column names
+        Get a list of all column names
         """
-        return [c for c in self.keys() if self[c].type == 'array']
+        return [c for c in self if self[c].type == 'array']
 
     @property
-    def dict_colnames(self):
+    def dict_names(self):
         """
         Get a list of the array column names
         """
-        return [c for c in self.keys() if self[c].type == 'dict']
+        return [c for c in self if self[c].type == 'dict']
 
     @property
-    def cols_colnames(self):
+    def subcols_names(self):
         """
         Get a list of the array column names
         """
-        return [c for c in self.keys() if self[c].type == 'cols']
+        return [c for c in self if self[c].type == 'cols']
 
     @property
     def type(self):
         """
-        get the data type of the column
+        Get the type (cols for Columns)
         """
         return self._type
 
@@ -132,8 +132,8 @@ class Columns(dict):
         if not yes:
             return
 
-        for colname in self:
-            self.delete_column(colname, yes=True)
+        for name in self:
+            self.delete_column(name, yes=True)
 
     def _dirbase(self):
         """
@@ -341,11 +341,11 @@ class Columns(dict):
         if len(self) > 0:
             # make sure the input data matches the existing column names
             in_names = set(names)
-            a_names = set(self.array_colnames)
-            if in_names != a_names:
+            table_names = set(self.table_names)
+            if in_names != table_names:
                 raise ValueError(
                     f'input columns {in_names}'
-                    f'do not match existing array columns {a_names}'
+                    f'do not match existing table columns {table_names}'
                 )
 
         for name in names:
@@ -434,7 +434,7 @@ class Columns(dict):
         yes: bool
             If True, don't prompt for confirmation
         """
-        if name not in self:
+        if name not in self.colnumn_names:
             print("cannot delete column '%s', it does not exist" % name)
 
         if not yes:
@@ -465,7 +465,8 @@ class Columns(dict):
         ----------
         columns: sequence or string
             Can be a scalar string or a sequence of strings.  Defaults to all
-            array columns if asdict is False, all columns if asdict is True
+            array columns if asdict is False, but will include
+            dicts if asdict is True
         rows: sequence, slice or scalar
             Sequence of row numbers.  Defaults to all.
         asdict: bool, optional
@@ -486,7 +487,7 @@ class Columns(dict):
             for colname in columns:
 
                 if self.verbose:
-                    print('\treading column: %s' % colname)
+                    print('    reading column: %s' % colname)
 
                 # just read the data and put in dict, simpler than below
                 col = self[colname]
@@ -519,7 +520,7 @@ class Columns(dict):
 
             for colname in columns:
                 if self.verbose:
-                    print('\treading column: %s' % colname)
+                    print('    reading column: %s' % colname)
 
                 col = self[colname]
                 data[colname][:] = col.read(rows=rows)
@@ -563,13 +564,11 @@ class Columns(dict):
         """
         if columns is None:
 
-            keys = sorted(self.keys())
-
             if asdict:
+                keys = sorted(self.keys())
                 columns = keys
             else:
-                # just get the array columns
-                columns = [c for c in keys if self[c].type == 'array']
+                columns = self.table_names
 
         else:
             if isinstance(columns, str):

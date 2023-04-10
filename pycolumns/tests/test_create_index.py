@@ -9,7 +9,7 @@ def test_create_index(cache_mem):
     import os
     import tempfile
     import numpy as np
-    from .. import sfile
+    import fitsio
     from ..columns import Columns
 
     seed = 333
@@ -28,7 +28,7 @@ def test_create_index(cache_mem):
         assert cols['rand'].has_index
 
         ifile = cols['rand'].index_filename
-        idata = sfile.read(ifile)
+        idata = fitsio.read(ifile)
 
         s = data['rand'].argsort()
         assert np.all(idata['value'] == data['rand'][s])

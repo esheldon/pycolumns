@@ -2,7 +2,6 @@
 def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
     import tempfile
     import numpy as np
-    from .sfile import Slicer
     import fitsio
     from .column import get_index_dtype
     import time
@@ -86,7 +85,7 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
         print('Doing mergesort')
 
     mtm0 = time.time()
-    with Slicer(outfile, mode='w+') as sink:
+    with fitsio.FITS(outfile, mode='rw', clobber=True) as sink:
         nwritten = 0
         it = 0
         while len(mergers) > 0:
@@ -128,7 +127,13 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
                 nwritten += num2write
                 if verbose:
                     print(f'\nwriting {nwritten}/{nrows}')
-                sink.write(scratch[:num2write])
+
+                if len(sink) == 1:
+                    # nothing written yet
+                    sink.write(scratch[:num2write])
+                else:
+                    sink[1].append(scratch[:num2write])
+
                 iscratch = 0
             else:
                 if verbose and it % (chunksize // 20) == 0:
@@ -137,64 +142,3 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
     if verbose:
         print('merge time: %.3g min' % ((time.time() - mtm0)/60))
         print('total time: %.3g min' % ((time.time() - atm0)/60))
-
-
-def _do_test(
-    tmpdir, seed=999, num=1_000_000, chunksize_mbytes=5,
-):
-    import tempfile
-    import numpy as np
-    import esutil as eu
-    from . import sfile
-
-    valname = 'value'
-
-    rng = np.random.RandomState(seed)
-    values = rng.uniform(size=num)
-
-    check_data = np.zeros(num, dtype=[('index', 'i8'), (valname, 'f8')])
-    check_data['index'] = np.arange(num)
-    check_data[valname] = values
-
-    infile = tempfile.mktemp(dir=tmpdir, prefix='infile-', suffix='.sf')
-    outfile = tempfile.mktemp(dir=tmpdir, prefix='outfile-', suffix='.sf')
-
-    print('writing:', infile)
-    sfile.write(infile, values)
-
-    chunksize_bytes = chunksize_mbytes * 1024 * 1024
-
-    bytes_per_element = check_data.dtype.itemsize
-    chunksize = chunksize_bytes // bytes_per_element
-    print('chunksize:', chunksize)
-
-    create_mergesort_index(
-        infile=infile,
-        outfile=outfile,
-        chunksize=chunksize,
-        tmpdir=tmpdir,
-    )
-
-    sdata = sfile.read(outfile)
-    check_data.sort(order=valname, kind='mergesort')
-    assert eu.numpy_util.compare_arrays(
-        sdata,
-        check_data,
-        ignore_missing=False,
-        verbose=True,
-    )
-
-
-def test(seed=999, num=1_000_000, chunksize_mbytes=5, keep=False):
-    import tempfile
-    if keep:
-        _do_test(
-            tmpdir='.', seed=seed, num=num,
-            chunksize_mbytes=chunksize_mbytes,
-        )
-    else:
-        with tempfile.TemporaryDirectory(dir='.') as tmpdir:
-            _do_test(
-                tmpdir=tmpdir, seed=seed, num=num,
-                chunksize_mbytes=chunksize_mbytes,
-            )
