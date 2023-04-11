@@ -8,8 +8,8 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
 
     atm0 = time.time()
 
-    nrows = source.get_nrows()
-    dtype, _, _ = source.get_rec_dtype()
+    nrows = source.nrows
+    dtype = source.dtype
     index_dtype = get_index_dtype(dtype)
 
     nchunks = nrows // chunksize
@@ -38,13 +38,28 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
         start = i * chunksize
         end = (i + 1) * chunksize
 
+        tm0read = time.time()
+        if verbose:
+            print('reading ', end='', flush=True)
+
         chunk_value_data = source[start:end]
+
+        if verbose:
+            _ptime(tm0read)
+
         # might be fewer than requested in slice
         chunk_num = chunk_value_data.size
 
         chunk_data = np.zeros(chunk_num, dtype=index_dtype)
 
+        if verbose:
+            print('argsort ', end='', flush=True)
+
+        tm0sort = time.time()
         s = chunk_value_data.argsort()
+        if verbose:
+            _ptime(tm0sort)
+
         # chunk_data['index'] = np.arange(start, start+chunk_num)
         # chunk_data['value'] = chunk_value_data
         chunk_data['index'] = np.arange(start, start+chunk_num)[s]
@@ -52,9 +67,16 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
         del s
         del chunk_value_data
 
+        if verbose:
+            print('writing ', end='', flush=True)
+
+        tm0write = time.time()
         tmpf = tempfile.mktemp(dir=tmpdir, suffix='.sf')
         fobj = fitsio.FITS(tmpf, 'rw')
         fobj.write(chunk_data)
+
+        if verbose:
+            _ptime(tm0write)
 
         # cache from lower chunk of data
         cache = chunk_data[:cache_size].copy()
@@ -69,7 +91,7 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
         }
         mergers.append(data)
         if verbose:
-            print('time: %.3g sec' % (time.time() - tm0))
+            _ptime(tm0, end='\n')
 
     # merge onto sink
     stack_tops = np.zeros(len(mergers), dtype=index_dtype)
@@ -142,3 +164,9 @@ def create_mergesort_index(source, outfile, chunksize, tmpdir, verbose=False):
     if verbose:
         print('merge time: %.3g min' % ((time.time() - mtm0)/60))
         print('total time: %.3g min' % ((time.time() - atm0)/60))
+
+
+def _ptime(tm0, end=' '):
+    import time
+    tm = time.time() - tm0
+    print(f'({tm/60:.2g} min)', end=end, flush=True)

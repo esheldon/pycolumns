@@ -586,9 +586,8 @@ class ArrayColumn(ColumnBase):
         # mergesort
         chunksize = chunksize_bytes // (bytes_per_element * 2)
 
-        hdu = self._get_hdu()
         create_mergesort_index(
-            source=hdu,
+            source=self,
             outfile=fname,
             chunksize=chunksize,
             tmpdir=tmpdir,
