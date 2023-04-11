@@ -461,7 +461,6 @@ class ArrayColumn(ColumnBase):
             if rows.ndim == 0:
                 data = data[0]
 
-
         return data
 
     def __setitem__(self, arg, values):
