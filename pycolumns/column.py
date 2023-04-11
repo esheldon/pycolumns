@@ -6,11 +6,9 @@ TODO
 
 """
 import os
-import bisect
 import numpy as np
 
 from . import util
-from .sfile import SimpleFile
 from .indices import Indices
 
 
@@ -270,6 +268,7 @@ class ArrayColumn(ColumnBase):
         """
 
         self._type = 'array'
+        self._ext = 1
 
         self._cache_mem_gb = float(cache_mem)
 
@@ -280,16 +279,21 @@ class ArrayColumn(ColumnBase):
             verbose=verbose,
         )
 
-        if self.filename is None or not os.path.exists(self.filename):
+        # if self.filename is None or not os.path.exists(self.filename):
+        if self.filename is None:
             return
 
-        self._open_file('r+')
+        self._open_file()
 
         # get info for index if it exists
         self._init_index()
 
-    def _open_file(self, mode):
-        self._sf = SimpleFile(self.filename, mode=mode)
+    def _open_file(self):
+        import fitsio
+        self._fits = fitsio.FITS(self.filename, 'rw')
+
+    def _get_hdu(self):
+        return self._fits[self._ext]
 
     def _clear(self):
         """
@@ -299,7 +303,8 @@ class ArrayColumn(ColumnBase):
         super()._clear()
 
         if self.has_data:
-            del self._sf
+            del self._fits
+            del self._dtype
 
         self._has_index = False
 
@@ -308,7 +313,15 @@ class ArrayColumn(ColumnBase):
         """
         returns True if this column has some data
         """
-        return hasattr(self, '_sf')
+        has_data = False
+
+        if hasattr(self, '_fits'):
+            if len(self._fits) > 1:
+                hdu = self._get_hdu()
+                if hdu.has_data():
+                    has_data = True
+        # import IPython; IPython.embed()
+        return has_data
 
     def ensure_has_data(self):
         """
@@ -324,20 +337,22 @@ class ArrayColumn(ColumnBase):
         """
         self.ensure_has_data()
 
-        return self._sf.dtype
+        if not hasattr(self, '_dtype'):
+            hdu = self._get_hdu()
+            dtype, _, _ = hdu.get_rec_dtype()
+            self._converted_dtype, self._convert_unicode = (
+                util.maybe_convert_ascii_dtype_to_unicode(dtype)
+            )
+            descr = dtype.descr
+            assert len(descr) == 1
+            assert descr[0][0] == 'data'
+            self._dtype = dtype
+
+        return self._dtype
 
     @property
     def index_dtype(self):
         return get_index_dtype(self.dtype)
-
-    @property
-    def shape(self):
-        """
-        get the shape of the column
-        """
-        self.ensure_has_data()
-
-        return self._sf.shape
 
     @property
     def nrows(self):
@@ -346,16 +361,24 @@ class ArrayColumn(ColumnBase):
         """
         self.ensure_has_data()
 
-        return self._sf.shape[0]
+        hdu = self._get_hdu()
+        return hdu.get_nrows()
+
+    @property
+    def shape(self):
+        """
+        get the shape of the column
+        """
+        self.ensure_has_data()
+
+        return (self.nrows, )
 
     @property
     def size(self):
         """
         get the size of the columns
         """
-        self.ensure_has_data()
-
-        return self._sf.size
+        return self.nrows
 
     @property
     def data_size_bytes(self):
@@ -396,34 +419,63 @@ class ArrayColumn(ColumnBase):
         if data.dtype.names is not None:
             raise ValueError('do not enter data with fields')
 
-        if not self.has_data:
-            self._open_file('w+')
+        if data.ndim > 1:
+            raise ValueError('data must be one dimensional array')
 
-        self._sf.write(data)
+        self._write_data_as_rec(data)
 
         if self.has_index:
             self._update_index()
+
+    def _write_data_as_rec(self, data):
+        view_data = self._get_rec_view(data)
+
+        if not self.has_data:
+            self._fits.write(view_data)
+        else:
+            hdu = self._fits[self._ext]
+            hdu.append(view_data)
+
+    def _get_rec_view(self, data):
+        view_dtype = [('data', data.dtype.descr[0][1])]
+        return data.view(view_dtype)
 
     def __getitem__(self, arg):
         """
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        if not hasattr(self, '_sf'):
-            raise ValueError('no file loaded yet')
 
-        use_arg = util.extract_rows(arg, sort=True)
-        return self._sf[use_arg]
+        self.ensure_has_data()
+
+        hdu = self._get_hdu()
+
+        rows = util.extract_rows(arg, sort=True)
+
+        if rows is None:
+            data = hdu[:]['data']
+        elif isinstance(rows, slice):
+            data = hdu[rows]['data']
+        else:
+            data = np.zeros(rows.size, dtype=self.dtype)
+            hdu._FITS.read_rows_as_rec(self._ext+1, data, rows)
+            if self._convert_unicode:
+                data = data.astype(self._converted_dtype, copy=False)
+            data = data['data']
+            if rows.ndim == 0:
+                data = data[0]
+
+        return data
 
     def __setitem__(self, arg, values):
         """
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        if not hasattr(self, '_sf'):
-            raise ValueError('no file loaded yet')
+        raise RuntimeError('fix writing')
 
-        self._sf[arg] = values
+        if not hasattr(self, '_fits'):
+            raise ValueError('no file loaded yet')
 
     def read(self, rows=None):
         """
@@ -434,15 +486,10 @@ class ArrayColumn(ColumnBase):
         rows: sequence, slice, Indices or None, optional
             A subset of the rows to read.
         """
-        if not hasattr(self, '_sf'):
+        if not hasattr(self, '_fits'):
             raise ValueError('no file loaded yet')
 
         return self[rows]
-        # if rows is None:
-        #     return self._sf[:]
-        # else:
-        #     use_rows = util.extract_rows(rows, sort=True)
-        #     return self._sf[use_rows]
 
     def _delete(self):
         """
@@ -450,7 +497,7 @@ class ArrayColumn(ColumnBase):
         """
 
         if hasattr(self, '_sf'):
-            del self._sf
+            del self._fits
 
         super()._delete()
 
@@ -516,10 +563,13 @@ class ArrayColumn(ColumnBase):
         self._init_index()
 
     def _write_index_memory(self, fname):
+        import fitsio
+
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
         dt = self.index_dtype
+
         index_data = np.zeros(self.shape[0], dtype=dt)
         index_data['index'] = np.arange(index_data.size)
         index_data['value'] = self[:]
@@ -527,8 +577,8 @@ class ArrayColumn(ColumnBase):
         index_data.sort(order='value')
 
         # set up file name and data type info
-        with SimpleFile(fname, mode='w+') as sf:
-            sf.write(index_data)
+        with fitsio.FITS(fname, mode='rw', clobber=True) as output:
+            output.write(index_data)
 
     def _write_index_mergesort(self, tmpdir, fname):
         from .mergesort import create_mergesort_index
@@ -539,12 +589,13 @@ class ArrayColumn(ColumnBase):
         chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
         bytes_per_element = self.index_dtype.itemsize
+
         # need factor of two because we keep both the cache and the scratch in
         # mergesort
         chunksize = chunksize_bytes // (bytes_per_element * 2)
 
         create_mergesort_index(
-            infile=self.filename,
+            source=self,
             outfile=fname,
             chunksize=chunksize,
             tmpdir=tmpdir,
@@ -574,10 +625,13 @@ class ArrayColumn(ColumnBase):
         """
         If index file exists, load some info
         """
+        import fitsio
+
         index_fname = self.index_filename
         if os.path.exists(index_fname):
             self._has_index = True
-            self._index = SimpleFile(index_fname, mode='r+')
+            self._index = fitsio.FITS(index_fname, 'rw')
+            self._iarr1 = np.zeros(1, dtype=self.index_dtype)
         else:
             self._has_index = False
             self._index = None
@@ -592,7 +646,7 @@ class ArrayColumn(ColumnBase):
 
         # remove the final extension
         index_fname = '.'.join(self.filename.split('.')[0:-1])
-        index_fname = index_fname+'__index.sf'
+        index_fname = index_fname+'.index'
         return index_fname
 
     def match(self, values):
@@ -642,16 +696,42 @@ class ArrayColumn(ColumnBase):
         """
         return self.between(val, val)
 
+    def _read_one_from_index(self, index):
+        iarr1 = self._iarr1
+        self._index._FITS.read_as_rec(self._ext+1, index+1, index+1, iarr1)
+        val = iarr1['value'][0]
+        if self._convert_unicode:
+            return str(val, 'utf-8')
+        return val
+
+    def _bisect_right(self, val):
+        return _bisect_right(
+            func=self._read_one_from_index,
+            x=val,
+            lo=0,
+            hi=self.nrows,
+        )
+
+    def _bisect_left(self, val):
+        return _bisect_left(
+            func=self._read_one_from_index,
+            x=val,
+            lo=0,
+            hi=self.nrows,
+        )
+
     # one-sided range operators
     def __gt__(self, val):
         """
         bisect_right returns i such that data[i:] are all strictly > val
         """
         self.verify_index_available()
+        i = self._bisect_right(val)
+        indices = self._index[1]['index'][i:].copy()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_right(mmap['value'], val)
-        indices = mmap['index'][i:].copy()
+        # mmap = self._index.mmap
+        # i = bisect.bisect_right(mmap['value'], val)
+        # indices = mmap['index'][i:].copy()
 
         return Indices(indices)
 
@@ -661,9 +741,12 @@ class ArrayColumn(ColumnBase):
         """
         self.verify_index_available()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_left(mmap['value'], val)
-        indices = mmap['index'][i:].copy()
+        i = self._bisect_left(val)
+        indices = self._index[1]['index'][i:].copy()
+
+        # mmap = self._index.mmap
+        # i = bisect.bisect_left(mmap['value'], val)
+        # indices = mmap['index'][i:].copy()
 
         return Indices(indices)
 
@@ -673,9 +756,12 @@ class ArrayColumn(ColumnBase):
         """
         self.verify_index_available()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_left(mmap['value'], val)
-        indices = mmap['index'][:i].copy()
+        i = self._bisect_left(val)
+        indices = self._index[1]['index'][:i].copy()
+
+        # mmap = self._index.mmap
+        # i = bisect.bisect_left(mmap['value'], val)
+        # indices = mmap['index'][:i].copy()
 
         return Indices(indices)
 
@@ -685,9 +771,12 @@ class ArrayColumn(ColumnBase):
         """
         self.verify_index_available()
 
-        mmap = self._index.mmap
-        i = bisect.bisect_right(mmap['value'], val)
-        indices = mmap['index'][:i].copy()
+        i = self._bisect_right(val)
+        indices = self._index[1]['index'][:i].copy()
+
+        # mmap = self._index.mmap
+        # i = bisect.bisect_right(mmap['value'], val)
+        # indices = mmap['index'][:i].copy()
 
         return Indices(indices)
 
@@ -731,38 +820,47 @@ class ArrayColumn(ColumnBase):
 
         self.verify_index_available()
 
-        mmap = self._index.mmap
+        # mmap = self._index.mmap
         if interval == '[]':
             # bisect_left returns i such that data[i:] are all strictly >= val
-            ilow = bisect.bisect_left(mmap['value'], low)
+            # ilow = bisect.bisect_left(mmap['value'], low)
+            ilow = self._bisect_left(low)
 
             # bisect_right returns i such that data[:i] are all strictly <= val
-            ihigh = bisect.bisect_right(mmap['value'], high)
+            # ihigh = bisect.bisect_right(mmap['value'], high)
+            ihigh = self._bisect_right(high)
 
         elif interval == '(]':
             # bisect_right returns i such that data[i:] are all strictly > val
-            ilow = bisect.bisect_right(mmap['value'], low)
+            # ilow = bisect.bisect_right(mmap['value'], low)
+            ilow = self._bisect_right(low)
 
             # bisect_right returns i such that data[:i] are all strictly <= val
-            ihigh = bisect.bisect_right(mmap['value'], high)
+            # ihigh = bisect.bisect_right(mmap['value'], high)
+            ihigh = self._bisect_right(high)
 
         elif interval == '[)':
             # bisect_left returns i such that data[:i] are all strictly >= val
-            ilow = bisect.bisect_left(mmap['value'], low)
+            # ilow = bisect.bisect_left(mmap['value'], low)
+            ilow = self._bisect_left(low)
 
             # bisect_left returns i such that data[:i] are all strictly < val
-            ihigh = bisect.bisect_left(mmap['value'], high)
+            # ihigh = bisect.bisect_left(mmap['value'], high)
+            ihigh = self._bisect_left(high)
 
         elif interval == '()':
             # bisect_right returns i such that data[i:] are all strictly > val
-            ilow = bisect.bisect_right(mmap['value'], low)
+            # ilow = bisect.bisect_right(mmap['value'], low)
+            ilow = self._bisect_right(low)
 
             # bisect_left returns i such that data[:i] are all strictly < val
-            ihigh = bisect.bisect_left(mmap['value'], high)
+            # ihigh = bisect.bisect_left(mmap['value'], high)
+            ihigh = self._bisect_left(high)
         else:
             raise ValueError('bad interval type: %s' % interval)
 
-        indices = mmap['index'][ilow:ihigh].copy()
+        # indices = mmap['index'][ilow:ihigh].copy()
+        indices = self._index[1]['index'][ilow:ihigh]
 
         return Indices(indices)
 
@@ -780,12 +878,14 @@ class ArrayColumn(ColumnBase):
                 s += 'Column: %-15s' % self.name
 
             s += ' type: %10s' % self.type
+            if self.has_data:
 
-            if self.shape is not None:
-                s += ' shape: %12s' % (self.shape,)
+                # if self.shape is not None:
+                #     s += ' shape: %12s' % (self.shape,)
+                s += ' nrows: %12s' % self.nrows
 
-            if self.name is not None:
-                s += ' has index: %s' % self.has_index
+                if self.name is not None:
+                    s += ' has index: %s' % self.has_index
 
             s = [s]
         else:
@@ -798,15 +898,15 @@ class ArrayColumn(ColumnBase):
 
             s += ['type: array']
 
-            if self.shape is not None:
-                s += ['shape: %s' % (self.shape,)]
-
-            if self.name is not None:
+            if self.has_data:
                 s += ['has index: %s' % self.has_index]
 
-            if self.dtype is not None:
                 c_dtype = self.dtype.descr[0][1]
-                s += ["dtype: %s" % c_dtype]
+                s += ['dtype: %s' % c_dtype]
+
+                # if self.shape is not None:
+                #     s += ['shape: %s' % (self.shape,)]
+                s += ['nrows: %s' % self.nrows]
 
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
@@ -889,36 +989,31 @@ def get_index_dtype(dtype):
     ])
 
 
-def _do_test_create_index(tmpdir, cache_mem, seed=999, num=1_000_000):
-    import os
-    import numpy as np
-    from . import sfile
-    from .columns import Columns
+def _bisect_right(func, x, lo, hi):
+    """
+    bisect right with function call to get value
+    """
 
-    cdir = os.path.join(tmpdir, 'test.cols')
-    cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if x < func(mid):
+            hi = mid
+        else:
+            lo = mid + 1
 
-    rng = np.random.RandomState(seed)
-    data = np.zeros(num, dtype=[('rand', 'f8')])
-    data['rand'] = rng.uniform(size=num)
-
-    cols.append(data)
-    cols['rand'].create_index()
-    ifile = cols['rand'].index_filename
-    idata = sfile.read(ifile)
-
-    s = data['rand'].argsort()
-    assert np.all(idata['value'] == data['rand'][s])
+    return lo
 
 
-def test_create_index(cache_mem=0.01, seed=999, num=1_000_000, keep=False):
-    import tempfile
-    if keep:
-        _do_test_create_index(
-            tmpdir='.', cache_mem=cache_mem, seed=seed, num=num,
-        )
-    else:
-        with tempfile.TemporaryDirectory(dir='.') as tmpdir:
-            _do_test_create_index(
-                tmpdir=tmpdir, cache_mem=cache_mem, seed=seed, num=num,
-            )
+def _bisect_left(func, x, lo, hi):
+    """
+    bisect left with function call to get value
+    """
+
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if func(mid) < x:
+            lo = mid + 1
+        else:
+            hi = mid
+
+    return lo

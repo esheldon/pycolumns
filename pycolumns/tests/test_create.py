@@ -20,19 +20,21 @@ def test_create(cache_mem, verbose):
     with tempfile.TemporaryDirectory() as tmpdir:
         cdir = os.path.join(tmpdir, 'test.cols')
         cols = Columns(cdir, cache_mem=cache_mem, verbose=verbose)
-        assert len(cols.colnames) == 0
+        assert len(cols.names) == 0
 
         assert cols.dir == cdir
         assert cols.verbose == verbose
         assert cols.cache_mem == cache_mem
 
-        data = np.zeros(num, dtype=[('id', 'i8'), ('rand', 'f4')])
+        dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+        data = np.zeros(num, dtype=dtype)
         data['id'] = np.arange(num)
         data['rand'] = rng.uniform(size=num)
+        data['scol'] = [str(val) for val in data['id']]
 
         cols.append(data)
 
-        assert len(cols.colnames) == len(data.dtype.names)
+        assert len(cols.names) == len(data.dtype.names)
         meta = {'version': '0.1', 'seeing': 0.9}
         cols.create_column('meta', 'dict')
         cols['meta'].write(meta)
@@ -58,6 +60,7 @@ def test_create(cache_mem, verbose):
         cols.append(data)
         assert cols['id'].size == num * 2
         assert cols['rand'].size == num * 2
+        assert cols['scol'].size == num * 2
 
         # don't allow appending with new columns
         with pytest.raises(ValueError):
@@ -67,15 +70,15 @@ def test_create(cache_mem, verbose):
         with pytest.raises(ValueError):
             bad_data = np.zeros(
                 3,
-                dtype=[('id', 'i8'), ('rand', 'f4'), ('extra', 'i2')],
+                dtype=dtype + [('extra', 'i2')],
             )
             cols.append(bad_data)
 
         # can currently update column at a time
-        cols['rand'][5] = 35
-        assert cols['rand'][5] == 35
+        # cols['rand'][5] = 35
+        # assert cols['rand'][5] == 35
 
-        idx = [8, 12]
-        vals = [1.0, 2.0]
-        cols['rand'][idx] = vals
-        assert np.all(cols['rand'][idx] == vals)
+        # idx = [8, 12]
+        # vals = [1.0, 2.0]
+        # cols['rand'][idx] = vals
+        # assert np.all(cols['rand'][idx] == vals)

@@ -27,7 +27,10 @@ class Indices(np.ndarray):
     """
     def __new__(self, init_data, copy=False):
         self._is_sorted = False
-        arr = np.array(init_data, copy=copy)
+
+        # always force native byte order since we send this to C code
+        # when using fitsio
+        arr = np.array(init_data, dtype='i8', copy=copy)
         shape = arr.shape
 
         ret = np.ndarray.__new__(self, shape, arr.dtype,
