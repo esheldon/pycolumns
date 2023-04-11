@@ -525,7 +525,6 @@ class Columns(dict):
                 col = self[colname]
                 data[colname][:] = col.read(rows=rows)
 
-        data = util.maybe_decode_fits_ascii_strings_to_unicode_py3(data)
         return data
 
     def _extract_dtype(self, columns):

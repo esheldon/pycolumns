@@ -340,6 +340,9 @@ class ArrayColumn(ColumnBase):
         if not hasattr(self, '_dtype'):
             hdu = self._get_hdu()
             dtype, _, _ = hdu.get_rec_dtype()
+            self._converted_dtype, self._convert_unicode = (
+                util.maybe_convert_ascii_dtype_to_unicode(dtype)
+            )
             descr = dtype.descr
             assert len(descr) == 1
             assert descr[0][0] == 'data'
@@ -456,7 +459,8 @@ class ArrayColumn(ColumnBase):
         else:
             data = np.zeros(rows.size, dtype=self.dtype)
             hdu._FITS.read_rows_as_rec(self._ext+1, data, rows)
-            data = util.maybe_decode_fits_ascii_strings_to_unicode_py3(data)
+            if self._convert_unicode:
+                data = data.astype(self._converted_dtype, copy=False)
             data = data['data']
             if rows.ndim == 0:
                 data = data[0]
@@ -695,7 +699,10 @@ class ArrayColumn(ColumnBase):
     def _read_one_from_index(self, index):
         iarr1 = self._iarr1
         self._index._FITS.read_as_rec(self._ext+1, index+1, index+1, iarr1)
-        return iarr1['value'][0]
+        val = iarr1['value'][0]
+        if self._convert_unicode:
+            return str(val, 'utf-8')
+        return val
 
     def _bisect_right(self, val):
         return _bisect_right(
