@@ -450,14 +450,17 @@ class ArrayColumn(ColumnBase):
         rows = util.extract_rows(arg, sort=True)
 
         if rows is None:
-            data = hdu[:]
+            data = hdu[:]['data']
         elif isinstance(rows, slice):
-            data = hdu[rows]
+            data = hdu[rows]['data']
         else:
             data = np.zeros(rows.size, dtype=self.dtype)
             hdu._FITS.read_rows_as_rec(self._ext+1, data, rows)
+            data = data['data']
+            if rows.ndim == 0:
+                data = data[0]
 
-        return data['data']
+        return data
 
     def __setitem__(self, arg, values):
         """
