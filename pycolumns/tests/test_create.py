@@ -26,9 +26,11 @@ def test_create(cache_mem, verbose):
         assert cols.verbose == verbose
         assert cols.cache_mem == cache_mem
 
-        data = np.zeros(num, dtype=[('id', 'i8'), ('rand', 'f4')])
+        dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+        data = np.zeros(num, dtype=dtype)
         data['id'] = np.arange(num)
         data['rand'] = rng.uniform(size=num)
+        data['scol'] = [str(val) for val in data['id']]
 
         cols.append(data)
 
@@ -58,6 +60,7 @@ def test_create(cache_mem, verbose):
         cols.append(data)
         assert cols['id'].size == num * 2
         assert cols['rand'].size == num * 2
+        assert cols['scol'].size == num * 2
 
         # don't allow appending with new columns
         with pytest.raises(ValueError):
@@ -67,7 +70,7 @@ def test_create(cache_mem, verbose):
         with pytest.raises(ValueError):
             bad_data = np.zeros(
                 3,
-                dtype=[('id', 'i8'), ('rand', 'f4'), ('extra', 'i2')],
+                dtype=dtype + [('extra', 'i2')],
             )
             cols.append(bad_data)
 
