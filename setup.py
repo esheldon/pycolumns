@@ -23,5 +23,6 @@ setup(
     description='A simple, efficient, pythonic column data store',
     long_description=long_description,
     long_description_content_type='text/markdown; charset=UTF-8; variant=GFM',
-    install_requires=['numpy'],
+    setup_requires=['numpy', 'fitsio'],
+    install_requires=['numpy', 'fitsio'],
 )
