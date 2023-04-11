@@ -456,9 +456,11 @@ class ArrayColumn(ColumnBase):
         else:
             data = np.zeros(rows.size, dtype=self.dtype)
             hdu._FITS.read_rows_as_rec(self._ext+1, data, rows)
+            data = hdu._maybe_decode_fits_ascii_strings_to_unicode_py3(data)
             data = data['data']
             if rows.ndim == 0:
                 data = data[0]
+
 
         return data
 
