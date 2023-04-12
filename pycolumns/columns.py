@@ -4,20 +4,12 @@ todo
     - allow update index without completely redoing it
     - tests for sub columns
     - Maybe add option "unsort" to put indices back in original unsorted order
-    - add updating a set of columns with indices= and data=
-        - already can do column by itself
-        - Would need to think carefully if we wanted to optimize by sorting
-          etc. to keep things consistent
-    - note if we move to not using memmap, will need to maybe think about when
-      there are duplicates in the requested indices.
-    - there will be no column set value method without mmap, would need to
-      add that functionality
+    - add updating a set of columns/column
     - make it possible to add_column for array if we then eventually verify
     - if reading single row, scalar, doing from column gives a number but
       on columns with read gives length 1 array
     - support update on dict column, which would be like a normal dict
       update
-    - better from_fits that uses cache_mem
 """
 import os
 from glob import glob
@@ -393,34 +385,36 @@ class Columns(dict):
             rowsize = one.itemsize
 
             # step size in bytes
-            step_bytes = 100*1000000
+            step_bytes = int(self._cache_mem_gb * 1024**3)
 
             # step size in rows
-            step = step_bytes//rowsize
+            step = step_bytes // rowsize
 
-            nstep = nrows//step
+            nstep = nrows // step
             nleft = nrows % step
 
             if nleft > 0:
                 nstep += 1
 
-            if self.verbose > 1:
+            if self.verbose:
                 print('Loading %s rows from file: %s' % (nrows, filename))
 
             for i in range(nstep):
 
-                start = i*step
-                stop = (i+1)*step
+                start = i * step
+                stop = (i + 1) * step
+
                 if stop > nrows:
+                    # not needed, but use for printouts
                     stop = nrows
 
-                if self.verbose > 1:
-                    print('Writing slice: %s:%s out '
-                          'of %s' % (start, stop, nrows))
+                if self.verbose:
+                    print(f'    {start}:{stop} of {nrows}')
 
                 data = hdu[start:stop]
 
-                data = util.get_native_data(data)
+                # not needed with fits backend
+                # data = util.get_native_data(data)
 
                 self.append(data, verify=False)
 
