@@ -568,8 +568,9 @@ class ArrayColumn(ColumnBase):
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
-        dt = self.index_dtype
-
+        # want native so no copying which happens for writes
+        # dt = self.index_dtype
+        dt = get_index_dtype(self.dtype, native=True)
         index_data = np.zeros(self.shape[0], dtype=dt)
         index_data['index'] = np.arange(index_data.size)
         index_data['value'] = self[:]
@@ -982,10 +983,17 @@ class DictColumn(ColumnBase):
         return s
 
 
-def get_index_dtype(dtype):
+def get_index_dtype(dtype, native=False):
+    # this removed the <,  > etc so it
+    # is native
+    dt = dtype.descr[0][1]
+    if native:
+        dt = dt[1:]
+
     return np.dtype([
-        ('index', '>i8'),
-        ('value', dtype.descr[0][1]),
+        ('index', 'i8'),
+        # ('value', dtype.descr[0][1][1:]),
+        ('value', dt),
     ])
 
 
