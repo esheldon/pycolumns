@@ -600,7 +600,8 @@ class Columns(dict):
             dbase = self._dirbase()
             s += [dbase]
             s += ['dir: '+self.dir]
-            s += ['nrows: %s' % self.nrows]
+            if hasattr(self, '_nrows'):
+                s += ['nrows: %s' % self.nrows]
 
         s += ['']
         subcols = []
