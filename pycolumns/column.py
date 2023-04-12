@@ -984,7 +984,7 @@ class DictColumn(ColumnBase):
 
 def get_index_dtype(dtype):
     return np.dtype([
-        ('index', 'i8'),
+        ('index', '>i8'),
         ('value', dtype.descr[0][1]),
     ])
 
