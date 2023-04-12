@@ -286,13 +286,16 @@ class Columns(dict):
         """
         Load a coldir under this coldir
         """
-        coldir = Columns(dir, verbose=self.verbose)
         if not os.path.exists(dir):
             raise RuntimeError("coldir does not exists: '%s'" % dir)
 
-        name = coldir._dirbase()
+        cols = Columns(
+            dir, cache_mem=self.cache_mem, verbose=self.verbose,
+        )
+
+        name = cols._dirbase()
         self._clear(name)
-        self[name] = coldir
+        self[name] = cols
 
     def reload(self, columns=None):
         """
