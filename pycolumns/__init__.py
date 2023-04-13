@@ -13,3 +13,5 @@ from . import indices
 from .indices import Indices
 
 from . import mergesort
+
+from . import _rowsfile
