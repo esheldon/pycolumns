@@ -308,7 +308,6 @@ PyRowsFile_read_slice(
 
     num = PyArray_SIZE(array);
     elsize = PyArray_ITEMSIZE(array);
-    // offset = PYROWSFILE_ELOC + start * elsize;
     offset = get_row_offset(start, elsize);
     end = get_row_offset(start + num, elsize);
     max_possible = get_row_offset(self->nrows, elsize);
@@ -322,31 +321,22 @@ PyRowsFile_read_slice(
     fprintf(stderr, "seeking to: %ld\n", offset);
 
     // SEEK_SET is from beginning
+    // note fseek does not set EOF or an error, would need to
+    // try the read first, hencd check above
     fseek(self->fptr, offset, SEEK_SET);
-    if (feof(self->fptr)) {
-        PyErr_Format(PyExc_IOError,
-                     "Hit EOF seeking to %ld in %s",
-                     start, self->fname);
-        return NULL;
-    }
-    if (ferror(self->fptr)) {
-        PyErr_Format(PyExc_IOError,
-                     "Error seeking to %ld in %s",
-                     start, self->fname);
-        return NULL;
-    }
 
     fprintf(stderr, "at: %ld\n", ftell(self->fptr));
 
     fprintf(stderr, "reading: elsize: %ld num: %ld\n", elsize, num);
-    // NPY_BEGIN_ALLOW_THREADS;
+
+    NPY_BEGIN_ALLOW_THREADS;
     nread = fread(
         PyArray_DATA(array),
         elsize,
         num,
         self->fptr
     );
-    // NPY_END_ALLOW_THREADS;
+    NPY_END_ALLOW_THREADS;
 
     fprintf(stderr, "read: %ld\n", nread);
     if (nread != num) {
