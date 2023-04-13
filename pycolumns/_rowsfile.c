@@ -275,6 +275,12 @@ PyRowsFile_append(
     Py_RETURN_NONE;
 }
 
+
+static PY_LONG_LONG
+get_row_offset(row, elsize) {
+    return PYROWSFILE_ELOC + row * elsize;
+}
+
 // read data into input array as a slice
 // array must be contiguous
 static PyObject*
@@ -288,9 +294,11 @@ PyRowsFile_read_slice(
     PyArrayObject* array = NULL;
     long long start =0;
     npy_intp num = 0;
+    npy_intp end = 0;
     npy_intp elsize = 0;
     npy_intp offset = 0;
     npy_intp nread = 0;
+    npy_intp max_possible = 0;
 
     if (!PyArg_ParseTuple(args, (char*)"OL", &arrayo, &start)) {
         return NULL;
@@ -300,16 +308,34 @@ PyRowsFile_read_slice(
 
     num = PyArray_SIZE(array);
     elsize = PyArray_ITEMSIZE(array);
-    offset = PYROWSFILE_ELOC + start * elsize;
+    // offset = PYROWSFILE_ELOC + start * elsize;
+    offset = get_row_offset(start, elsize);
+    end = get_row_offset(start + num, elsize);
+    max_possible = get_row_offset(self->nrows, elsize);
+
+    if (offset > max_possible || end > max_possible) {
+        PyErr_Format(PyExc_IOError,
+                     "Attempt to read rows [%ld, %ld) goes beyond EOF",
+                     start, start + num);
+        return NULL;
+    }
     fprintf(stderr, "seeking to: %ld\n", offset);
 
     // SEEK_SET is from beginning
-    if (-1 == fseek(self->fptr, offset, SEEK_SET)) {
+    fseek(self->fptr, offset, SEEK_SET);
+    if (feof(self->fptr)) {
+        PyErr_Format(PyExc_IOError,
+                     "Hit EOF seeking to %ld in %s",
+                     start, self->fname);
+        return NULL;
+    }
+    if (ferror(self->fptr)) {
         PyErr_Format(PyExc_IOError,
                      "Error seeking to %ld in %s",
                      start, self->fname);
         return NULL;
     }
+
     fprintf(stderr, "at: %ld\n", ftell(self->fptr));
 
     fprintf(stderr, "reading: elsize: %ld num: %ld\n", elsize, num);
