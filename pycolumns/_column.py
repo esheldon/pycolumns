@@ -119,7 +119,7 @@ class Column(_column_pywrap.Column):
         nrows = stop - start
         if data.size != nrows:
             raise ValueError(f'data size {data.size} != slice nrows {nrows}')
-        super().read_rows(data, start)
+        super().read_slice(data, start)
 
     def append(self, data):
         """
