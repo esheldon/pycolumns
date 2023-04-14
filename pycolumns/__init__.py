@@ -3,7 +3,7 @@
 from .version import __version__
 
 from . import columns
-from .columns import Columns, where
+from .columns import Columns
 
 from . import util
 

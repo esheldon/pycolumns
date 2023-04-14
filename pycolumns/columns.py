@@ -125,7 +125,7 @@ class Columns(dict):
             return
 
         for name in self:
-            self.delete_column(name, yes=True)
+            self.delete_entry(name, yes=True)
 
     def _dirbase(self):
         """
@@ -167,7 +167,7 @@ class Columns(dict):
                     if type == 'cols':
                         self._load_coldir(f)
                     else:
-                        self._load_column(f)
+                        self._load_entry(f)
         self.verify()
 
     def verify(self):
@@ -190,7 +190,7 @@ class Columns(dict):
                             'got %d vs %d' % (c, this_nrows, self.nrows)
                         )
 
-    def _load_column(self, filename):
+    def _load_entry(self, filename):
         """
         Load the specified column
         """
@@ -201,7 +201,7 @@ class Columns(dict):
         if type not in ALLOWED_COL_TYPES:
             raise ValueError("bad column type: '%s'" % type)
 
-        col = self._open_column(
+        col = self._open_entry(
             filename=filename,
             name=name,
             type=type,
@@ -211,7 +211,7 @@ class Columns(dict):
         self._clear(name)
         self[name] = col
 
-    def _open_column(self, filename, name, type):
+    def _open_entry(self, filename, name, type):
         from .column import Column
         from .dictfile import DictFile
 
@@ -235,7 +235,36 @@ class Columns(dict):
 
         return col
 
-    def create_column(self, name, type, verify=True):
+    def create_dict(self, name):
+        """
+        create a new dict column
+
+        parameters
+        ----------
+        name: str
+            Column name
+        """
+
+        type = 'dict'
+        if name in self.dict_names:
+            raise ValueError("column '%s' already exists" % name)
+
+        if self.dir is None:
+            raise ValueError("no dir is set for Columns db, can't "
+                             "construct names")
+
+        filename = util.create_filename(dir=self.dir, name=name, type=type)
+
+        dictfile = self._open_entry(
+            filename=filename,
+            name=name,
+            type=type,
+        )
+
+        name = dictfile.name
+        self[name] = dictfile
+
+    def _create_column(self, name, verify=True):
         """
         create the specified column
 
@@ -250,23 +279,20 @@ class Columns(dict):
         ----------
         name: str
             Column name
-        type: str
-            Column type, 'dict'
         """
+
+        type = 'array'
 
         if name in self:
             raise ValueError("column '%s' already exists" % name)
-
-        if type not in ALLOWED_COL_TYPES:
-            raise ValueError("bad column type: '%s'" % type)
 
         if self.dir is None:
             raise ValueError("no dir is set for Columns db, can't "
                              "construct names")
 
-        filename = util.create_filename(self.dir, name, type)
+        filename = util.create_filename(dir=self.dir, name=name, type=type)
 
-        col = self._open_column(
+        col = self._open_entry(
             filename=filename,
             name=name,
             type=type,
@@ -361,7 +387,7 @@ class Columns(dict):
         """
 
         if name not in self:
-            self.create_column(name, 'array', verify=False)
+            self._create_column(name, verify=False)
 
         self[name]._append(data)
 
@@ -423,32 +449,41 @@ class Columns(dict):
 
         self.verify()
 
-    def delete_column(self, name, yes=False):
+    def delete_entry(self, name, yes=False):
         """
-        delete the specified column and reload
+        delete the specified entry and reload
 
         parameters
         ----------
         name: string
-            Name of column to delete
+            Name of entry to delete
         yes: bool
             If True, don't prompt for confirmation
         """
-        if name not in self.colnumn_names:
-            print("cannot delete column '%s', it does not exist" % name)
+        if name not in self.names:
+            print("cannot delete entry '%s', it does not exist" % name)
 
         if not yes:
-            answer = input("really delete column '%s'? (y/n) " % name)
+            answer = input("really delete entry '%s'? (y/n) " % name)
             if answer.lower() == 'y':
                 yes = True
 
         if not yes:
             return
 
-        fname = self[name].filename
-        if os.path.exists(fname):
-            print("Removing data for column: %s" % name)
-            os.remove(fname)
+        entry = self[name]
+        if entry.type == 'cols':
+            print("Removing data for sub columns: %s" % name)
+
+            entry.delete(yes=True)
+            fname = entry.filename
+            if os.path.exists(fname):
+                os.removedirs(fname)
+        else:
+            fname = entry.filename
+            if os.path.exists(fname):
+                print("Removing data for entry: %s" % name)
+                os.remove(fname)
 
         self.reload()
 
@@ -532,17 +567,6 @@ class Columns(dict):
             dtype.append(dt)
 
         return dtype
-
-    read_columns = read
-
-    def read_column(self, colname, rows=None):
-        """
-        Only numpy, fixed length for now.  Eventually allow pickled columns.
-        """
-        if colname not in self:
-            raise ValueError("Column '%s' not found" % colname)
-
-        return self[colname].read(rows=rows)
 
     def _extract_columns(self, columns=None, asdict=False):
         """
@@ -655,45 +679,3 @@ class Columns(dict):
         s = self._get_repr_list()
         s = '\n'.join(s)
         return s
-
-
-def where(query_index):
-    """
-    Extract results from a query_index object into a normal numpy array.  This
-    is not usually necessary, as query objects inherit from numpy arrays.
-
-    Parameters
-    ----------
-    query_index: Indices
-        An Indices object generated by using operators such as "==" on an
-        indexed column object.  The Column methods between and match also
-        return Indices objects.  Indices objects can be combined with the "|"
-        and "&" operators.  This where functions extracts the underlying
-        index array.
-
-    Returns
-    -------
-    numpy array of indices
-
-    Example
-    --------
-
-        # lets say we have indexes on columns 'type' and 'mag' get the indices
-        # where type is 'event' and rate is between 10 and 20.  Note the braces
-        # around each operation are required here
-
-        >>> import columns
-        >>> c=columns.Columns(column_dir)
-        >>> ind=columns.where(  (c['type'] == 'event')
-                              & (c['rate'].between(10,20)) )
-
-        # now read some data from a set of columns using these
-        # indices.  We can do this with individual columns:
-        >>> ind = columns['id'][ind]
-        >>> x = columns['x'][ind]
-        >>> y = columns['y'][ind]
-
-        # we can also extract multiple columns at once
-        >>> data = columns.read(columns=['x','y','mag','type'], rows=ind)
-    """
-    return query_index.array()

@@ -83,7 +83,6 @@ Column:
 # alternative syntaxes
 >>> ind = c['id'][:]
 >>> ind = c['id'].read()
->>> ind = c.read_column('id')
 
 # read a subset of rows
 # slicing
@@ -92,7 +91,7 @@ Column:
 # specifying a set of rows
 >>> rows = [3, 225, 1235]
 >>> ind = c['id'][rows]
->>> ind = c.read_column('id', rows=rows)
+>>> ind = c['id'].read(rows=rows)
 
 # reading a dictionary column
 >>> meta = c['meta'].read()
@@ -125,18 +124,11 @@ Column:
 >>> c.from_fits(fitsfile_name)
 
 # add a dictionary column.
->>> c.create_column('weather', 'dict')
+>>> c.create_dict('weather')
 >>> c['weather'].write({'temp': 30.1, 'humid': 0.5})
 
 # overwrite dict column
 >>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})
-
-# you should not generally create array columns, since they
-# can get out of sync with existing columns.  This will by default
-# raise an exception, but you can send verify=False if you know
-# what you are doing.  In the future special support will be added for
-# adding new columns
->>> c.create_column('test', 'array')
 
 # update values for an array column
 >>> c['id'][35] = 10
@@ -167,8 +159,8 @@ Column:
 # delete all data.  This will ask for confirmation
 >>> c.delete()
 
-# delete column and its data
->>> c.delete_column('ra')
+# delete an entry (column, dict, etc.) and its data
+>>> c.delete_entry('ra')
 
 # to configure the amount of memory used during index creation, specify
 # cache_mem in gigabytes.  Default 1 gig

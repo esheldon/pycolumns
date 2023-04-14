@@ -36,7 +36,7 @@ def test_create(cache_mem, verbose):
 
         assert len(cols.names) == len(data.dtype.names)
         meta = {'version': '0.1', 'seeing': 0.9}
-        cols.create_column('meta', 'dict')
+        cols.create_dict('meta')
         cols['meta'].write(meta)
 
         rmeta = cols['meta'].read()
