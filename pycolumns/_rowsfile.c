@@ -6,21 +6,21 @@
 #include "numpy/arrayobject.h" 
 
 // size of header lines before END, including newlines
-#define PYROWSFILE_SSIZE 29
+#define PYCOLUMNFILE_SSIZE 29
 
 // How much to read after last header line to eat up END and two
 // newlines
 // END\n\n
-#define PYROWSFILE_ESIZE 5
+#define PYCOLUMNFILE_ESIZE 5
 
 // where we should be after reading header
-#define PYROWSFILE_ELOC 92
+#define PYCOLUMNFILE_ELOC 92
 
 // Max size of these strings
-#define PYROWSFILE_DTYPE_LEN 20
-#define PYROWSFILE_FVERS_LEN 20
+#define PYCOLUMNFILE_DTYPE_LEN 20
+#define PYCOLUMNFILE_FVERS_LEN 20
 
-struct PyRowsFile {
+struct PyColumnFile {
     PyObject_HEAD
 
     const char* fname;
@@ -30,30 +30,30 @@ struct PyRowsFile {
 
     int has_header;
     PY_LONG_LONG nrows;
-    char dtype[PYROWSFILE_DTYPE_LEN];
-    char fvers[PYROWSFILE_FVERS_LEN];
+    char dtype[PYCOLUMNFILE_DTYPE_LEN];
+    char fvers[PYCOLUMNFILE_FVERS_LEN];
 };
 
 static PyObject *
-PyRowsFile_get_filename(struct PyRowsFile* self) {
+PyColumnFile_get_filename(struct PyColumnFile* self) {
     return PyUnicode_FromString(self->fname);
 }
 static PyObject *
-PyRowsFile_get_nrows(struct PyRowsFile* self) {
+PyColumnFile_get_nrows(struct PyColumnFile* self) {
     return PyLong_FromLongLong(self->nrows);
 }
 
 
 static int
-PyRowsFile_read_nrows(struct PyRowsFile* self)
+PyColumnFile_read_nrows(struct PyColumnFile* self)
 {
     size_t nread = 0;
-    char instring[PYROWSFILE_SSIZE] = {0};
+    char instring[PYCOLUMNFILE_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYROWSFILE_SSIZE,
+        PYCOLUMNFILE_SSIZE,
         1,
         self->fptr
     );
@@ -72,15 +72,15 @@ PyRowsFile_read_nrows(struct PyRowsFile* self)
 }
 
 static int
-PyRowsFile_read_dtype(struct PyRowsFile* self)
+PyColumnFile_read_dtype(struct PyColumnFile* self)
 {
     size_t nread = 0;
-    char instring[PYROWSFILE_SSIZE] = {0};
+    char instring[PYCOLUMNFILE_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYROWSFILE_SSIZE,
+        PYCOLUMNFILE_SSIZE,
         1,
         self->fptr
     );
@@ -99,15 +99,15 @@ PyRowsFile_read_dtype(struct PyRowsFile* self)
 }
 
 static int
-PyRowsFile_read_fvers(struct PyRowsFile* self)
+PyColumnFile_read_fvers(struct PyColumnFile* self)
 {
     size_t nread = 0;
-    char instring[PYROWSFILE_SSIZE] = {0};
+    char instring[PYCOLUMNFILE_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYROWSFILE_SSIZE,
+        PYCOLUMNFILE_SSIZE,
         1,
         self->fptr
     );
@@ -126,15 +126,15 @@ PyRowsFile_read_fvers(struct PyRowsFile* self)
 }
 
 static int
-PyRowsFile_read_end(struct PyRowsFile* self)
+PyColumnFile_read_end(struct PyColumnFile* self)
 {
     size_t nread = 0;
-    char instring[PYROWSFILE_SSIZE] = {0};
+    char instring[PYCOLUMNFILE_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYROWSFILE_ESIZE,
+        PYCOLUMNFILE_ESIZE,
         1,
         self->fptr
     );
@@ -149,30 +149,30 @@ PyRowsFile_read_end(struct PyRowsFile* self)
 
 
 static int
-read_header(struct PyRowsFile* self)
+read_header(struct PyColumnFile* self)
 {
 
     // SEEK_SET is from beginning
     fseek(self->fptr, 0, SEEK_SET);
 
-    if (!PyRowsFile_read_nrows(self)) {
+    if (!PyColumnFile_read_nrows(self)) {
         return 0;
     }
-    if (!PyRowsFile_read_dtype(self)) {
+    if (!PyColumnFile_read_dtype(self)) {
         return 0;
     }
-    if (!PyRowsFile_read_fvers(self)) {
+    if (!PyColumnFile_read_fvers(self)) {
         return 0;
     }
-    if (!PyRowsFile_read_end(self)) {
+    if (!PyColumnFile_read_end(self)) {
         return 0;
     }
 
     fprintf(stderr, "loc: %ld\n", ftell(self->fptr));
-    if (ftell(self->fptr) != PYROWSFILE_ELOC) {
+    if (ftell(self->fptr) != PYCOLUMNFILE_ELOC) {
         PyErr_Format(PyExc_IOError,
                      "After head read got loc %lld instead of %lld",
-                     ftell(self->fptr), PYROWSFILE_ELOC);
+                     ftell(self->fptr), PYCOLUMNFILE_ELOC);
         return 0;
     }
 
@@ -182,7 +182,7 @@ read_header(struct PyRowsFile* self)
 
 
 static int
-write_nrows(struct PyRowsFile* self, PY_LONG_LONG nrows) {
+write_nrows(struct PyColumnFile* self, PY_LONG_LONG nrows) {
     int nwrote = 0;
     nwrote = fprintf(self->fptr, "NROWS = %20lld\n", nrows);
     if (nwrote == 0) {
@@ -197,8 +197,8 @@ write_nrows(struct PyRowsFile* self, PY_LONG_LONG nrows) {
 
 // write the header and load it
 static PyObject*
-PyRowsFile_write_initial_header(
-    struct PyRowsFile* self,
+PyColumnFile_write_initial_header(
+    struct PyColumnFile* self,
     PyObject *args,
     PyObject *kwds
 )
@@ -236,7 +236,7 @@ PyRowsFile_write_initial_header(
 
 
 static int
-update_nrows(struct PyRowsFile* self, npy_intp rows_added) {
+update_nrows(struct PyColumnFile* self, npy_intp rows_added) {
     fseek(self->fptr, 0, SEEK_SET);
 
     self->nrows += rows_added;
@@ -245,8 +245,8 @@ update_nrows(struct PyRowsFile* self, npy_intp rows_added) {
 
 // Append data to file
 static PyObject*
-PyRowsFile_append(
-    struct PyRowsFile* self,
+PyColumnFile_append(
+    struct PyColumnFile* self,
     PyObject *args,
     PyObject *kwds
 )
@@ -278,14 +278,14 @@ PyRowsFile_append(
 
 static PY_LONG_LONG
 get_row_offset(row, elsize) {
-    return PYROWSFILE_ELOC + row * elsize;
+    return PYCOLUMNFILE_ELOC + row * elsize;
 }
 
 // read data into input array as a slice
 // array must be contiguous
 static PyObject*
-PyRowsFile_read_slice(
-    struct PyRowsFile* self,
+PyColumnFile_read_slice(
+    struct PyColumnFile* self,
     PyObject *args,
     PyObject *kwds
 )
@@ -322,7 +322,7 @@ PyRowsFile_read_slice(
 
     // SEEK_SET is from beginning
     // note fseek does not set EOF or an error, would need to
-    // try the read first, hencd check above
+    // try the read first, hence check above
     fseek(self->fptr, offset, SEEK_SET);
 
     fprintf(stderr, "at: %ld\n", ftell(self->fptr));
@@ -353,7 +353,7 @@ PyRowsFile_read_slice(
 
 
 static int
-PyRowsFile_init(struct PyRowsFile* self, PyObject *args, PyObject *kwds)
+PyColumnFile_init(struct PyColumnFile* self, PyObject *args, PyObject *kwds)
 {
     char* fname = NULL;
     char* mode = NULL;
@@ -391,7 +391,7 @@ PyRowsFile_init(struct PyRowsFile* self, PyObject *args, PyObject *kwds)
 
 
 static void
-PyRowsFile_dealloc(struct PyRowsFile* self)
+PyColumnFile_dealloc(struct PyColumnFile* self)
 {
 
     if (self->fptr != NULL) {
@@ -402,11 +402,11 @@ PyRowsFile_dealloc(struct PyRowsFile* self)
 }
 
 static PyObject *
-PyRowsFile_repr(struct PyRowsFile* self) {
+PyColumnFile_repr(struct PyColumnFile* self) {
     char buff[4096];
   
     snprintf(buff, 4096,
-             "RowsFile\n"
+             "ColumnFile\n"
              "    file: %s\n"
              "    mode: %s\n"
              "    verbose: %d\n"
@@ -421,37 +421,37 @@ PyRowsFile_repr(struct PyRowsFile* self) {
     return PyUnicode_FromString((const char*)buff);
 }
 
-static PyMethodDef PyRowsFile_methods[] = {
+static PyMethodDef PyColumnFile_methods[] = {
     {"get_filename",
-     (PyCFunction)PyRowsFile_get_filename,
+     (PyCFunction)PyColumnFile_get_filename,
      METH_VARARGS, 
      "get_filename()\n"
      "\n"
      "Get the filename.\n"},
 
     {"get_nrows",
-     (PyCFunction)PyRowsFile_get_nrows,
+     (PyCFunction)PyColumnFile_get_nrows,
      METH_VARARGS, 
      "get_nrows()\n"
      "\n"
      "Get the number of rows.\n"},
 
     {"write_initial_header",
-     (PyCFunction)PyRowsFile_write_initial_header,
+     (PyCFunction)PyColumnFile_write_initial_header,
      METH_VARARGS, 
      "write_initial_header()\n"
      "\n"
      "Write an initial header.\n"},
 
     {"append",
-     (PyCFunction)PyRowsFile_append,
+     (PyCFunction)PyColumnFile_append,
      METH_VARARGS, 
      "append()\n"
      "\n"
      "Append data.\n"},
 
     {"read_slice",
-     (PyCFunction)PyRowsFile_read_slice,
+     (PyCFunction)PyColumnFile_read_slice,
      METH_VARARGS, 
      "read_slice()\n"
      "\n"
@@ -460,18 +460,18 @@ static PyMethodDef PyRowsFile_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-static PyTypeObject PyRowsFileType = {
+static PyTypeObject PyColumnFileType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_rowsfile.RowsFile",             /*tp_name*/
-    sizeof(struct PyRowsFile), /*tp_basicsize*/
+    "_columnfile.ColumnFile",             /*tp_name*/
+    sizeof(struct PyColumnFile), /*tp_basicsize*/
     0,                         /*tp_itemsize*/
-    (destructor)PyRowsFile_dealloc, /*tp_dealloc*/
+    (destructor)PyColumnFile_dealloc, /*tp_dealloc*/
     0,                         /*tp_print*/
     0,                         /*tp_getattr*/
     0,                         /*tp_setattr*/
     0,                         /*tp_compare*/
     //0,                         /*tp_repr*/
-    (reprfunc)PyRowsFile_repr,                         /*tp_repr*/
+    (reprfunc)PyColumnFile_repr,                         /*tp_repr*/
     0,                         /*tp_as_number*/
     0,                         /*tp_as_sequence*/
     0,                         /*tp_as_mapping*/
@@ -489,7 +489,7 @@ static PyTypeObject PyRowsFileType = {
     0,                     /* tp_weaklistoffset */
     0,                     /* tp_iter */
     0,                     /* tp_iternext */
-    PyRowsFile_methods,             /* tp_methods */
+    PyColumnFile_methods,             /* tp_methods */
     0,             /* tp_members */
     0,                         /* tp_getset */
     0,                         /* tp_base */
@@ -498,22 +498,22 @@ static PyTypeObject PyRowsFileType = {
     0,                         /* tp_descr_set */
     0,                         /* tp_dictoffset */
     //0,     /* tp_init */
-    (initproc)PyRowsFile_init,      /* tp_init */
+    (initproc)PyColumnFile_init,      /* tp_init */
     0,                         /* tp_alloc */
     PyType_GenericNew,                 /* tp_new */
 };
 
-static PyMethodDef rowsfile_methods[] = {
+static PyMethodDef columnfile_methods[] = {
     {NULL}  /* Sentinel */
 };
 
 
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
-    "_rowsfile",      /* m_name */
-    "Defines the RowsFile class",  /* m_doc */
+    "_columnfile",      /* m_name */
+    "Defines the ColumnFile class",  /* m_doc */
     -1,                  /* m_size */
-    rowsfile_methods,    /* m_methods */
+    columnfile_methods,    /* m_methods */
     NULL,                /* m_reload */
     NULL,                /* m_traverse */
     NULL,                /* m_clear */
@@ -524,14 +524,14 @@ static struct PyModuleDef moduledef = {
 #define PyMODINIT_FUNC void
 #endif
 PyMODINIT_FUNC
-PyInit__rowsfile(void) 
+PyInit__columnfile(void) 
 {
     PyObject* m;
 
 
-    PyRowsFileType.tp_new = PyType_GenericNew;
+    PyColumnFileType.tp_new = PyType_GenericNew;
 
-    if (PyType_Ready(&PyRowsFileType) < 0) {
+    if (PyType_Ready(&PyColumnFileType) < 0) {
         return NULL;
     }
     m = PyModule_Create(&moduledef);
@@ -539,8 +539,8 @@ PyInit__rowsfile(void)
         return NULL;
     }
 
-    Py_INCREF(&PyRowsFileType);
-    PyModule_AddObject(m, "RowsFile", (PyObject *)&PyRowsFileType);
+    Py_INCREF(&PyColumnFileType);
+    PyModule_AddObject(m, "ColumnFile", (PyObject *)&PyColumnFileType);
 
     import_array();
 
