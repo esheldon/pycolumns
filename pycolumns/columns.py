@@ -15,6 +15,8 @@ todo
 """
 import os
 from .filebase import FileBase
+from .column import Column
+from .dictfile import Dict
 from . import util
 
 ALLOWED_COL_TYPES = ['array', 'dict', 'cols']
@@ -212,8 +214,6 @@ class Columns(dict):
         self[name] = col
 
     def _open_entry(self, filename, name, type):
-        from .column import Column
-        from .dictfile import DictFile
 
         if type == 'array':
             col = Column(
@@ -224,7 +224,7 @@ class Columns(dict):
                 cache_mem=self.cache_mem,
             )
         elif type == 'dict':
-            col = DictFile(
+            col = Dict(
                 filename=filename,
                 dir=self.dir,
                 name=name,

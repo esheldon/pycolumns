@@ -171,7 +171,7 @@ class Column(FileBase):
 
     @property
     def index_dtype(self):
-        return get_index_dtype(self.dtype)
+        return self._index_dtype
 
     @property
     def nrows(self):
@@ -344,50 +344,59 @@ class Column(FileBase):
             print('column %s already has an index')
             return
 
-        if len(self.shape) > 1:
-            raise ValueError('cannot index a multi-dimensional column')
-
         if self.verbose:
             print('creating index for column %s' % self.name)
             print('index size gb:', self.index_size_gb)
             print('cache mem gb:', self._cache_mem_gb)
 
+        # total usage is index size plus twice the size data
+        # since we need to do data[s] to get the sorted
+        # this is an optimization to not run sort twice
+        size_gb = self.index_size_gb + self.data_size_gb * 2
+
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
-            tfile = os.path.join(
+            ifile = os.path.join(
                 tmpdir,
                 os.path.basename(self.index_filename),
             )
-            if self.index_size_gb < self._cache_mem_gb:
-                self._write_index_memory(tfile)
+            sfile = os.path.join(
+                tmpdir,
+                os.path.basename(self.sorted_filename),
+            )
+
+            if size_gb < self._cache_mem_gb:
+                self._write_index_memory(ifile, sfile)
             else:
-                self._write_index_mergesort(tmpdir, tfile)
+                self._write_index_mergesort(tmpdir, ifile, sfile)
 
             if self.verbose:
-                print(f'{tfile} -> {self.index_filename}')
+                print(f'{ifile} -> {self.index_filename}')
+            shutil.move(ifile, self.index_filename)
 
-            shutil.move(tfile, self.index_filename)
+            if self.verbose:
+                print(f'{sfile} -> {self.index_filename}')
+            shutil.move(sfile, self.sorted_filename)
 
         self._init_index()
 
-    def _write_index_memory(self, fname):
-        import numpy as np
-        import fitsio
-
+    def _write_index_memory(self, index_file, sorted_file):
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
-        # want native so no copying which happens for writes
-        # dt = self.index_dtype
-        dt = get_index_dtype(self.dtype, native=True)
-        index_data = np.zeros(self.shape[0], dtype=dt)
-        index_data['index'] = np.arange(index_data.size)
-        index_data['value'] = self[:]
+        data = self[:]
+        sort_index = data.argsort()
+        data = data[sort_index]
 
-        index_data.sort(order='value')
+        indcol = _column.Column(index_file, 'w+', self.verbose)
+        indcol.write_initial_header(self.index_dtype.str)
+        indcol.append(sort_index)
 
-        # set up file name and data type info
-        with fitsio.FITS(fname, mode='rw', clobber=True) as output:
-            output.write(index_data)
+        scol = _column.Column(sorted_file, 'w+', self.verbose)
+        scol.write_initial_header(self.dtype.str)
+        scol.append(data)
+
+        indcol.close()
+        scol.close()
 
     def _write_index_mergesort(self, tmpdir, fname):
         from .mergesort import create_mergesort_index
@@ -440,6 +449,8 @@ class Column(FileBase):
         import numpy as np
         import fitsio
 
+        self._index_dtype = np.dtype('i8')
+
         index_fname = self.index_filename
         if os.path.exists(index_fname):
             self._has_index = True
@@ -458,9 +469,22 @@ class Column(FileBase):
             return None
 
         # remove the final extension
-        index_fname = '.'.join(self.filename.split('.')[0:-1])
-        index_fname = index_fname+'.index'
-        return index_fname
+        fname = '.'.join(self.filename.split('.')[0:-1])
+        fname = fname+'.index'
+        return fname
+
+    @property
+    def sorted_filename(self):
+        """
+        get the filename for the index of this column
+        """
+        if self.filename is None:
+            return None
+
+        # remove the final extension
+        fname = '.'.join(self.filename.split('.')[0:-1])
+        fname = fname+'.sort'
+        return fname
 
     def match(self, values):
         """
@@ -736,24 +760,6 @@ class Column(FileBase):
             s = ['Column: '] + s
 
         return s
-
-
-def get_index_dtype(dtype, native=False):
-    """
-    this removed the <,  > etc so it
-    is native
-    """
-    import numpy as np
-
-    dt = dtype.descr[0][1]
-    if native:
-        dt = dt[1:]
-
-    return np.dtype([
-        ('index', 'i8'),
-        # ('value', dtype.descr[0][1][1:]),
-        ('value', dt),
-    ])
 
 
 def _bisect_right(func, x, lo, hi):

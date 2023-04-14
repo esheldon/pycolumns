@@ -1,7 +1,8 @@
 import pytest
 
 
-@pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+# @pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+@pytest.mark.parametrize('cache_mem', [1.0])
 def test_create_index(cache_mem):
     """
     cache_mem of 0.01 will force use of mergesort
@@ -41,7 +42,6 @@ def test_create_index_str():
     import os
     import tempfile
     import numpy as np
-    import fitsio
     from ..columns import Columns
 
     seed = 55

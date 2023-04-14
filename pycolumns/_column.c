@@ -680,6 +680,17 @@ PyColumn_init(struct PyColumn* self, PyObject *args, PyObject *kwds)
     return 0;
 }
 
+static PyObject *
+PyColumn_close(struct PyColumn* self)
+{
+    if (self->fptr != NULL) {
+        fclose(self->fptr);
+        self->fptr = NULL;
+    }
+    Py_RETURN_NONE;
+}
+
+
 
 static void
 PyColumn_dealloc(struct PyColumn* self)
@@ -784,6 +795,13 @@ static PyMethodDef PyColumn_methods[] = {
      "read_row()\n"
      "\n"
      "Read single row into input array.\n"},
+
+    {"close",
+     (PyCFunction)PyColumn_close,
+     METH_VARARGS, 
+     "close()\n"
+     "\n"
+     "close the file stream.\n"},
 
     {NULL}  /* Sentinel */
 };
