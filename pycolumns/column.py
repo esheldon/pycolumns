@@ -262,7 +262,6 @@ class Column(FileBase):
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        import numpy as np
 
         self.ensure_has_data()
 
@@ -349,9 +348,9 @@ class Column(FileBase):
             print('index size gb:', self.index_size_gb)
             print('cache mem gb:', self._cache_mem_gb)
 
-        # total usage is index size plus twice the size data
-        # since we need to do data[s] to get the sorted
-        # this is an optimization to not run sort twice
+        # total usage for in-memory sorting is index size plus twice the size
+        # data since we need to do data[s] to get the sorted this is an
+        # optimization to not run sort twice
         size_gb = self.index_size_gb + self.data_size_gb * 2
 
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
@@ -397,7 +396,7 @@ class Column(FileBase):
         ) as scol:
             scol.append(data)
 
-    def _write_index_mergesort(self, tmpdir, fname):
+    def _write_index_mergesort(self, tmpdir, index_file, sorted_file):
         from .mergesort import create_mergesort_index
 
         if self.verbose:
@@ -405,7 +404,7 @@ class Column(FileBase):
 
         chunksize_bytes = int(self._cache_mem_gb * 1024**3)
 
-        bytes_per_element = self.index_dtype.itemsize
+        bytes_per_element = self.index_dtype.itemsize + self.dtype.itemsize
 
         # need factor of two because we keep both the cache and the scratch in
         # mergesort
@@ -413,7 +412,8 @@ class Column(FileBase):
 
         create_mergesort_index(
             source=self,
-            outfile=fname,
+            ifile=index_file,
+            sfile=sorted_file,
             chunksize=chunksize,
             tmpdir=tmpdir,
             verbose=self.verbose,

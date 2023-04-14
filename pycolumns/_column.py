@@ -94,9 +94,10 @@ class Column(_column_pywrap.Column):
         data: array
             The output data
         """
-        nrows = s.stop - s.start
+        start, stop = self._extract_slice_start_stop(s)
+        nrows = stop - start
         data = np.empty(nrows, dtype=self.get_dtype())
-        super().read_slice(data, s.start)
+        super().read_slice(data, start)
         return data
 
     def read_slice_into(self, data, s):
@@ -114,7 +115,11 @@ class Column(_column_pywrap.Column):
         -------
         None
         """
-        super().read_rows(data, s.start)
+        start, stop = self._extract_slice_start_stop(s)
+        nrows = stop - start
+        if data.size != nrows:
+            raise ValueError(f'data size {data.size} != slice nrows {nrows}')
+        super().read_rows(data, start)
 
     def append(self, data):
         """
@@ -131,6 +136,19 @@ class Column(_column_pywrap.Column):
         """
         dtype = np.dtype(dtype)
         super().init(dtype.str)
+
+    def _extract_slice_start_stop(self, s):
+        nrows = self.get_nrows()
+
+        start = s.start
+        if start is None:
+            start = 0
+        stop = s.stop
+        if stop is None:
+            stop = nrows
+        elif stop > nrows:
+            stop = nrows
+        return start, stop
 
     def __exit__(self, exception_type, exception_value, traceback):
         self.close()
