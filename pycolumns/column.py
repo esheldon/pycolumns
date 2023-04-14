@@ -340,18 +340,18 @@ class Column(FileBase):
         import shutil
 
         if self.has_index:
-            print('column %s already has an index')
+            print(f'column {self.name} already has an index')
             return
-
-        if self.verbose:
-            print('creating index for column %s' % self.name)
-            print('index size gb:', self.index_size_gb)
-            print('cache mem gb:', self._cache_mem_gb)
 
         # total usage for in-memory sorting is index size plus twice the size
         # data since we need to do data[s] to get the sorted this is an
         # optimization to not run sort twice
         size_gb = self.index_size_gb + self.data_size_gb * 2
+
+        if self.verbose:
+            print('creating index for column', self.name)
+            print(f'cache mem gb: {self._cache_mem_gb:.3g}')
+            print(f'required gb: {size_gb:.3g}')
 
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
             ifile = os.path.join(
@@ -373,7 +373,7 @@ class Column(FileBase):
             shutil.move(ifile, self.index_filename)
 
             if self.verbose:
-                print(f'{sfile} -> {self.index_filename}')
+                print(f'{sfile} -> {self.sorted_filename}')
             shutil.move(sfile, self.sorted_filename)
 
         self._init_index()

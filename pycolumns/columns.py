@@ -14,6 +14,7 @@ todo
       update
 """
 import os
+import numpy as np
 from .filebase import FileBase
 from .column import Column
 from .dictfile import Dict
@@ -391,7 +392,9 @@ class Columns(dict):
 
         self[name]._append(data)
 
-    def from_fits(self, filename, ext=1, lower=False):
+    def from_fits(
+        self, filename, ext=1, native=False, little=False, lower=False,
+    ):
         """
         Write columns to the database, reading from the input fits file.
         Uses chunks of 100MB
@@ -400,12 +403,30 @@ class Columns(dict):
         ----------
         filename: string
             Name of the file to read
-        ext: extension number, optional
-            The FITS extension to read from
+        ext: extension, optional
+            The FITS extension to read, numerical or string. default 1
+        native: bool, optional
+            FITS files are in big endian byte order.
+            If native is True, ensure the outpt is in native byte order.
+            Default False.
+        little: bool, optional
+            FITS files are in big endian byte order.
+            If little is True, convert to little endian byte order. Default
+            False.
         lower: bool, optional
-            if True, lower-case all names
+            if True, lower-case all names.  Default False.
         """
         import fitsio
+
+        if (native and np.little_endian) or little:
+            byteswap = True
+            if self.verbose:
+                print('byteswapping')
+        else:
+            byteswap = False
+
+        # step size in bytes
+        step_bytes = int(self._cache_mem_gb * 1024**3)
 
         with fitsio.FITS(filename, lower=lower) as fits:
             hdu = fits[ext]
@@ -413,9 +434,6 @@ class Columns(dict):
             one = hdu[0:0+1]
             nrows = hdu.get_nrows()
             rowsize = one.itemsize
-
-            # step size in bytes
-            step_bytes = int(self._cache_mem_gb * 1024**3)
 
             # step size in rows
             step = step_bytes // rowsize
@@ -443,9 +461,12 @@ class Columns(dict):
 
                 data = hdu[start:stop]
 
-                data = util.get_native_data(data)
+                if byteswap:
+                    data.byteswap(inplace=True)
+                    data.dtype = data.dtype.newbyteorder()
 
                 self.append(data, verify=False)
+                del data
 
         self.verify()
 
@@ -507,7 +528,6 @@ class Columns(dict):
         asdict: bool, optional
             If set to True, read the requested columns into a dict.
         """
-        import numpy as np
 
         columns = self._extract_columns(columns=columns, asdict=asdict)
 
