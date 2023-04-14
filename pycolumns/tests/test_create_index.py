@@ -10,7 +10,7 @@ def test_create_index(cache_mem):
     import os
     import tempfile
     import numpy as np
-    import fitsio
+    from .. import _column
     from ..columns import Columns
 
     seed = 333
@@ -29,10 +29,13 @@ def test_create_index(cache_mem):
         assert cols['rand'].has_index
 
         ifile = cols['rand'].index_filename
-        idata = fitsio.read(ifile)
+        sfile = cols['rand'].sorted_filename
+        idata = _column.read(ifile)
+        sdata = _column.read(sfile)
 
         s = data['rand'].argsort()
-        assert np.all(idata['value'] == data['rand'][s])
+        assert np.all(idata == s)
+        assert np.all(sdata == data['rand'][s])
 
 
 def test_create_index_str():
@@ -42,6 +45,7 @@ def test_create_index_str():
     import os
     import tempfile
     import numpy as np
+    from .. import _column
     from ..columns import Columns
 
     seed = 55
@@ -61,10 +65,13 @@ def test_create_index_str():
         assert cols['scol'].has_index
 
         ifile = cols['scol'].index_filename
-        idata = fitsio.read(ifile)
+        sfile = cols['scol'].sorted_filename
+        idata = _column.read(ifile)
+        sdata = _column.read(sfile)
 
         s = data['scol'].argsort()
-        assert np.all(idata['value'] == data['scol'][s])
+        assert np.all(idata == s)
+        assert np.all(sdata == data['scol'][s])
 
         ind = (data['scol'] == data['scol'][5])
         rd = data['scol'][ind]

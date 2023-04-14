@@ -96,6 +96,7 @@ class Column(FileBase):
 
         self._type = 'array'
         self._ext = 1
+        self._index_dtype = np.dtype('i8')
 
         self._cache_mem_gb = float(cache_mem)
 
@@ -121,7 +122,11 @@ class Column(FileBase):
         else:
             mode = 'w+'
 
-        self._col = _column.Column(self.filename, mode, self.verbose)
+        self._col = _column.Column(
+            fname=self.filename,
+            mode=mode,
+            verbose=self.verbose,
+        )
 
     def _clear(self):
         """
@@ -223,9 +228,7 @@ class Column(FileBase):
 
         self._check_data(data)
 
-        if not self.has_data:
-            self._col.write_initial_header(data.dtype.str)
-        else:
+        if self.has_data:
             self._check_data_dtype(data)
 
         self._col.append(data)
@@ -244,8 +247,8 @@ class Column(FileBase):
             raise ValueError('data must be one dimensional array')
 
     def _check_data_dtype(self, data):
-        dt = data.dtype.str
-        mydt = self.dtype.str
+        dt = data.dtype
+        mydt = self.dtype
 
         if dt != mydt:
             raise ValueError(f"data dtype '{dt}' != '{mydt}'")
@@ -270,12 +273,9 @@ class Column(FileBase):
         if isinstance(rows, slice):
             # can ignore step since we convert stepped slices to rows in
             # extract_rows
-            n2read = rows.stop - rows.start
-            data = np.empty(n2read, dtype=self.dtype)
-            self._col.read_slice(data, rows.start)
+            data = self._col.read_slice(rows)
         else:
-            data = np.empty(rows.size, dtype=self.dtype)
-            self._col.read_rows(data, rows)
+            data = self._col.read_rows(rows)
 
         return data
 
@@ -387,16 +387,15 @@ class Column(FileBase):
         sort_index = data.argsort()
         data = data[sort_index]
 
-        indcol = _column.Column(index_file, 'w+', self.verbose)
-        indcol.write_initial_header(self.index_dtype.str)
-        indcol.append(sort_index)
+        with _column.Column(
+            index_file, mode='w+', verbose=self.verbose,
+        ) as indcol:
+            indcol.append(sort_index)
 
-        scol = _column.Column(sorted_file, 'w+', self.verbose)
-        scol.write_initial_header(self.dtype.str)
-        scol.append(data)
-
-        indcol.close()
-        scol.close()
+        with _column.Column(
+            sorted_file, mode='w+', verbose=self.verbose,
+        ) as scol:
+            scol.append(data)
 
     def _write_index_mergesort(self, tmpdir, fname):
         from .mergesort import create_mergesort_index
@@ -447,18 +446,21 @@ class Column(FileBase):
         """
         import os
         import numpy as np
-        import fitsio
-
-        self._index_dtype = np.dtype('i8')
 
         index_fname = self.index_filename
         if os.path.exists(index_fname):
+            sort_fname = self.sorted_filename
+            if not os.path.exists(sort_fname):
+                raise RuntimeError(f'missing sorted file {sort_fname}')
+
             self._has_index = True
-            self._index = fitsio.FITS(index_fname, 'rw')
-            self._iarr1 = np.zeros(1, dtype=self.index_dtype)
+            self._index = _column.Column(index_fname)
+            self._sorted = _column.Column(sort_fname)
+            self._arr1 = np.zeros(1, dtype=self.dtype)
         else:
             self._has_index = False
             self._index = None
+            self._sorted = None
 
     @property
     def index_filename(self):
@@ -468,10 +470,12 @@ class Column(FileBase):
         if self.filename is None:
             return None
 
-        # remove the final extension
-        fname = '.'.join(self.filename.split('.')[0:-1])
-        fname = fname+'.index'
-        return fname
+        if not hasattr(self, '_index_filename'):
+            # remove the final extension
+            bname = '.'.join(self.filename.split('.')[0:-1])
+            self._index_filename = bname+'.index'
+
+        return self._index_filename
 
     @property
     def sorted_filename(self):
@@ -481,10 +485,12 @@ class Column(FileBase):
         if self.filename is None:
             return None
 
-        # remove the final extension
-        fname = '.'.join(self.filename.split('.')[0:-1])
-        fname = fname+'.sort'
-        return fname
+        if not hasattr(self, '_sorted_filename'):
+            # remove the final extension
+            bname = '.'.join(self.filename.split('.')[0:-1])
+            self._sorted_filename = bname+'.sort'
+
+        return self._sorted_filename
 
     def match(self, values):
         """
@@ -536,9 +542,9 @@ class Column(FileBase):
         return self.between(val, val)
 
     def _read_one_from_index(self, index):
-        iarr1 = self._iarr1
-        self._index._FITS.read_as_rec(self._ext+1, index+1, index+1, iarr1)
-        val = iarr1['value'][0]
+        arr1 = self._arr1
+        self._index._FITS.read_as_rec(self._ext+1, index+1, index+1, arr1)
+        val = arr1['value'][0]
         if self._convert_unicode:
             return str(val, 'utf-8')
         return val

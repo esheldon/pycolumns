@@ -378,6 +378,12 @@ PyColumn_write_initial_header(
     if (!PyArg_ParseTuple(args, (char*)"s", &dtype)) {
         return NULL;
     }
+    if (self->has_header) {
+        PyErr_Format(PyExc_RuntimeError,
+                     "%s is already initialized",
+                     self->fname);
+        return NULL;
+    }
 
     fseek(self->fptr, 0, SEEK_SET);
 
@@ -761,10 +767,10 @@ static PyMethodDef PyColumn_methods[] = {
      "Returns True of header has been written.\n"},
 
 
-    {"write_initial_header",
+    {"init",
      (PyCFunction)PyColumn_write_initial_header,
      METH_VARARGS, 
-     "write_initial_header()\n"
+     "init()\n"
      "\n"
      "Write an initial header.\n"},
 
@@ -856,7 +862,7 @@ static PyMethodDef column_methods[] = {
 
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
-    "_column",      /* m_name */
+    "_column_pywrap",      /* m_name */
     "Defines the Column class",  /* m_doc */
     -1,                  /* m_size */
     column_methods,    /* m_methods */
@@ -870,7 +876,7 @@ static struct PyModuleDef moduledef = {
 #define PyMODINIT_FUNC void
 #endif
 PyMODINIT_FUNC
-PyInit__column(void) 
+PyInit__column_pywrap(void) 
 {
     PyObject* m;
 

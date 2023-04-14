@@ -19,4 +19,5 @@ from .indices import Indices
 
 from . import mergesort
 
+from . import _column_pywrap
 from . import _column

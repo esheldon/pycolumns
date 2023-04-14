@@ -18,8 +18,8 @@ with open(os.path.join(os.path.dirname(__file__), "README.md")) as fp:
     long_description = fp.read()
 
 ext = Extension(
-    "pycolumns._column",
-    ["pycolumns/_column.c"],
+    "pycolumns._column_pywrap",
+    ["pycolumns/_column_pywrap.c"],
 )
 
 
