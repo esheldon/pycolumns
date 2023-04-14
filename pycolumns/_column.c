@@ -5,22 +5,24 @@
 #include <Python.h>
 #include "numpy/arrayobject.h" 
 
+#define PYCOLUMN_FVERS 0
+
 // size of header lines before END, including newlines
-#define PYCOLUMNFILE_SSIZE 29
+#define PYCOLUMN_SSIZE 29
 
 // How much to read after last header line to eat up END and two
 // newlines
 // END\n\n
-#define PYCOLUMNFILE_ESIZE 5
+#define PYCOLUMN_ESIZE 5
 
 // where we should be after reading header
-#define PYCOLUMNFILE_ELOC 92
+#define PYCOLUMN_ELOC 92
 
 // Max size of these strings
-#define PYCOLUMNFILE_DTYPE_LEN 20
-#define PYCOLUMNFILE_FVERS_LEN 20
+#define PYCOLUMN_DTYPE_LEN 20
+#define PYCOLUMN_FVERS_LEN 20
 
-struct PyColumnFile {
+struct PyColumn {
     PyObject_HEAD
 
     const char* fname;
@@ -30,30 +32,34 @@ struct PyColumnFile {
 
     int has_header;
     PY_LONG_LONG nrows;
-    char dtype[PYCOLUMNFILE_DTYPE_LEN];
-    char fvers[PYCOLUMNFILE_FVERS_LEN];
+    char dtype[PYCOLUMN_DTYPE_LEN];
+    char fvers[PYCOLUMN_FVERS_LEN];
 };
 
 static PyObject *
-PyColumnFile_get_filename(struct PyColumnFile* self) {
+PyColumn_get_filename(struct PyColumn* self) {
     return PyUnicode_FromString(self->fname);
 }
 static PyObject *
-PyColumnFile_get_nrows(struct PyColumnFile* self) {
+PyColumn_get_dtype(struct PyColumn* self) {
+    return PyUnicode_FromString(self->dtype);
+}
+static PyObject *
+PyColumn_get_nrows(struct PyColumn* self) {
     return PyLong_FromLongLong(self->nrows);
 }
 
 
 static int
-PyColumnFile_read_nrows(struct PyColumnFile* self)
+PyColumn_read_nrows(struct PyColumn* self)
 {
     size_t nread = 0;
-    char instring[PYCOLUMNFILE_SSIZE] = {0};
+    char instring[PYCOLUMN_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYCOLUMNFILE_SSIZE,
+        PYCOLUMN_SSIZE,
         1,
         self->fptr
     );
@@ -72,15 +78,15 @@ PyColumnFile_read_nrows(struct PyColumnFile* self)
 }
 
 static int
-PyColumnFile_read_dtype(struct PyColumnFile* self)
+PyColumn_read_dtype(struct PyColumn* self)
 {
     size_t nread = 0;
-    char instring[PYCOLUMNFILE_SSIZE] = {0};
+    char instring[PYCOLUMN_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYCOLUMNFILE_SSIZE,
+        PYCOLUMN_SSIZE,
         1,
         self->fptr
     );
@@ -99,15 +105,15 @@ PyColumnFile_read_dtype(struct PyColumnFile* self)
 }
 
 static int
-PyColumnFile_read_fvers(struct PyColumnFile* self)
+PyColumn_read_fvers(struct PyColumn* self)
 {
     size_t nread = 0;
-    char instring[PYCOLUMNFILE_SSIZE] = {0};
+    char instring[PYCOLUMN_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYCOLUMNFILE_SSIZE,
+        PYCOLUMN_SSIZE,
         1,
         self->fptr
     );
@@ -126,15 +132,15 @@ PyColumnFile_read_fvers(struct PyColumnFile* self)
 }
 
 static int
-PyColumnFile_read_end(struct PyColumnFile* self)
+PyColumn_read_end(struct PyColumn* self)
 {
     size_t nread = 0;
-    char instring[PYCOLUMNFILE_SSIZE] = {0};
+    char instring[PYCOLUMN_SSIZE] = {0};
 
     // read nrows string
     nread = fread(
         instring,
-        PYCOLUMNFILE_ESIZE,
+        PYCOLUMN_ESIZE,
         1,
         self->fptr
     );
@@ -149,30 +155,30 @@ PyColumnFile_read_end(struct PyColumnFile* self)
 
 
 static int
-read_header(struct PyColumnFile* self)
+read_header(struct PyColumn* self)
 {
 
     // SEEK_SET is from beginning
     fseek(self->fptr, 0, SEEK_SET);
 
-    if (!PyColumnFile_read_nrows(self)) {
+    if (!PyColumn_read_nrows(self)) {
         return 0;
     }
-    if (!PyColumnFile_read_dtype(self)) {
+    if (!PyColumn_read_dtype(self)) {
         return 0;
     }
-    if (!PyColumnFile_read_fvers(self)) {
+    if (!PyColumn_read_fvers(self)) {
         return 0;
     }
-    if (!PyColumnFile_read_end(self)) {
+    if (!PyColumn_read_end(self)) {
         return 0;
     }
 
     fprintf(stderr, "loc: %ld\n", ftell(self->fptr));
-    if (ftell(self->fptr) != PYCOLUMNFILE_ELOC) {
+    if (ftell(self->fptr) != PYCOLUMN_ELOC) {
         PyErr_Format(PyExc_IOError,
                      "After head read got loc %lld instead of %lld",
-                     ftell(self->fptr), PYCOLUMNFILE_ELOC);
+                     ftell(self->fptr), PYCOLUMN_ELOC);
         return 0;
     }
 
@@ -182,7 +188,7 @@ read_header(struct PyColumnFile* self)
 
 
 static int
-write_nrows(struct PyColumnFile* self, PY_LONG_LONG nrows) {
+write_nrows(struct PyColumn* self, PY_LONG_LONG nrows) {
     int nwrote = 0;
     nwrote = fprintf(self->fptr, "NROWS = %20lld\n", nrows);
     if (nwrote == 0) {
@@ -197,17 +203,16 @@ write_nrows(struct PyColumnFile* self, PY_LONG_LONG nrows) {
 
 // write the header and load it
 static PyObject*
-PyColumnFile_write_initial_header(
-    struct PyColumnFile* self,
+PyColumn_write_initial_header(
+    struct PyColumn* self,
     PyObject *args,
     PyObject *kwds
 )
 {
     char *dtype = NULL;
-    char *fvers = NULL;
     int nwrote = 0;
 
-    if (!PyArg_ParseTuple(args, (char*)"ss", &dtype, &fvers)) {
+    if (!PyArg_ParseTuple(args, (char*)"s", &dtype)) {
         return NULL;
     }
 
@@ -217,7 +222,7 @@ PyColumnFile_write_initial_header(
         return NULL;
     }
     fprintf(self->fptr, "DTYPE = %20s\n", dtype);
-    fprintf(self->fptr, "FVERS = %20s\n", fvers);
+    fprintf(self->fptr, "FVERS = %20d\n", PYCOLUMN_FVERS);
     nwrote = fprintf(self->fptr, "END\n\n");
 
     if (nwrote == 0) {
@@ -236,7 +241,7 @@ PyColumnFile_write_initial_header(
 
 
 static int
-update_nrows(struct PyColumnFile* self, npy_intp rows_added) {
+update_nrows(struct PyColumn* self, npy_intp rows_added) {
     fseek(self->fptr, 0, SEEK_SET);
 
     self->nrows += rows_added;
@@ -245,8 +250,8 @@ update_nrows(struct PyColumnFile* self, npy_intp rows_added) {
 
 // Append data to file
 static PyObject*
-PyColumnFile_append(
-    struct PyColumnFile* self,
+PyColumn_append(
+    struct PyColumn* self,
     PyObject *args,
     PyObject *kwds
 )
@@ -278,27 +283,26 @@ PyColumnFile_append(
 
 static PY_LONG_LONG
 get_row_offset(row, elsize) {
-    return PYCOLUMNFILE_ELOC + row * elsize;
+    return PYCOLUMN_ELOC + row * elsize;
 }
 
 // read data into input array as a slice
 // array must be contiguous
 static PyObject*
-PyColumnFile_read_slice(
-    struct PyColumnFile* self,
+PyColumn_read_slice(
+    struct PyColumn* self,
     PyObject *args,
     PyObject *kwds
 )
 {
     PyObject* arrayo = NULL;
     PyArrayObject* array = NULL;
-    long long start =0;
+    long long start = 0;
     npy_intp num = 0;
-    npy_intp end = 0;
+    npy_intp end = 0, row = 0, nread = 0, this_nread = 0, max_possible = 0;
     npy_intp elsize = 0;
     npy_intp offset = 0;
-    npy_intp nread = 0;
-    npy_intp max_possible = 0;
+    PyArrayIterObject *it = NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OL", &arrayo, &start)) {
         return NULL;
@@ -329,14 +333,46 @@ PyColumnFile_read_slice(
 
     fprintf(stderr, "reading: elsize: %ld num: %ld\n", elsize, num);
 
-    NPY_BEGIN_ALLOW_THREADS;
-    nread = fread(
-        PyArray_DATA(array),
-        elsize,
-        num,
-        self->fptr
-    );
-    NPY_END_ALLOW_THREADS;
+    if (PyArray_ISCONTIGUOUS(array)) {
+        fprintf(stderr, "reading as contiguous\n");
+        NPY_BEGIN_ALLOW_THREADS;
+        nread = fread(PyArray_DATA(array),
+                      elsize,
+                      num,
+                      self->fptr);
+        NPY_END_ALLOW_THREADS;
+    } else {
+        fprintf(stderr, "reading as non contiguous\n");
+        NPY_BEGIN_THREADS_DEF;
+
+        it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)array);
+
+        NPY_BEGIN_THREADS;
+
+        row = start;
+        while (it->index < it->size) {
+            this_nread = fread(
+                (const void *) it->dataptr,
+                elsize,
+                1,
+                self->fptr 
+            );
+            if (this_nread < 1) {
+                NPY_END_THREADS;
+                PyErr_Format(PyExc_IOError,
+                             "problem reading element %" NPY_INTP_FMT
+                             " from file", row);
+                Py_DECREF(it);
+                return NULL;
+            }
+            nread += 1;
+            row += 1;
+            PyArray_ITER_NEXT(it);
+        }
+        NPY_END_THREADS;
+        Py_DECREF(it);
+
+    }
 
     fprintf(stderr, "read: %ld\n", nread);
     if (nread != num) {
@@ -353,7 +389,7 @@ PyColumnFile_read_slice(
 
 
 static int
-PyColumnFile_init(struct PyColumnFile* self, PyObject *args, PyObject *kwds)
+PyColumn_init(struct PyColumn* self, PyObject *args, PyObject *kwds)
 {
     char* fname = NULL;
     char* mode = NULL;
@@ -391,7 +427,7 @@ PyColumnFile_init(struct PyColumnFile* self, PyObject *args, PyObject *kwds)
 
 
 static void
-PyColumnFile_dealloc(struct PyColumnFile* self)
+PyColumn_dealloc(struct PyColumn* self)
 {
 
     if (self->fptr != NULL) {
@@ -402,11 +438,11 @@ PyColumnFile_dealloc(struct PyColumnFile* self)
 }
 
 static PyObject *
-PyColumnFile_repr(struct PyColumnFile* self) {
+PyColumn_repr(struct PyColumn* self) {
     char buff[4096];
   
     snprintf(buff, 4096,
-             "ColumnFile\n"
+             "column\n"
              "    file: %s\n"
              "    mode: %s\n"
              "    verbose: %d\n"
@@ -421,37 +457,44 @@ PyColumnFile_repr(struct PyColumnFile* self) {
     return PyUnicode_FromString((const char*)buff);
 }
 
-static PyMethodDef PyColumnFile_methods[] = {
+static PyMethodDef PyColumn_methods[] = {
     {"get_filename",
-     (PyCFunction)PyColumnFile_get_filename,
+     (PyCFunction)PyColumn_get_filename,
      METH_VARARGS, 
      "get_filename()\n"
      "\n"
      "Get the filename.\n"},
 
     {"get_nrows",
-     (PyCFunction)PyColumnFile_get_nrows,
+     (PyCFunction)PyColumn_get_nrows,
      METH_VARARGS, 
      "get_nrows()\n"
      "\n"
      "Get the number of rows.\n"},
 
+    {"get_dtype",
+     (PyCFunction)PyColumn_get_dtype,
+     METH_VARARGS, 
+     "get_dtype()\n"
+     "\n"
+     "Get the dtype string.\n"},
+
     {"write_initial_header",
-     (PyCFunction)PyColumnFile_write_initial_header,
+     (PyCFunction)PyColumn_write_initial_header,
      METH_VARARGS, 
      "write_initial_header()\n"
      "\n"
      "Write an initial header.\n"},
 
     {"append",
-     (PyCFunction)PyColumnFile_append,
+     (PyCFunction)PyColumn_append,
      METH_VARARGS, 
      "append()\n"
      "\n"
      "Append data.\n"},
 
     {"read_slice",
-     (PyCFunction)PyColumnFile_read_slice,
+     (PyCFunction)PyColumn_read_slice,
      METH_VARARGS, 
      "read_slice()\n"
      "\n"
@@ -460,18 +503,18 @@ static PyMethodDef PyColumnFile_methods[] = {
     {NULL}  /* Sentinel */
 };
 
-static PyTypeObject PyColumnFileType = {
+static PyTypeObject PyColumnType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    "_columnfile.ColumnFile",             /*tp_name*/
-    sizeof(struct PyColumnFile), /*tp_basicsize*/
+    "_column.Column",             /*tp_name*/
+    sizeof(struct PyColumn), /*tp_basicsize*/
     0,                         /*tp_itemsize*/
-    (destructor)PyColumnFile_dealloc, /*tp_dealloc*/
+    (destructor)PyColumn_dealloc, /*tp_dealloc*/
     0,                         /*tp_print*/
     0,                         /*tp_getattr*/
     0,                         /*tp_setattr*/
     0,                         /*tp_compare*/
     //0,                         /*tp_repr*/
-    (reprfunc)PyColumnFile_repr,                         /*tp_repr*/
+    (reprfunc)PyColumn_repr,                         /*tp_repr*/
     0,                         /*tp_as_number*/
     0,                         /*tp_as_sequence*/
     0,                         /*tp_as_mapping*/
@@ -489,7 +532,7 @@ static PyTypeObject PyColumnFileType = {
     0,                     /* tp_weaklistoffset */
     0,                     /* tp_iter */
     0,                     /* tp_iternext */
-    PyColumnFile_methods,             /* tp_methods */
+    PyColumn_methods,             /* tp_methods */
     0,             /* tp_members */
     0,                         /* tp_getset */
     0,                         /* tp_base */
@@ -498,22 +541,22 @@ static PyTypeObject PyColumnFileType = {
     0,                         /* tp_descr_set */
     0,                         /* tp_dictoffset */
     //0,     /* tp_init */
-    (initproc)PyColumnFile_init,      /* tp_init */
+    (initproc)PyColumn_init,      /* tp_init */
     0,                         /* tp_alloc */
     PyType_GenericNew,                 /* tp_new */
 };
 
-static PyMethodDef columnfile_methods[] = {
+static PyMethodDef column_methods[] = {
     {NULL}  /* Sentinel */
 };
 
 
 static struct PyModuleDef moduledef = {
     PyModuleDef_HEAD_INIT,
-    "_columnfile",      /* m_name */
-    "Defines the ColumnFile class",  /* m_doc */
+    "_column",      /* m_name */
+    "Defines the Column class",  /* m_doc */
     -1,                  /* m_size */
-    columnfile_methods,    /* m_methods */
+    column_methods,    /* m_methods */
     NULL,                /* m_reload */
     NULL,                /* m_traverse */
     NULL,                /* m_clear */
@@ -524,14 +567,14 @@ static struct PyModuleDef moduledef = {
 #define PyMODINIT_FUNC void
 #endif
 PyMODINIT_FUNC
-PyInit__columnfile(void) 
+PyInit__column(void) 
 {
     PyObject* m;
 
 
-    PyColumnFileType.tp_new = PyType_GenericNew;
+    PyColumnType.tp_new = PyType_GenericNew;
 
-    if (PyType_Ready(&PyColumnFileType) < 0) {
+    if (PyType_Ready(&PyColumnType) < 0) {
         return NULL;
     }
     m = PyModule_Create(&moduledef);
@@ -539,8 +582,8 @@ PyInit__columnfile(void)
         return NULL;
     }
 
-    Py_INCREF(&PyColumnFileType);
-    PyModule_AddObject(m, "ColumnFile", (PyObject *)&PyColumnFileType);
+    Py_INCREF(&PyColumnType);
+    PyModule_AddObject(m, "Column", (PyObject *)&PyColumnType);
 
     import_array();
 

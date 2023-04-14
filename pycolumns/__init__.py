@@ -14,4 +14,4 @@ from .indices import Indices
 
 from . import mergesort
 
-from . import _columnfile
+from . import _column
