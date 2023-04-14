@@ -2,6 +2,7 @@
    TODO
 
    - python wrapper class or inherited
+   - read one without checking erros for speed?  Or is read slice OK?
    - maybe more error checking internally
    - printouts when verbose
 */
