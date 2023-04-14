@@ -1,3 +1,10 @@
+/*
+   TODO
+
+   - python wrapper class or inherited
+   - maybe more error checking internally
+   - printouts when verbose
+*/
 #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
 
 // #include <string.h>
@@ -285,18 +292,15 @@ PyColumn_read_slice(
     PyObject *kwds
 )
 {
-    PyObject* arrayo = NULL;
     PyArrayObject* array = NULL;
     long long start = 0;
     npy_intp num = 0, elsize = 0, offset = 0, end = 0, row = 0,
              nread = 0, this_nread = 0, max_possible = 0;
     PyArrayIterObject *it = NULL;
 
-    if (!PyArg_ParseTuple(args, (char*)"OL", &arrayo, &start)) {
+    if (!PyArg_ParseTuple(args, (char*)"OL", &array, &start)) {
         return NULL;
     }
-
-    array = (PyArrayObject *) arrayo;
 
     num = PyArray_SIZE(array);
     elsize = PyArray_ITEMSIZE(array);
@@ -389,11 +393,12 @@ ensure_arrays_same_size(PyObject* arr1, const char* name1,
         return 1;
     }
 }
+
 /*
    Read rows into array
    No error checking is done on the data type of the input array
    The rows should be sorted for efficiency, but this is not checked
-   rows should be type 'i8' but this is not checked
+   rows should be native npy_int64 but this is not checked
 */
 static PyObject*
 PyColumn_read_rows(
@@ -402,10 +407,6 @@ PyColumn_read_rows(
     PyObject *kwds
 )
 {
-    // PyObject* rows = NULL;
-    // PyObject* arrayo = NULL;
-    // PyObject* array = NULL;
-    // PyObject* arrayo = NULL, *rowso = NULL;
     PyArrayObject* array = NULL, *rows = NULL;
     npy_int64 row = 0;
     npy_intp num = 0, elsize = 0, offset = 0,
@@ -417,20 +418,12 @@ PyColumn_read_rows(
         return NULL;
     }
 
-    /* array = (PyArrayObject *) arrayo; */
-    /* rows = (PyArrayObject *) rowso; */
-    /*  */
     if (!ensure_arrays_same_size(rows, "rows", array, "array")) {
         return NULL;
     }
 
     elsize = PyArray_ITEMSIZE(array);
     max_possible = get_row_offset(self->nrows, elsize);
-
-    // SEEK_SET is from beginning
-    // note fseek does not set EOF or an error, would need to
-    // try the read first, hence check above
-    fseek(self->fptr, offset, SEEK_SET);
 
     NPY_BEGIN_THREADS_DEF;
 
