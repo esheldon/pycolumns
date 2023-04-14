@@ -543,10 +543,8 @@ class Column(FileBase):
 
     def _read_one_from_index(self, index):
         arr1 = self._arr1
-        self._index._FITS.read_as_rec(self._ext+1, index+1, index+1, arr1)
-        val = arr1['value'][0]
-        if self._convert_unicode:
-            return str(val, 'utf-8')
+        self._sorted.read_row(arr1, index)
+        val = arr1[0]
         return val
 
     def _bisect_right(self, val):
@@ -574,11 +572,7 @@ class Column(FileBase):
 
         self.verify_index_available()
         i = self._bisect_right(val)
-        indices = self._index[1]['index'][i:].copy()
-
-        # mmap = self._index.mmap
-        # i = bisect.bisect_right(mmap['value'], val)
-        # indices = mmap['index'][i:].copy()
+        indices = self._index.read_slice(slice(i, None))
 
         return Indices(indices)
 
@@ -591,11 +585,7 @@ class Column(FileBase):
         self.verify_index_available()
 
         i = self._bisect_left(val)
-        indices = self._index[1]['index'][i:].copy()
-
-        # mmap = self._index.mmap
-        # i = bisect.bisect_left(mmap['value'], val)
-        # indices = mmap['index'][i:].copy()
+        indices = self._index.read_slice(slice(i, None))
 
         return Indices(indices)
 
@@ -608,11 +598,7 @@ class Column(FileBase):
         self.verify_index_available()
 
         i = self._bisect_left(val)
-        indices = self._index[1]['index'][:i].copy()
-
-        # mmap = self._index.mmap
-        # i = bisect.bisect_left(mmap['value'], val)
-        # indices = mmap['index'][:i].copy()
+        indices = self._index.read_slice(slice(0, i))
 
         return Indices(indices)
 
@@ -625,11 +611,7 @@ class Column(FileBase):
         self.verify_index_available()
 
         i = self._bisect_right(val)
-        indices = self._index[1]['index'][:i].copy()
-
-        # mmap = self._index.mmap
-        # i = bisect.bisect_right(mmap['value'], val)
-        # indices = mmap['index'][:i].copy()
+        indices = self._index.read_slice(slice(0, i))
 
         return Indices(indices)
 
@@ -674,47 +656,37 @@ class Column(FileBase):
 
         self.verify_index_available()
 
-        # mmap = self._index.mmap
         if interval == '[]':
             # bisect_left returns i such that data[i:] are all strictly >= val
-            # ilow = bisect.bisect_left(mmap['value'], low)
             ilow = self._bisect_left(low)
 
             # bisect_right returns i such that data[:i] are all strictly <= val
-            # ihigh = bisect.bisect_right(mmap['value'], high)
             ihigh = self._bisect_right(high)
 
         elif interval == '(]':
             # bisect_right returns i such that data[i:] are all strictly > val
-            # ilow = bisect.bisect_right(mmap['value'], low)
             ilow = self._bisect_right(low)
 
             # bisect_right returns i such that data[:i] are all strictly <= val
-            # ihigh = bisect.bisect_right(mmap['value'], high)
             ihigh = self._bisect_right(high)
 
         elif interval == '[)':
             # bisect_left returns i such that data[:i] are all strictly >= val
-            # ilow = bisect.bisect_left(mmap['value'], low)
             ilow = self._bisect_left(low)
 
             # bisect_left returns i such that data[:i] are all strictly < val
-            # ihigh = bisect.bisect_left(mmap['value'], high)
             ihigh = self._bisect_left(high)
 
         elif interval == '()':
             # bisect_right returns i such that data[i:] are all strictly > val
-            # ilow = bisect.bisect_right(mmap['value'], low)
             ilow = self._bisect_right(low)
 
             # bisect_left returns i such that data[:i] are all strictly < val
-            # ihigh = bisect.bisect_left(mmap['value'], high)
             ihigh = self._bisect_left(high)
         else:
             raise ValueError('bad interval type: %s' % interval)
 
-        # indices = mmap['index'][ilow:ihigh].copy()
-        indices = self._index[1]['index'][ilow:ihigh]
+        indices = self._index.read_slice(slice(ilow, ihigh))
 
         return Indices(indices)
 
