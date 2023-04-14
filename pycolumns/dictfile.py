@@ -1,6 +1,7 @@
 from .filebase import FileBase
 from . import util
 
+
 class Dict(FileBase):
     def _do_init(
         self,
