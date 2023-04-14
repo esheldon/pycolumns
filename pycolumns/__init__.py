@@ -6,8 +6,13 @@ from . import columns
 from .columns import Columns, where
 
 from . import util
+
+from . import filebase
 from . import column
-from .column import ArrayColumn, DictColumn
+from .column import Column
+
+from . import dictfile
+from .dictfile import DictFile
 
 from . import indices
 from .indices import Indices

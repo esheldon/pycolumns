@@ -7,185 +7,12 @@ TODO
 """
 import os
 import numpy as np
-
+from .filebase import FileBase
 from . import util
-from .indices import Indices
+from . import _column
 
 
-class ColumnBase(object):
-    """
-    Represent a column in a Columns database.  Facilitate opening, reading,
-    writing of data.  This class can be instantiated alone, but is usually
-    accessed through the Columns class.
-    """
-    def __init__(
-        self,
-        filename=None,
-        name=None,
-        dir=None,
-        verbose=False,
-    ):
-
-        self._do_init(
-            filename=filename,
-            name=name,
-            dir=dir,
-            verbose=verbose,
-        )
-
-    def _do_init(
-        self,
-        filename=None,
-        name=None,
-        dir=None,
-        verbose=False,
-    ):
-        """
-        See main docs for the Column class
-        """
-
-        self._clear()
-
-        self._filename = filename
-        self._name = name
-        self._dir = dir
-        self._verbose = verbose
-
-        # make sure we have something to work with before continuing
-        if not self._init_args_sufficient(filename, dir, name):
-            return
-
-        if self.filename is not None:
-            self._set_meta_from_filename()
-
-        elif self.name is not None:
-            self._set_meta_from_name()
-
-    @property
-    def verbose(self):
-        return self._verbose
-
-    @property
-    def dir(self):
-        """
-        get the directory holding the file
-        """
-        return self._dir
-
-    @property
-    def filename(self):
-        """
-        get the file name holding the column data
-        """
-        return self._filename
-
-    @property
-    def name(self):
-        """
-        get the name type of the column
-        """
-        return self._name
-
-    @property
-    def type(self):
-        """
-        get the data type of the column
-        """
-        return self._type
-
-    def reload(self):
-        """
-        Just reload the metadata for this column
-        """
-        if self.verbose:
-            print('Reloading column metadata for: %s' % self.name)
-        self._do_init(filename=self.filename, verbose=self.verbose)
-
-    def _clear(self):
-        """
-        Clear out all the metadata for this column.
-        """
-
-        self._filename = None
-        self._name = None
-        self._dir = None
-
-    def read(self, *args):
-        """
-        Read data from a column
-        """
-        raise NotImplementedError('implement read')
-
-    #
-    # setup methods
-    #
-
-    def _set_meta_from_filename(self):
-        """
-        Initiaize this column based on the pull path filename
-        """
-        if self.filename is not None:
-            if self.verbose:
-                print("Initializing from file: %s" % self.filename)
-
-            if self.filename is None:
-                raise ValueError("You haven't specified a filename yet")
-
-            self._name = util.extract_colname(self.filename)
-        else:
-            raise ValueError("You must set filename to use this function")
-
-    def _set_meta_from_name(self):
-        """
-        Initialize this based on name.  The filename is constructed from
-        the dir and name
-        """
-
-        if self.name is not None and self.dir is not None:
-
-            if self.verbose:
-                mess = "Initalizing from \n\tdir: %s \n\tname: %s \n\ttype: %s"
-                print(mess % (self.dir, self.name, self.type))
-
-            self._filename = util.create_filename(
-                self.dir,
-                self.name,
-                self.type,
-            )
-        else:
-            raise ValueError("You must set dir,name,type to use this function")
-
-    def _get_repr_list(self, full=False):
-        """
-
-        Get a list of metadat for this column.
-
-        """
-        raise NotImplementedError('implemente _get_repr_list')
-
-    def __repr__(self):
-        """
-        Print out some info about this column
-        """
-        s = self._get_repr_list(full=True)
-        s = "\n".join(s)
-        return s
-
-    def _init_args_sufficient(self,
-                              filename=None,
-                              dir=None,
-                              name=None):
-        """
-        Determine if the inputs are enough for initialization
-        """
-        if (filename is None) and \
-                (dir is None or name is None):
-            return False
-        else:
-            return True
-
-
-class ArrayColumn(ColumnBase):
+class Column(FileBase):
     """
     Represent an array column in a Columns database
 
@@ -289,11 +116,12 @@ class ArrayColumn(ColumnBase):
         self._init_index()
 
     def _open_file(self):
-        import fitsio
-        self._fits = fitsio.FITS(self.filename, 'rw')
+        if os.path.exists(self.filename):
+            mode = 'r+'
+        else:
+            mode = 'w+'
 
-    def _get_hdu(self):
-        return self._fits[self._ext]
+        self._col = _column.Column(self.filename, mode, self.verbose)
 
     def _clear(self):
         """
@@ -303,7 +131,7 @@ class ArrayColumn(ColumnBase):
         super()._clear()
 
         if self.has_data:
-            del self._fits
+            del self._col
             del self._dtype
 
         self._has_index = False
@@ -311,16 +139,14 @@ class ArrayColumn(ColumnBase):
     @property
     def has_data(self):
         """
-        returns True if this column has some data
+        returns True if this column has a header defined, even if there are no
+        rows
         """
         has_data = False
 
-        if hasattr(self, '_fits'):
-            if len(self._fits) > 1:
-                hdu = self._get_hdu()
-                if hdu.has_data():
-                    has_data = True
-        # import IPython; IPython.embed()
+        if hasattr(self, '_col'):
+            if self._col.has_header():
+                has_data = True
         return has_data
 
     def ensure_has_data(self):
@@ -335,18 +161,11 @@ class ArrayColumn(ColumnBase):
         """
         get the data type of the column
         """
+
         self.ensure_has_data()
 
         if not hasattr(self, '_dtype'):
-            hdu = self._get_hdu()
-            dtype, _, _ = hdu.get_rec_dtype()
-            self._converted_dtype, self._convert_unicode = (
-                util.maybe_convert_ascii_dtype_to_unicode(dtype)
-            )
-            descr = dtype.descr
-            assert len(descr) == 1
-            assert descr[0][0] == 'data'
-            self._dtype = dtype
+            self._dtype = np.dtype(self._col.get_dtype())
 
         return self._dtype
 
@@ -357,21 +176,10 @@ class ArrayColumn(ColumnBase):
     @property
     def nrows(self):
         """
-        get the shape of the column
+        get the number of rows in the column
         """
         self.ensure_has_data()
-
-        hdu = self._get_hdu()
-        return hdu.get_nrows()
-
-    @property
-    def shape(self):
-        """
-        get the shape of the column
-        """
-        self.ensure_has_data()
-
-        return (self.nrows, )
+        return self._col.get_nrows()
 
     @property
     def size(self):
@@ -382,7 +190,7 @@ class ArrayColumn(ColumnBase):
 
     @property
     def data_size_bytes(self):
-        return self.dtype.itemsize * self.size
+        return self.dtype.itemsize * self.nrows
 
     @property
     def data_size_gb(self):
@@ -402,8 +210,9 @@ class ArrayColumn(ColumnBase):
 
     def _append(self, data):
         """
-        Append data to the column.  Data are appended if the file already
-        exists.
+        Append data to the column.  Data are appended.  If the file has not
+        been initialized, the data type is initialized to that of the input
+        data.
 
         Parameters
         ----------
@@ -412,29 +221,34 @@ class ArrayColumn(ColumnBase):
             the data types must match exactly.
         """
 
-        # make sure the data type of the input equals that of the column
-        if not isinstance(data, np.ndarray):
-            raise ValueError("For 'array' columns data must be a numpy array")
+        self._check_data(data)
 
-        if data.dtype.names is not None:
-            raise ValueError('do not enter data with fields')
+        if not self.has_data:
+            self._col.write_initial_header(data.dtype.str)
+        else:
+            self._check_data_dtype(data)
 
-        if data.ndim > 1:
-            raise ValueError('data must be one dimensional array')
-
-        self._write_data_as_rec(data)
+        self._col.append(data)
 
         if self.has_index:
             self._update_index()
 
-    def _write_data_as_rec(self, data):
-        view_data = self._get_rec_view(data)
+    def _check_data(self, data):
+        if data.dtype.names is not None:
+            raise ValueError('column data cannot have fields')
 
-        if not self.has_data:
-            self._fits.write(view_data)
-        else:
-            hdu = self._fits[self._ext]
-            hdu.append(view_data)
+        if not isinstance(data, np.ndarray):
+            raise ValueError(f'data must be a numpy array, got {type(data)}')
+
+        if data.ndim > 1:
+            raise ValueError('data must be one dimensional array')
+
+    def _check_data_dtype(self, data):
+        dt = data.dtype.str
+        mydt = self.dtype.str
+
+        if dt != mydt:
+            raise ValueError(f"data dtype '{dt}' != '{mydt}'")
 
     def _get_rec_view(self, data):
         view_dtype = [('data', data.dtype.descr[0][1])]
@@ -445,25 +259,23 @@ class ArrayColumn(ColumnBase):
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
+        import numpy as np
 
         self.ensure_has_data()
 
-        hdu = self._get_hdu()
+        # converts to slice or Indices and converts stepped slices to
+        # arange
+        rows = util.extract_rows(arg, self.nrows, sort=True)
 
-        rows = util.extract_rows(arg, sort=True)
-
-        if rows is None:
-            data = hdu[:]['data']
-        elif isinstance(rows, slice):
-            data = hdu[rows]['data']
+        if isinstance(rows, slice):
+            # can ignore step since we convert stepped slices to rows in
+            # extract_rows
+            n2read = rows.stop - rows.start
+            data = np.empty(n2read, dtype=self.dtype)
+            self._col.read_slice(data, rows.start)
         else:
-            data = np.zeros(rows.size, dtype=self.dtype)
-            hdu._FITS.read_rows_as_rec(self._ext+1, data, rows)
-            if self._convert_unicode:
-                data = data.astype(self._converted_dtype, copy=False)
-            data = data['data']
-            if rows.ndim == 0:
-                data = data[0]
+            data = np.empty(rows.size, dtype=self.dtype)
+            self._col.read_rows(data, rows)
 
         return data
 
@@ -474,9 +286,6 @@ class ArrayColumn(ColumnBase):
         """
         raise RuntimeError('fix writing')
 
-        if not hasattr(self, '_fits'):
-            raise ValueError('no file loaded yet')
-
     def read(self, rows=None):
         """
         read data from this column
@@ -486,9 +295,6 @@ class ArrayColumn(ColumnBase):
         rows: sequence, slice, Indices or None, optional
             A subset of the rows to read.
         """
-        if not hasattr(self, '_fits'):
-            raise ValueError('no file loaded yet')
-
         return self[rows]
 
     def _delete(self):
@@ -496,8 +302,8 @@ class ArrayColumn(ColumnBase):
         Attempt to delete the data file associated with this column
         """
 
-        if hasattr(self, '_sf'):
-            del self._fits
+        if hasattr(self, '_col'):
+            del self._col
 
         super()._delete()
 
@@ -530,6 +336,7 @@ class ArrayColumn(ColumnBase):
         the index.  Also, after creation any data appended to the column are
         automatically added to the index.
         """
+        import os
         import tempfile
         import shutil
 
@@ -563,6 +370,7 @@ class ArrayColumn(ColumnBase):
         self._init_index()
 
     def _write_index_memory(self, fname):
+        import numpy as np
         import fitsio
 
         if self.verbose:
@@ -614,6 +422,8 @@ class ArrayColumn(ColumnBase):
         """
         Delete the index for this column if it exists
         """
+        import os
+
         if self.has_index:
             index_fname = self.index_filename
             if os.path.exists(index_fname):
@@ -626,6 +436,8 @@ class ArrayColumn(ColumnBase):
         """
         If index file exists, load some info
         """
+        import os
+        import numpy as np
         import fitsio
 
         index_fname = self.index_filename
@@ -664,6 +476,8 @@ class ArrayColumn(ColumnBase):
         -------
         Indices of matches
         """
+        import numpy as np
+        from .indices import Indices
 
         values = np.array(values, ndmin=1, copy=False)
 
@@ -726,6 +540,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_right returns i such that data[i:] are all strictly > val
         """
+        from .indices import Indices
+
         self.verify_index_available()
         i = self._bisect_right(val)
         indices = self._index[1]['index'][i:].copy()
@@ -740,6 +556,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_left returns i such that data[i:] are all strictly >= val
         """
+        from .indices import Indices
+
         self.verify_index_available()
 
         i = self._bisect_left(val)
@@ -755,6 +573,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_left returns i such that data[:i] are all strictly < val
         """
+        from .indices import Indices
+
         self.verify_index_available()
 
         i = self._bisect_left(val)
@@ -770,6 +590,8 @@ class ArrayColumn(ColumnBase):
         """
         bisect_right returns i such that data[:i] are all strictly <= val
         """
+        from .indices import Indices
+
         self.verify_index_available()
 
         i = self._bisect_right(val)
@@ -818,6 +640,7 @@ class ArrayColumn(ColumnBase):
         # index array
         ind = columns.where( (col1.between(low,high)) & (col2 == value2) )
         """
+        from .indices import Indices
 
         self.verify_index_available()
 
@@ -915,77 +738,13 @@ class ArrayColumn(ColumnBase):
         return s
 
 
-class DictColumn(ColumnBase):
-    def _do_init(
-        self,
-        filename=None,
-        name=None,
-        dir=None,
-        verbose=False,
-    ):
-
-        self._type = 'dict'
-
-        super()._do_init(
-            filename=filename,
-            name=name,
-            dir=dir,
-            verbose=verbose,
-        )
-
-    def write(self, data):
-        """
-        Write data to the dict column.
-
-        Parameters
-        ----------
-        data: dict or json supported object
-            The data must be supported by the JSON format.
-        """
-
-        util.write_json(data, self.filename)
-
-    def read(self):
-        """
-        read data from this column
-        """
-
-        return util.read_json(self.filename)
-
-    def _get_repr_list(self, full=False):
-        """
-
-        Get a list of metadat for this column.
-
-        """
-        indent = '  '
-
-        if not full:
-            s = ''
-            if self.name is not None:
-                s += 'Column: %-15s' % self.name
-            s += ' type: %10s' % self.type
-
-            s = [s]
-        else:
-            s = []
-            if self.name is not None:
-                s += ['name: %s' % self.name]
-
-            if self.filename is not None:
-                s += ['filename: %s' % self.filename]
-
-            s += ['type: dict']
-
-            s = [indent + tmp for tmp in s]
-            s = ['Column: '] + s
-
-        return s
-
-
 def get_index_dtype(dtype, native=False):
-    # this removed the <,  > etc so it
-    # is native
+    """
+    this removed the <,  > etc so it
+    is native
+    """
+    import numpy as np
+
     dt = dtype.descr[0][1]
     if native:
         dt = dt[1:]

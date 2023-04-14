@@ -1,6 +1,8 @@
 """
 todo
 
+    - add read_into so we don't have to make copies, but that would be slower
+    when reading slices into rec since it could not do one big fread
     - allow update index without completely redoing it
     - tests for sub columns
     - Maybe add option "unsort" to put indices back in original unsorted order
@@ -12,9 +14,7 @@ todo
       update
 """
 import os
-from glob import glob
-import numpy as np
-from .column import ColumnBase, ArrayColumn, DictColumn
+from .filebase import FileBase
 from . import util
 
 ALLOWED_COL_TYPES = ['array', 'dict', 'cols']
@@ -153,6 +153,7 @@ class Columns(dict):
             .cols
 
         """
+        from glob import glob
 
         # clear out the existing columns and start from scratch
         self._clear()
@@ -211,8 +212,11 @@ class Columns(dict):
         self[name] = col
 
     def _open_column(self, filename, name, type):
+        from .column import Column
+        from .dictfile import DictFile
+
         if type == 'array':
-            col = ArrayColumn(
+            col = Column(
                 filename=filename,
                 dir=self.dir,
                 name=name,
@@ -220,7 +224,7 @@ class Columns(dict):
                 cache_mem=self.cache_mem,
             )
         elif type == 'dict':
-            col = DictColumn(
+            col = DictFile(
                 filename=filename,
                 dir=self.dir,
                 name=name,
@@ -413,8 +417,7 @@ class Columns(dict):
 
                 data = hdu[start:stop]
 
-                # not needed with fits backend
-                # data = util.get_native_data(data)
+                data = util.get_native_data(data)
 
                 self.append(data, verify=False)
 
@@ -469,13 +472,16 @@ class Columns(dict):
         asdict: bool, optional
             If set to True, read the requested columns into a dict.
         """
+        import numpy as np
 
         columns = self._extract_columns(columns=columns, asdict=asdict)
 
         if len(columns) == 0:
             return None
 
-        rows = util.extract_rows(rows=rows, sort=True)
+        # converts to slice or Indices and converts stepped slices to
+        # arange
+        rows = util.extract_rows(rows=rows, nrows=self.nrows, sort=True)
 
         if asdict:
             # Just putting the arrays into a dictionary.
@@ -495,20 +501,10 @@ class Columns(dict):
 
         else:
 
-            if rows is not None:
-                if isinstance(rows, slice):
-                    n_rows2read = rows.stop - rows.start
-                else:
-                    try:
-                        n_rows2read = rows.size
-                    except TypeError:
-                        n_rows2read = 1
+            if isinstance(rows, slice):
+                n_rows2read = rows.stop - rows.start
             else:
-                for c in columns:
-                    col = self[c]
-                    if col.type == 'array':
-                        n_rows2read = col.nrows
-                        break
+                n_rows2read = rows.size
 
             # copying into a single array with fields
             dtype = self._extract_dtype(columns)
@@ -529,17 +525,12 @@ class Columns(dict):
 
         for colname in columns:
             col = self[colname]
-            shape = col.shape
 
-            descr = col.dtype.descr[0][1]
+            descr = col.dtype.str
 
             dt = (colname, descr)
-            if len(shape) > 1:
-                dt = dt + shape[1:]
-
             dtype.append(dt)
 
-        dtype, _ = util.maybe_convert_ascii_dtype_to_unicode(np.dtype(dtype))
         return dtype
 
     read_columns = read
@@ -618,7 +609,7 @@ class Columns(dict):
 
             for name in sorted(self):
                 c = self[name]
-                if isinstance(c, ColumnBase):
+                if isinstance(c, FileBase):
 
                     name = c.name
 

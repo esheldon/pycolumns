@@ -25,8 +25,8 @@ class Indices(np.ndarray):
         Indices([3, 4, 5, 6])
 
     """
-    def __new__(self, init_data, copy=False):
-        self._is_sorted = False
+    def __new__(self, init_data, copy=False, is_sorted=False):
+        self._is_sorted = is_sorted
 
         # always force native byte order since we send this to C code
         # when using fitsio

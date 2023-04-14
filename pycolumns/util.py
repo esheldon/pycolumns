@@ -3,7 +3,7 @@ import json
 import numpy as np
 
 
-def extract_rows(rows, sort=True):
+def extract_rows(rows, nrows, sort=True):
     """
     extract rows for reading
 
@@ -20,19 +20,36 @@ def extract_rows(rows, sort=True):
     """
     from .indices import Indices
 
-    if (
-        rows is not None
-        and not isinstance(rows, slice)
-        and not isinstance(rows, Indices)
-    ):
-        output = Indices(rows)
-    else:
+    if isinstance(rows, slice):
+        s = extract_slice(rows, nrows)
+        if s.step is not None:
+            ind = np.arange(s.start, s.stop, s.step)
+            output = Indices(ind, is_sorted=True)
+        else:
+            output = s
+    elif rows is None:
+        output = slice(0, nrows)
+    elif isinstance(rows, Indices):
         output = rows
-
-    if isinstance(rows, Indices) and sort:
-        output.sort()
+    else:
+        output = Indices(rows)
+        if sort:
+            output.sort()
 
     return output
+
+
+def extract_slice(s, nrows):
+    start = s.start
+    stop = s.stop
+
+    if start is None:
+        start = 0
+
+    if stop is None:
+        stop = nrows
+
+    return slice(start, stop, s.step)
 
 
 def extract_colname(filename):
@@ -119,35 +136,3 @@ def get_native_data(data):
         new_data[n] = data[n]
 
     return new_data
-
-
-def maybe_decode_fits_ascii_strings_to_unicode_py3(array):
-    new_dtype, do_conversion = (
-        maybe_convert_ascii_dtype_to_unicode(array.dtype)
-    )
-    if do_conversion:
-        array = array.astype(new_dtype, copy=False)
-    return array
-
-
-def maybe_convert_ascii_dtype_to_unicode(dtype):
-
-    do_conversion = False
-    new_dt = []
-    for dt in dtype.descr:
-        if 'S' in dt[1]:
-            do_conversion = True
-            if len(dt) == 3:
-                new_dt.append((
-                    dt[0],
-                    dt[1].replace('S', 'U').replace('|', ''),
-                    dt[2]))
-            else:
-                new_dt.append((
-                    dt[0],
-                    dt[1].replace('S', 'U').replace('|', '')))
-        else:
-            new_dt.append(dt)
-
-    new_dtype = np.dtype(new_dt)
-    return new_dtype, do_conversion

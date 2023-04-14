@@ -52,12 +52,24 @@ PyColumn_get_filename(struct PyColumn* self) {
     return PyUnicode_FromString(self->fname);
 }
 static PyObject *
+PyColumn_get_mode(struct PyColumn* self) {
+    return PyUnicode_FromString(self->mode);
+}
+static PyObject *
 PyColumn_get_dtype(struct PyColumn* self) {
     return PyUnicode_FromString(self->dtype);
 }
 static PyObject *
 PyColumn_get_nrows(struct PyColumn* self) {
     return PyLong_FromLongLong(self->nrows);
+}
+static PyObject *
+PyColumn_has_header(struct PyColumn* self) {
+    if (self->has_header) {
+        Py_RETURN_TRUE;
+    } else {
+        Py_RETURN_FALSE;
+    }
 }
 
 static int
@@ -709,6 +721,13 @@ static PyMethodDef PyColumn_methods[] = {
      "\n"
      "Get the filename.\n"},
 
+    {"get_mode",
+     (PyCFunction)PyColumn_get_mode,
+     METH_VARARGS, 
+     "get_mode()\n"
+     "\n"
+     "Get the file open mode.\n"},
+
     {"get_nrows",
      (PyCFunction)PyColumn_get_nrows,
      METH_VARARGS, 
@@ -722,6 +741,14 @@ static PyMethodDef PyColumn_methods[] = {
      "get_dtype()\n"
      "\n"
      "Get the dtype string.\n"},
+
+    {"has_header",
+     (PyCFunction)PyColumn_has_header,
+     METH_VARARGS, 
+     "has_header()\n"
+     "\n"
+     "Returns True of header has been written.\n"},
+
 
     {"write_initial_header",
      (PyCFunction)PyColumn_write_initial_header,
