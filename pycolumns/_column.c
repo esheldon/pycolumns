@@ -56,19 +56,16 @@ PyColumn_read_nrows(struct PyColumn* self)
     size_t nread = 0;
     char instring[PYCOLUMN_SSIZE] = {0};
 
-    // read nrows string
+    // read nrows line
     nread = fread(
         instring,
         PYCOLUMN_SSIZE,
         1,
         self->fptr
     );
-    fprintf(stderr, "nread: %ld\n", nread);
-    fprintf(stderr, "%s", instring);
     if (nread != 1) {
         return 0;
     }
-    fprintf(stderr, "loc: %ld\n", ftell(self->fptr));
     nread = sscanf(instring, "NROWS = %lld", &self->nrows);
     if (nread != 1) {
         return 0;
@@ -83,19 +80,16 @@ PyColumn_read_dtype(struct PyColumn* self)
     size_t nread = 0;
     char instring[PYCOLUMN_SSIZE] = {0};
 
-    // read nrows string
+    // read dtype line
     nread = fread(
         instring,
         PYCOLUMN_SSIZE,
         1,
         self->fptr
     );
-    fprintf(stderr, "nread: %ld\n", nread);
-    fprintf(stderr, "%s", instring);
     if (nread != 1) {
         return 0;
     }
-    fprintf(stderr, "loc: %ld\n", ftell(self->fptr));
     nread = sscanf(instring, "DTYPE = %s", self->dtype);
     if (nread != 1) {
         return 0;
@@ -110,19 +104,16 @@ PyColumn_read_fvers(struct PyColumn* self)
     size_t nread = 0;
     char instring[PYCOLUMN_SSIZE] = {0};
 
-    // read nrows string
+    // read fvers line
     nread = fread(
         instring,
         PYCOLUMN_SSIZE,
         1,
         self->fptr
     );
-    fprintf(stderr, "nread: %ld\n", nread);
-    fprintf(stderr, "%s", instring);
     if (nread != 1) {
         return 0;
     }
-    fprintf(stderr, "loc: %ld\n", ftell(self->fptr));
     nread = sscanf(instring, "FVERS = %s", self->fvers);
     if (nread != 1) {
         return 0;
@@ -137,15 +128,13 @@ PyColumn_read_end(struct PyColumn* self)
     size_t nread = 0;
     char instring[PYCOLUMN_SSIZE] = {0};
 
-    // read nrows string
+    // read END and two newlines
     nread = fread(
         instring,
         PYCOLUMN_ESIZE,
         1,
         self->fptr
     );
-    fprintf(stderr, "nread: %ld\n", nread);
-    fprintf(stderr, "%s", instring);
     if (nread != 1) {
         return 0;
     }
@@ -174,7 +163,6 @@ read_header(struct PyColumn* self)
         return 0;
     }
 
-    fprintf(stderr, "loc: %ld\n", ftell(self->fptr));
     if (ftell(self->fptr) != PYCOLUMN_ELOC) {
         PyErr_Format(PyExc_IOError,
                      "After head read got loc %lld instead of %lld",
@@ -282,12 +270,14 @@ PyColumn_append(
 
 
 static PY_LONG_LONG
-get_row_offset(row, elsize) {
+get_row_offset(npy_intp row, npy_intp elsize) {
     return PYCOLUMN_ELOC + row * elsize;
 }
 
-// read data into input array as a slice
-// array must be contiguous
+/*
+   Read slice into array
+   No error checking is done on the data type of the input array
+*/
 static PyObject*
 PyColumn_read_slice(
     struct PyColumn* self,
@@ -298,10 +288,8 @@ PyColumn_read_slice(
     PyObject* arrayo = NULL;
     PyArrayObject* array = NULL;
     long long start = 0;
-    npy_intp num = 0;
-    npy_intp end = 0, row = 0, nread = 0, this_nread = 0, max_possible = 0;
-    npy_intp elsize = 0;
-    npy_intp offset = 0;
+    npy_intp num = 0, elsize = 0, offset = 0, end = 0, row = 0,
+             nread = 0, this_nread = 0, max_possible = 0;
     PyArrayIterObject *it = NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OL", &arrayo, &start)) {
@@ -322,19 +310,16 @@ PyColumn_read_slice(
                      start, start + num);
         return NULL;
     }
-    fprintf(stderr, "seeking to: %ld\n", offset);
 
     // SEEK_SET is from beginning
     // note fseek does not set EOF or an error, would need to
     // try the read first, hence check above
     fseek(self->fptr, offset, SEEK_SET);
 
-    fprintf(stderr, "at: %ld\n", ftell(self->fptr));
-
-    fprintf(stderr, "reading: elsize: %ld num: %ld\n", elsize, num);
-
     if (PyArray_ISCONTIGUOUS(array)) {
-        fprintf(stderr, "reading as contiguous\n");
+        if (self->verbose) {
+             fprintf(stderr, "reading as contiguous\n");
+        }
         NPY_BEGIN_ALLOW_THREADS;
         nread = fread(PyArray_DATA(array),
                       elsize,
@@ -342,7 +327,9 @@ PyColumn_read_slice(
                       self->fptr);
         NPY_END_ALLOW_THREADS;
     } else {
-        fprintf(stderr, "reading as non contiguous\n");
+        if (self->verbose) {
+            fprintf(stderr, "reading as non contiguous\n");
+        }
         NPY_BEGIN_THREADS_DEF;
 
         it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)array);
@@ -360,7 +347,7 @@ PyColumn_read_slice(
             if (this_nread < 1) {
                 NPY_END_THREADS;
                 PyErr_Format(PyExc_IOError,
-                             "problem reading element %" NPY_INTP_FMT
+                             "problem reading row %" NPY_INTP_FMT
                              " from file", row);
                 Py_DECREF(it);
                 return NULL;
@@ -374,7 +361,120 @@ PyColumn_read_slice(
 
     }
 
-    fprintf(stderr, "read: %ld\n", nread);
+    if (nread != num) {
+        PyErr_Format(PyExc_IOError,
+                     "Error reading %lld from %s",
+                     num, self->fname);
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
+
+static int
+ensure_arrays_same_size(PyObject* arr1, const char* name1,
+                        PyObject* arr2, const char* name2) {
+    npy_intp num1 = 0, num2 = 0;
+    num1 = PyArray_SIZE(arr1);
+    num2 = PyArray_SIZE(arr2);
+
+    if (num1 != num2) {
+        PyErr_Format(
+            PyExc_ValueError,
+            "%s has size %" NPY_INTP_FMT
+            " but %s has size %" NPY_INTP_FMT, num1, num2
+        );
+        return 0;
+    } else {
+        return 1;
+    }
+}
+/*
+   Read rows into array
+   No error checking is done on the data type of the input array
+   The rows should be sorted for efficiency, but this is not checked
+   rows should be type 'i8' but this is not checked
+*/
+static PyObject*
+PyColumn_read_rows(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    // PyObject* rows = NULL;
+    // PyObject* arrayo = NULL;
+    // PyObject* array = NULL;
+    // PyObject* arrayo = NULL, *rowso = NULL;
+    PyArrayObject* array = NULL, *rows = NULL;
+    npy_int64 row = 0;
+    npy_intp num = 0, elsize = 0, offset = 0,
+             nread = 0, this_nread = 0,
+             max_possible = 0;
+    PyArrayIterObject *it = NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", &array, &rows)) {
+        return NULL;
+    }
+
+    /* array = (PyArrayObject *) arrayo; */
+    /* rows = (PyArrayObject *) rowso; */
+    /*  */
+    if (!ensure_arrays_same_size(rows, "rows", array, "array")) {
+        return NULL;
+    }
+
+    elsize = PyArray_ITEMSIZE(array);
+    max_possible = get_row_offset(self->nrows, elsize);
+
+    // SEEK_SET is from beginning
+    // note fseek does not set EOF or an error, would need to
+    // try the read first, hence check above
+    fseek(self->fptr, offset, SEEK_SET);
+
+    NPY_BEGIN_THREADS_DEF;
+
+    it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)array);
+
+    NPY_BEGIN_THREADS;
+
+    while (it->index < it->size) {
+        row = *(npy_int64 *) PyArray_GETPTR1(rows, it->index);
+
+        if (row > self->nrows) {
+            NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Attempt to read row " NPY_INTP_FMT
+                         " in file with " NPY_INTP_FMT "rows",
+                         row, self->nrows);
+            Py_DECREF(it);
+            return NULL;
+        }
+        offset = get_row_offset(row, elsize);
+        fseek(self->fptr, offset, SEEK_SET);
+
+        this_nread = fread(
+            (const void *) it->dataptr,
+            elsize,
+            1,
+            self->fptr 
+        );
+        if (this_nread < 1) {
+            NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "problem reading row %" NPY_INTP_FMT
+                         " from file", row);
+            Py_DECREF(it);
+            return NULL;
+        }
+        nread += 1;
+        row += 1;
+        PyArray_ITER_NEXT(it);
+    }
+    NPY_END_THREADS;
+    Py_DECREF(it);
+
+    num = PyArray_SIZE(array);
     if (nread != num) {
         PyErr_Format(PyExc_IOError,
                      "Error reading %lld from %s",
@@ -414,7 +514,6 @@ PyColumn_init(struct PyColumn* self, PyObject *args, PyObject *kwds)
 
     if (self->mode[0] == 'r') {
         if (!read_header(self)) {
-            // fclose(self->fptr);
             PyErr_Format(PyExc_IOError,
                          "Error parsing header of %s",
                          self->fname);
@@ -499,6 +598,13 @@ static PyMethodDef PyColumn_methods[] = {
      "read_slice()\n"
      "\n"
      "Read slice of data into input array.\n"},
+
+    {"read_rows",
+     (PyCFunction)PyColumn_read_rows,
+     METH_VARARGS, 
+     "read_rows()\n"
+     "\n"
+     "Read rows into input array.\n"},
 
     {NULL}  /* Sentinel */
 };
