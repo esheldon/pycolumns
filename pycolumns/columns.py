@@ -393,7 +393,7 @@ class Columns(dict):
         self[name]._append(data)
 
     def from_fits(
-        self, filename, ext=1, native=False, little=False, lower=False,
+        self, filename, ext=1, native=False, little=True, lower=False,
     ):
         """
         Write columns to the database, reading from the input fits file.
@@ -412,7 +412,7 @@ class Columns(dict):
         little: bool, optional
             FITS files are in big endian byte order.
             If little is True, convert to little endian byte order. Default
-            False.
+            True.
         lower: bool, optional
             if True, lower-case all names.  Default False.
         """
