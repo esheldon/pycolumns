@@ -1,6 +1,11 @@
 """
 TODO
 
+    - Indices store sort_index which can be used in the read_rows code
+      (if sent) to put the data into the right place in the array
+      If is_sorted is set, then this would be None
+
+      This obviously uses more memory.
     - add read_into so we don't have to make copies, but that would be slower
     when reading slices into rec since it could not do one big fread
     - allow update index without completely redoing it

@@ -38,6 +38,18 @@ class Indices(np.ndarray):
         return ret
 
     @property
+    def sort_index(self):
+        """
+        get an array that sorts the index
+        """
+        if self.is_sorted:
+            return None
+        else:
+            if not hasattr(self, '_sort_index'):
+                self._sort_index = self.argsort()
+            return self._sort_index
+
+    @property
     def is_sorted(self):
         """
         returns True if sort has been run
