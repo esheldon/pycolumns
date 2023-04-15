@@ -550,7 +550,7 @@ PyColumn_read_rows(
     npy_int64 row = 0;
     npy_intp nread = 0;
     PyArrayIterObject *it = NULL;
-    NPY_BEGIN_THREADS_DEF;
+    // NPY_BEGIN_THREADS_DEF;
 
     if (!PyArg_ParseTuple(args, (char*)"OO", &array, &rows)) {
         return NULL;
@@ -565,13 +565,13 @@ PyColumn_read_rows(
 
     it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)array);
 
-    NPY_BEGIN_THREADS;
+    // NPY_BEGIN_THREADS;
 
     while (it->index < it->size) {
         row = *(npy_int64 *) PyArray_GETPTR1(rows, it->index);
 
         if (row > (self->nrows - 1)) {
-            NPY_END_THREADS;
+            // NPY_END_THREADS;
             PyErr_Format(PyExc_IOError,
                          "Attempt to read row " NPY_INTP_FMT
                          " in file with " NPY_INTP_FMT "rows",
@@ -589,7 +589,7 @@ PyColumn_read_rows(
             self->fptr 
         );
         if (nread < 1) {
-            NPY_END_THREADS;
+            // NPY_END_THREADS;
             PyErr_Format(PyExc_IOError,
                          "Error reading row %" NPY_INTP_FMT
                          " from file", row);
@@ -598,7 +598,7 @@ PyColumn_read_rows(
         }
         PyArray_ITER_NEXT(it);
     }
-    NPY_END_THREADS;
+    // NPY_END_THREADS;
     Py_DECREF(it);
 
     Py_RETURN_NONE;
