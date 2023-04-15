@@ -33,8 +33,9 @@ def extract_rows(rows, nrows, sort=True):
         output = rows
     else:
         output = Indices(rows)
-        if sort:
-            output.sort()
+
+    if isinstance(output, Indices) and sort:
+        output.sort()
 
     return output
 

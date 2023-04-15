@@ -1,5 +1,5 @@
 """
-todo
+TODO
 
     - add read_into so we don't have to make copies, but that would be slower
     when reading slices into rec since it could not do one big fread
@@ -12,6 +12,20 @@ todo
       on columns with read gives length 1 array
     - support update on dict column, which would be like a normal dict
       update
+    - allow appending without updating index, which we would do at the end
+      of a series of appends
+    - add aux index for chunks of the index.  Each chunk would contain 1/N
+        if the elements and a min/max which can be searched quickly.
+        Can even have 2, a .aux1 and .aux2 to speed up more
+    - this has ideas from B trees but without the file system block based
+      sizes for leaves of the tree
+
+    - eventually could chunk the data or indices into files, ala zarr, but
+      keeping the file handles open for speed (zarr is too slow for binary
+      search due to that). then for searches one can move
+      through the files.  For the search on the sort we would have the aux1/aux2
+      with aux2 in memory
+
 """
 import os
 import numpy as np

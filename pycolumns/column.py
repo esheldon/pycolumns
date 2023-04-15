@@ -1,10 +1,3 @@
-"""
-TODO
-
-    - allow appending without updating index, which we would do at the end
-      of a series of appends
-
-"""
 import os
 import numpy as np
 from .filebase import FileBase
@@ -383,8 +376,14 @@ class Column(FileBase):
             print(f'creating index for {self.name} in memory')
 
         data = self[:]
+        if self.verbose:
+            print('sorting')
+
         sort_index = data.argsort()
         data = data[sort_index]
+
+        if self.verbose:
+            print('writing')
 
         with _column.Column(
             index_file, mode='w+', verbose=self.verbose,
