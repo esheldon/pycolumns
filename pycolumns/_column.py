@@ -60,7 +60,8 @@ class Column(_column_pywrap.Column):
             The output data
         """
         data = np.empty(rows.size, dtype=self.get_dtype())
-        super()._read_rows(data, rows)
+        # super()._read_rows(data, rows)
+        super()._read_rows_pages(data, rows)
         return data
 
     def read_rows_into(self, data, rows):
@@ -78,7 +79,8 @@ class Column(_column_pywrap.Column):
         -------
         None
         """
-        super()._read_rows(data, rows)
+        # super()._read_rows(data, rows)
+        super()._read_rows_pages(data, rows)
 
     def read_slice(self, s):
         """

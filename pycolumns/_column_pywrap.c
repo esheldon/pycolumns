@@ -195,6 +195,8 @@ static npy_intp
 PyColumn_get_page_containing(struct PyColumn* self, npy_intp row) {
     npy_intp row_offset, pagenum;
     row_offset = pyc_get_row_offset(self, row);
+
+    row_offset -= PYCOLUMN_DATA_START;
     pagenum = row_offset / PYCOLUMN_PAGE_SIZE;
     return pagenum;
 }
@@ -206,6 +208,8 @@ static int pyc_load_page(struct PyColumn* self, npy_intp pagenum) {
 
     self->page.begin = pyc_get_page_offset(self, pagenum);
 
+    // fprintf(stderr, "reading page: %ld\n", pagenum);
+    // fprintf(stderr, "seeking to: %ld\n", self->page.begin);
     fseek(self->fptr, self->page.begin, SEEK_SET);
 
     // end is like a slice
@@ -215,6 +219,7 @@ static int pyc_load_page(struct PyColumn* self, npy_intp pagenum) {
     }
 
     num2read = self->page.end - self->page.begin;
+    // fprintf(stderr, "num2read: %ld\n", num2read);
 
     if (num2read > PYCOLUMN_PAGE_SIZE) {
         // NPY_END_THREADS;
@@ -231,6 +236,7 @@ static int pyc_load_page(struct PyColumn* self, npy_intp pagenum) {
         1,
         self->fptr 
     );
+    // fprintf(stderr, "nread: %ld\n", nread);
     if (nread < 1) {
         // NPY_END_THREADS;
         PyErr_Format(PyExc_IOError,
@@ -250,9 +256,8 @@ static int pyc_read_row_from_pages(
        struct PyColumn* self, npy_intp row, char* ptr
 )
 {
-    npy_intp pagenum = 0, row_offset = 0,
-             offset_in_page = 0, end_in_page = 0,
-             bytes_to_copy = 0;
+    npy_intp pagenum = 0, row_offset = 0, row_end = 0,
+             offset_in_page = 0, bytes_to_copy = 0, bytes_to_copy2 = 0;
 
     pagenum = PyColumn_get_page_containing(self, row);
 
@@ -263,23 +268,33 @@ static int pyc_read_row_from_pages(
     }
 
     row_offset = pyc_get_row_offset(self, row);
-    offset_in_page = row_offset - self->page.begin;
-    end_in_page = offset_in_page + self->elsize;  // non-inclusive
+    row_end = row_offset + self->elsize;
 
-    if (end_in_page > self->page.end) {
+    offset_in_page = row_offset - self->page.begin;
+    /* fprintf(stderr, */
+    /*         "row_offset: %ld page begin: %ld row_end: %ld page end: %ld\n", */
+    /*         row_offset, self->page.begin, row_end, self->page.end); */
+    /* fprintf(stderr, "offset_in_page: %ld end_in_page: %ld\n", */
+    /*         offset_in_page, offset_in_page + self->elsize); */
+
+    // if (end_in_page > self->page.end) {
+    if (row_end > self->page.end) {
+        // fprintf(stderr, "crosses page boundary\n");
         // we will only read some of the bytes from this page
-        bytes_to_copy = self->page.end - offset_in_page;
+        // bytes_to_copy = self->page.end - offset_in_page;
+        bytes_to_copy = self->page.end - row_offset;
         copy_bytes_from_page(self, ptr, offset_in_page, bytes_to_copy);
 
-        bytes_to_copy = end_in_page - self->page.end;
+        bytes_to_copy2 = row_end - self->page.end;
 
         // load next page
         if (!pyc_load_page(self, pagenum + 1)) {
             return 0;
         }
-        copy_bytes_from_page(self, ptr, 0, bytes_to_copy);
+        copy_bytes_from_page(self, ptr + bytes_to_copy, 0, bytes_to_copy2);
 
     } else {
+        // fprintf(stderr, "does not cross page boundary\n");
         copy_bytes_from_page(self, ptr, offset_in_page, self->elsize);
     }
 
