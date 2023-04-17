@@ -30,6 +30,8 @@
 #define PYCOLUMN_DTYPE_LEN 20
 #define PYCOLUMN_FVERS_LEN 20
 
+#define PYCOLUMN_PAGE_SIZE 2880
+
 struct PyColumn {
     PyObject_HEAD
 
@@ -603,6 +605,94 @@ PyColumn_read_rows(
 
     Py_RETURN_NONE;
 }
+
+/*
+   Read rows into array
+   No error checking is done on the data type of the input array
+   The rows should be sorted for efficiency, but this is not checked
+   rows should be native npy_int64 but this is not checked
+*/
+/*
+static PyObject*
+PyColumn_read_rows_buffer(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL, *rows = NULL;
+    npy_int64 row = 0;
+    npy_intp nread = 0;
+    PyArrayIterObject *it = NULL;
+
+    // move into struct PyColumn
+    char buffer[PYCOLUMN_PAGE_SIZE] = {0};
+
+    // NPY_BEGIN_THREADS_DEF;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", &array, &rows)) {
+        return NULL;
+    }
+
+    if (!PyColumn_check_elsize(self, array)) {
+        return NULL;
+    }
+    if (!ensure_arrays_same_size(rows, "rows", array, "array")) {
+        return NULL;
+    }
+
+    it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)array);
+
+    // NPY_BEGIN_THREADS;
+
+    current_page = -1;
+    while (it->index < it->size) {
+        row = *(npy_int64 *) PyArray_GETPTR1(rows, it->index);
+
+        if (row > (self->nrows - 1)) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Attempt to read row " NPY_INTP_FMT
+                         " in file with " NPY_INTP_FMT "rows",
+                         row, self->nrows);
+            Py_DECREF(it);
+            return NULL;
+        }
+        offset = PyColumn_get_row_offset(self, row);
+        page = offset / PYCOLUMN_PAGE_SIZE;
+        if (page == current_page) {
+            // memcpy from buffer
+        } else {
+            // if fully contained in buffer, read all
+            // else read part from buffer then load next and copy
+            // that in
+        }
+        page_offset = page * PYCOLUMN_PAGE_SIZE;
+
+        PyColumn_seek_row(self, row);
+
+        nread = fread(
+            (const void *) it->dataptr,
+            self->elsize,
+            1,
+            self->fptr 
+        );
+        if (nread < 1) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Error reading row %" NPY_INTP_FMT
+                         " from file", row);
+            Py_DECREF(it);
+            return NULL;
+        }
+        PyArray_ITER_NEXT(it);
+    }
+    // NPY_END_THREADS;
+    Py_DECREF(it);
+
+    Py_RETURN_NONE;
+}
+*/
 
 static PyObject*
 PyColumn_read_row(
