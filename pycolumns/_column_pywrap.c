@@ -208,8 +208,8 @@ static int pyc_load_page(struct PyColumn* self, npy_intp pagenum) {
 
     self->page.begin = pyc_get_page_offset(self, pagenum);
 
-    // fprintf(stderr, "reading page: %ld\n", pagenum);
-    // fprintf(stderr, "seeking to: %ld\n", self->page.begin);
+    /* fprintf(stderr, "reading page: %ld\n", pagenum); */
+    /* fprintf(stderr, "seeking to: %ld\n", self->page.begin); */
     fseek(self->fptr, self->page.begin, SEEK_SET);
 
     // end is like a slice
@@ -429,6 +429,10 @@ ERROR:
     return retval;
 }
 
+static void
+pyc_set_file_end(struct PyColumn* self) {
+    self->file_end = pyc_get_row_offset(self, self->nrows);
+}
 
 static int
 pyc_read_header(struct PyColumn* self)
@@ -467,6 +471,7 @@ pyc_read_header(struct PyColumn* self)
         goto ERROR;
     }
     self->elsize = self->descr->elsize;
+    pyc_set_file_end(self);
 
     retval = 1;
     self->has_header = 1;
@@ -490,6 +495,15 @@ pyc_write_nrows(struct PyColumn* self, PY_LONG_LONG nrows) {
     } else {
         return 1;
     }
+}
+
+static int
+pyc_update_nrows(struct PyColumn* self, npy_intp rows_added) {
+    fseek(self->fptr, 0, SEEK_SET);
+
+    self->nrows += rows_added;
+    pyc_set_file_end(self);
+    return pyc_write_nrows(self, self->nrows);
 }
 
 // write the header and load it
@@ -534,20 +548,6 @@ PyColumn_write_initial_header(
     }
 
     Py_RETURN_NONE;
-}
-
-static void
-pyc_set_file_end(struct PyColumn* self) {
-    self->file_end = pyc_get_row_offset(self, self->nrows);
-}
-
-static int
-pyc_update_nrows(struct PyColumn* self, npy_intp rows_added) {
-    fseek(self->fptr, 0, SEEK_SET);
-
-    self->nrows += rows_added;
-    pyc_set_file_end(self);
-    return pyc_write_nrows(self, self->nrows);
 }
 
 // Append data to file
