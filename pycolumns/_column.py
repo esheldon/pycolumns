@@ -28,7 +28,7 @@ class Column(_column_pywrap.Column):
             The output data
         """
         data = np.empty(self.get_nrows(), dtype=self.get_dtype())
-        super().read_slice(data, 0)
+        super()._read_slice(data, 0)
         return data
 
     def read_into(self, data):
@@ -43,7 +43,7 @@ class Column(_column_pywrap.Column):
         nrows = self.get_nrows()
         if not data.size == nrows:
             raise ValueError(f'data rows {data.size} != file nrows {nrows}')
-        super().read_slice(data, 0)
+        super()._read_slice(data, 0)
 
     def read_rows(self, rows):
         """
@@ -60,7 +60,7 @@ class Column(_column_pywrap.Column):
             The output data
         """
         data = np.empty(rows.size, dtype=self.get_dtype())
-        super().read_rows(data, rows)
+        super()._read_rows(data, rows)
         return data
 
     def read_rows_into(self, data, rows):
@@ -78,7 +78,7 @@ class Column(_column_pywrap.Column):
         -------
         None
         """
-        super().read_rows(data, rows)
+        super()._read_rows(data, rows)
 
     def read_slice(self, s):
         """
@@ -97,7 +97,7 @@ class Column(_column_pywrap.Column):
         start, stop = self._extract_slice_start_stop(s)
         nrows = stop - start
         data = np.empty(nrows, dtype=self.get_dtype())
-        super().read_slice(data, start)
+        super()._read_slice(data, start)
         return data
 
     def read_slice_into(self, data, s):
@@ -119,7 +119,7 @@ class Column(_column_pywrap.Column):
         nrows = stop - start
         if data.size != nrows:
             raise ValueError(f'data size {data.size} != slice nrows {nrows}')
-        super().read_slice(data, start)
+        super()._read_slice(data, start)
 
     def append(self, data):
         """
@@ -128,7 +128,7 @@ class Column(_column_pywrap.Column):
         if not self.has_header():
             self.init(data.dtype)
 
-        super().append(data)
+        super()._append(data)
 
     def init(self, dtype):
         """

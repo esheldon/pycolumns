@@ -542,7 +542,7 @@ class Column(FileBase):
 
     def _read_one_from_index(self, index):
         arr1 = self._arr1
-        self._sorted.read_row(arr1, index)
+        self._sorted._read_row(arr1, index)
         val = arr1[0]
         return val
 
