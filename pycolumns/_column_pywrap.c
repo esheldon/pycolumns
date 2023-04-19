@@ -115,7 +115,7 @@ ensure_arrays_same_size(PyObject* arr1, const char* name1,
         PyErr_Format(
             PyExc_ValueError,
             "%s has size %" NPY_INTP_FMT
-            " but %s has size %" NPY_INTP_FMT, num1, num2
+            " but %s has size %" NPY_INTP_FMT, name1, num1, name2, num2
         );
         return 0;
     } else {
