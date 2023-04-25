@@ -1,7 +1,7 @@
 import numpy as np
 from . import util
-from . import _column
-from .defaults import DEFAULT_CACHE_MEM
+from ._column import Column as CColumn
+from .defaults import DEFAULT_CACHE_MEM, DEFAULT_MERGESORT_CHUNKSIZE_GB
 
 
 class Column(object):
@@ -97,8 +97,9 @@ class Column(object):
 
         self._type = 'col'
         self._ext = 1
-        self._index_dtype = np.dtype('i8')
         self._dtype = np.dtype(self._meta['dtype'])
+        self._index_dtype = np.dtype('i8')
+        self._index1_dtype = np.dtype([('index', 'i8'), ('value', self.dtype)])
 
         self._open_array_file()
 
@@ -163,7 +164,7 @@ class Column(object):
         """
         get the filename for the hierarch 1 index of this column
         """
-        return self._index_filename
+        return self._index1_filename
 
     @property
     def sorted_filename(self):
@@ -212,6 +213,10 @@ class Column(object):
         return self._index_dtype
 
     @property
+    def index1_dtype(self):
+        return self._index1_dtype
+
+    @property
     def nrows(self):
         """
         get the number of rows in the column
@@ -250,7 +255,7 @@ class Column(object):
         return self._cache_mem_gb
 
     def _open_array_file(self):
-        self._col = _column.Column(
+        self._col = CColumn(
             self.array_filename,
             dtype=self._meta['dtype'],
             mode='r+',
@@ -354,21 +359,31 @@ class Column(object):
         if not self.has_index:
             raise ValueError('no index exists for column %s' % self.name)
 
-    def create_index(self):
+    def create_index(
+        self, overwrite=False, chunksize=DEFAULT_MERGESORT_CHUNKSIZE_GB,
+    ):
         """
         Create an index for this column.
 
-        Once the index is created, all data from the column will be put into
-        the index.  Also, after creation any data appended to the column are
-        automatically added to the index.
+        Parameters
+        ----------
+        overwrite: bool, optional
+            If set to True, overwrite any existing index.  See also
+            update_index()
+        chunksize: number
+            Size of chunks for mergesort in gigabytes
         """
         import os
-        import tempfile
+        from tempfile import TemporaryDirectory
         import shutil
 
-        if self.has_index:
-            print(f'column {self.name} already has an index')
-            return
+        if self.has_index and not overwrite:
+            raise RuntimeError(
+                f'column {self.name} already has an index.  Send '
+                f' overwrite=True or use update_index()'
+            )
+
+        self.delete_index()
 
         # total usage for in-memory sorting is index size plus twice the size
         # data since we need to do data[s] to get the sorted this is an
@@ -380,7 +395,7 @@ class Column(object):
             print(f'cache mem: {self.cache_mem}')
             print(f'required gb: {size_gb:.3g}')
 
-        with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
+        with TemporaryDirectory(dir=self.dir) as tmpdir:
             ifile = os.path.join(
                 tmpdir,
                 os.path.basename(self.index_filename),
@@ -389,45 +404,40 @@ class Column(object):
                 tmpdir,
                 os.path.basename(self.sorted_filename),
             )
+            with CColumn(ifile, mode='w+', dtype=self.index_dtype) as iobj:
+                with CColumn(sfile, mode='w+', dtype=self.dtype) as sobj:
 
-            if size_gb < self.cache_mem_gb:
-                self._write_index_memory(ifile, sfile)
-            else:
-                self._write_index_mergesort(tmpdir, ifile, sfile)
+                    if size_gb < self.cache_mem_gb:
+                        self._write_index_memory(iobj, sobj)
+                    else:
+                        self._write_index_mergesort(tmpdir, ifile, sfile)
 
-            if self.verbose:
-                print(f'{ifile} -> {self.index_filename}')
-            shutil.move(ifile, self.index_filename)
+                    if self.verbose:
+                        print(f'  {ifile} -> {self.index_filename}')
+                    shutil.move(ifile, self.index_filename)
 
-            if self.verbose:
-                print(f'{sfile} -> {self.sorted_filename}')
-            shutil.move(sfile, self.sorted_filename)
+                    if self.verbose:
+                        print(f'  {sfile} -> {self.sorted_filename}')
+                    shutil.move(sfile, self.sorted_filename)
 
+        self._write_index1()
         self._init_index()
 
-    def _write_index_memory(self, index_file, sorted_file):
+    def _write_index_memory(self, iobj, sobj):
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
         data = self[:]
         if self.verbose:
-            print('sorting')
+            print('  sorting')
 
         sort_index = data.argsort()
-        data = data[sort_index]
 
         if self.verbose:
-            print('writing')
+            print('  writing')
 
-        with _column.Column(
-            index_file, mode='w+', verbose=self.verbose,
-        ) as indcol:
-            indcol.append(sort_index)
-
-        with _column.Column(
-            sorted_file, mode='w+', verbose=self.verbose,
-        ) as scol:
-            scol.append(data)
+        iobj.append(sort_index)
+        sobj.append(data[sort_index])
 
     def _write_index_mergesort(self, tmpdir, index_file, sorted_file):
         from .mergesort import create_mergesort_index
@@ -452,12 +462,47 @@ class Column(object):
             verbose=self.verbose,
         )
 
-    def update_index(self):
+    def _write_index1(self, chunksize_rows=10_000):
         """
-        re-create the index
+        this needs to be worked out much better
         """
-        self.delete_index()
-        self.create_index()
+        nchunks = self.nrows // chunksize_rows
+        if self.nrows % chunksize_rows != 0:
+            nchunks += 1
+
+        if nchunks < 10:
+            rows = np.arange(self.nrows)
+        else:
+            rows = np.ones(nchunks+1, dtype='i8')
+            rows[0:-1] = np.arange(0, self.nrows, chunksize_rows)
+            rows[-1] = self.nrows - 1
+
+        output = np.zeros(rows.size, dtype=self.index1_dtype)
+        output['index'] = rows
+
+        if self.verbose:
+            print('  reading index1 values from:', self.sorted_filename)
+        with CColumn(self.sorted_filename, dtype=self.dtype) as scol:
+            output['value'] = scol[rows]
+
+        if self.verbose:
+            print('  writing:', self.index1_filename)
+        with CColumn(
+                self.index1_filename,
+                mode='w+',
+                dtype=self.index1_dtype) as i1col:
+            i1col.append(output)
+
+    def update_index(self, chunksize=DEFAULT_MERGESORT_CHUNKSIZE_GB):
+        """
+        Recreate the index for this column.
+
+        Parameters
+        ----------
+        chunksize: number
+            Size of chunks for mergesort in gigabytes
+        """
+        self.create_index(overwrite=True)
 
     def delete_index(self):
         """
@@ -466,10 +511,15 @@ class Column(object):
         import os
 
         if self.has_index:
-            index_fname = self.index_filename
-            if os.path.exists(index_fname):
-                print("Removing index for column: %s" % self.name)
-                os.remove(index_fname)
+            names = [
+                self.index_filename,
+                self.index1_filename,
+                self.sorted_filename,
+            ]
+            for name in names:
+                if os.path.exists(name):
+                    print("Removing: %s" % name)
+                    os.remove(name)
 
         self._init_index()
 
@@ -482,26 +532,28 @@ class Column(object):
 
         self._arr1 = np.zeros(1, dtype=self.dtype)
 
-        index_fname = self.index_filename
-        if os.path.exists(index_fname):
-            sort_fname = self.sorted_filename
-            if not os.path.exists(sort_fname):
-                raise RuntimeError(f'missing sorted file {sort_fname}')
+        if os.path.exists(self.index_filename):
+            if not os.path.exists(self.sorted_filename):
+                raise RuntimeError(
+                    f'missing sorted file {self.sorted_filename}'
+                )
 
-            index_fname = self.index_filename
-            if not os.path.exists(index_fname):
-                raise RuntimeError(f'missing index file {index_fname}')
+            if not os.path.exists(self.index_filename):
+                raise RuntimeError(
+                    f'missing index file {self.index_filename}'
+                )
 
-            index1_fname = self.index1_filename
-            if not os.path.exists(index1_fname):
-                raise RuntimeError(f'missing index1 file {index1_fname}')
+            if not os.path.exists(self.index1_filename):
+                raise RuntimeError(
+                    f'missing index1 file {self.index1_filename}'
+                )
 
             self._has_index = True
-            self._index = _column.Column(index_fname, dtype=self.index_dtype)
-            self._index1 = _column.Column(
-                index1_fname, dtype=self.index1_dtype,
+            self._index = CColumn(self.index_filename, dtype=self.index_dtype)
+            self._index1 = CColumn(
+                self.index1_filename, dtype=self.index1_dtype,
             )
-            self._sorted = _column.Column(sort_fname, dtype=self.dtype)
+            self._sorted = CColumn(self.sorted_filename, dtype=self.dtype)
 
             self._index1_data = self._index1[:]
         else:

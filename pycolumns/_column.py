@@ -269,14 +269,12 @@ Column:
 """
 
 
-def read(fname, rows=None, verbose=False):
-    with Column(fname, mode='r', verbose=verbose) as col:
+def read(fname, dtype, rows=None, verbose=False):
+    with Column(fname, dtype=dtype, mode='r', verbose=verbose) as col:
         if rows is None:
-            data = col.read()
-        elif isinstance(rows, slice):
-            data = col.read_slice()
+            data = col[:]
         else:
-            data = col.read_rows(rows)
+            data = col[rows]
     return data
 
 
@@ -286,7 +284,7 @@ def write(fname, data, append=True, verbose=False):
     else:
         mode = 'w+'
 
-    with Column(fname, mode=mode, verbose=verbose) as col:
+    with Column(fname, dtype=data.dtype, mode=mode, verbose=verbose) as col:
         if not col.has_header():
             col.init(data.dtype.str)
         col.append(data)
@@ -298,7 +296,7 @@ def append(fname, data, verbose=False):
     else:
         mode = 'r+'
 
-    with Column(fname, mode=mode, verbose=verbose) as col:
+    with Column(fname, dtype=data.dtype, mode=mode, verbose=verbose) as col:
         if not col.has_header():
             col.init(data.dtype.str)
         col.append(data)

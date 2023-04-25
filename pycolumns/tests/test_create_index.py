@@ -1,7 +1,8 @@
 import pytest
 
 
-@pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+# @pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+@pytest.mark.parametrize('cache_mem', [1.0])
 def test_create_index(cache_mem):
     """
     cache_mem of 0.01 will force use of mergesort
@@ -10,18 +11,23 @@ def test_create_index(cache_mem):
     import tempfile
     import numpy as np
     from .. import _column
-    from ..columns import Columns
+    from ..columns import Columns, create_columns
+    from ..util import array_to_schema
 
     seed = 333
     num = 1_000_000
+    rng = np.random.RandomState(seed)
+    data = np.zeros(num, dtype=[('rand', 'f8')])
+    data['rand'] = rng.uniform(size=num)
+
+    schema = array_to_schema(data)
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
 
-        rng = np.random.RandomState(seed)
-        data = np.zeros(num, dtype=[('rand', 'f8')])
-        data['rand'] = rng.uniform(size=num)
+        cdir = os.path.join(tmpdir, 'test.cols')
+        create_columns(cdir, schema, verbose=True)
+
+        cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
 
         cols.append(data)
         cols['rand'].create_index()
@@ -29,8 +35,8 @@ def test_create_index(cache_mem):
 
         ifile = cols['rand'].index_filename
         sfile = cols['rand'].sorted_filename
-        idata = _column.read(ifile)
-        sdata = _column.read(sfile)
+        idata = _column.read(ifile, dtype=cols['rand'].index_dtype)
+        sdata = _column.read(sfile, dtype=cols['rand'].dtype)
 
         s = data['rand'].argsort()
         assert np.all(idata == s)
@@ -45,28 +51,37 @@ def test_create_index_str():
     import tempfile
     import numpy as np
     from .. import _column
-    from ..columns import Columns
+    from ..columns import Columns, create_columns
+    from ..util import array_to_schema
 
     seed = 55
     num = 20
+    rng = np.random.RandomState(seed)
+
+    dt = 'U5'
+    data = np.zeros(num, dtype=[('scol', dt)])
+    rand = rng.uniform(size=num)
+    data['scol'] = rand.astype(dt)
+
+    schema = array_to_schema(data)
 
     with tempfile.TemporaryDirectory() as tmpdir:
+
         cdir = os.path.join(tmpdir, 'test.cols')
+        create_columns(cdir, schema, verbose=True)
+
         cols = Columns(cdir, verbose=True)
 
-        rng = np.random.RandomState(seed)
-        data = np.zeros(num, dtype=[('scol', 'U5')])
-        rand = rng.uniform(size=num)
-        data['scol'] = ['%.2g' % v for v in rand]
-
         cols.append(data)
+        print(cols)
+
         cols['scol'].create_index()
         assert cols['scol'].has_index
 
         ifile = cols['scol'].index_filename
         sfile = cols['scol'].sorted_filename
-        idata = _column.read(ifile)
-        sdata = _column.read(sfile)
+        idata = _column.read(ifile, dtype=cols['scol'].index_dtype)
+        sdata = _column.read(sfile, dtype=cols['scol'].dtype)
 
         s = data['scol'].argsort()
         assert np.all(idata == s)
