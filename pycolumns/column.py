@@ -1,11 +1,10 @@
-import os
 import numpy as np
-from .filebase import FileBase
 from . import util
 from . import _column
+from .defaults import DEFAULT_CACHE_MEM
 
 
-class Column(FileBase):
+class Column(object):
     """
     Represent an array column in a Columns database
 
@@ -17,8 +16,14 @@ class Column(FileBase):
         Name of the column
     dir: str, optional
         Directory of column
-    cache_mem: number, optional
-        Memory for cache used when creating index in gigabytes. Default 1.0
+    cache_mem: str or number
+        Cache memory for index creation, default '1g' or one gigabyte.
+        Can be a number in gigabytes or a string
+        Strings should be like '{amount}{unit}'
+            '1g' = 1 gigabytes
+            '100m' = 100 metabytes
+            '1000k' = 1000 kilobytes
+        Units can be g, m or k, case insenitive
     verbose: bool, optional
         If set to True print messages
 
@@ -27,10 +32,10 @@ class Column(FileBase):
     # there are alternative construction methods
     # this method determines all info from the full path
 
-    col = ArrayColumn(filename='/full/path')
+    col = Column(filename='/full/path')
 
     # this one uses directory, column name
-    col = ArrayColumn(name='something', dir='/path2o/dbname.cols')
+    col = Column(name='something', dir='/path2o/dbname.cols')
 
     Slice and item lookup
     ---------------------
@@ -61,78 +66,118 @@ class Column(FileBase):
     """
     def __init__(
         self,
-        filename=None,
-        name=None,
-        dir=None,
-        cache_mem=1,
+        metafile,
+        cache_mem=DEFAULT_CACHE_MEM,
         verbose=False,
-    ):
-        self._do_init(
-            filename=filename,
-            name=name,
-            dir=dir,
-            cache_mem=cache_mem,
-            verbose=verbose,
-        )
-
-    def _do_init(
-        self,
-        filename=None,
-        name=None,
-        dir=None,
-        verbose=False,
-        cache_mem=1,
     ):
         """
         initialize the meta data, and possibly load the mmap
         """
 
-        self._type = 'array'
+        self._meta_filename = metafile
+        self._cache_mem = cache_mem
+        self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
+        self._verbose = verbose
+        self.reload()
+
+    def reload(self):
+        """
+        load, or reload all meta data and reopen/open files
+        """
+        self._meta = util.read_json(self.meta_filename)
+
+        path_info = util.meta_to_colfiles(self.meta_filename)
+        self._array_filename = path_info['array']
+        self._index_filename = path_info['index']
+        self._index1_filename = path_info['index1']
+        self._sorted_filename = path_info['sorted']
+        self._chunks_filename = path_info['chunks']
+        self._name = path_info['name']
+        self._dir = path_info['dir']
+
+        self._type = 'col'
         self._ext = 1
         self._index_dtype = np.dtype('i8')
+        self._dtype = np.dtype(self._meta['dtype'])
 
-        self._cache_mem_gb = float(cache_mem)
-
-        super()._do_init(
-            filename=filename,
-            name=name,
-            dir=dir,
-            verbose=verbose,
-        )
-
-        # if self.filename is None or not os.path.exists(self.filename):
-        if self.filename is None:
-            return
-
-        self._open_file()
+        self._open_array_file()
 
         # get info for index if it exists
         self._init_index()
 
-    def _open_file(self):
-        if os.path.exists(self.filename):
-            mode = 'r+'
-        else:
-            mode = 'w+'
+    @property
+    def verbose(self):
+        return self._verbose
 
-        self._col = _column.Column(
-            fname=self.filename,
-            mode=mode,
-            verbose=self.verbose,
-        )
-
-    def _clear(self):
+    @property
+    def name(self):
         """
-        Clear out all the metadata for this column.
+        get the name type of the column
         """
+        return self._name
 
-        super()._clear()
+    @property
+    def dir(self):
+        """
+        get the directory holding the file
+        """
+        return self._dir
 
-        if self.has_data:
-            del self._col
-            del self._dtype
+    @property
+    def type(self):
+        """
+        get the data type of the column
+        """
+        return self._type
 
-        self._has_index = False
+    @property
+    def meta_filename(self):
+        """
+        get the filename for the array of this column
+        """
+        return self._meta_filename
+
+    @property
+    def array_filename(self):
+        """
+        get the filename for the array of this column
+        """
+        return self._array_filename
+
+    @property
+    def chunks_filename(self):
+        """
+        get the filename for the chunks for this column
+        """
+        return self._chunks_filename
+
+    @property
+    def index_filename(self):
+        """
+        get the filename for the index of this column
+        """
+        return self._index_filename
+
+    @property
+    def index1_filename(self):
+        """
+        get the filename for the hierarch 1 index of this column
+        """
+        return self._index_filename
+
+    @property
+    def sorted_filename(self):
+        """
+        get the filename for the sorted version of this column
+        """
+        return self._sorted_filename
+
+    @property
+    def meta(self):
+        """
+        get a copy of the meta data dict
+        """
+        return self._meta.copy()
 
     @property
     def has_data(self):
@@ -151,21 +196,16 @@ class Column(FileBase):
         """
         raise RuntimeError if no data is present
         """
-        if not self.has_data:
-            raise ValueError('this column has no associated data')
+        if not self.nrows > 0:
+            raise ValueError('this column has no data')
 
     @property
     def dtype(self):
         """
         get the data type of the column
         """
-
-        self.ensure_has_data()
-
-        if not hasattr(self, '_dtype'):
-            self._dtype = np.dtype(self._col.get_dtype())
-
         return self._dtype
+        # return self._meta['dtype']
 
     @property
     def index_dtype(self):
@@ -176,8 +216,7 @@ class Column(FileBase):
         """
         get the number of rows in the column
         """
-        self.ensure_has_data()
-        return self._col.get_nrows()
+        return self._col.nrows
 
     @property
     def size(self):
@@ -206,6 +245,18 @@ class Column(FileBase):
     def cache_mem(self):
         return self._cache_mem_gb
 
+    @property
+    def cache_mem_gb(self):
+        return self._cache_mem_gb
+
+    def _open_array_file(self):
+        self._col = _column.Column(
+            self.array_filename,
+            dtype=self._meta['dtype'],
+            mode='r+',
+            verbose=self.verbose,
+        )
+
     def _append(self, data):
         """
         Append data to the column.  Data are appended.  If the file has not
@@ -220,10 +271,7 @@ class Column(FileBase):
         """
 
         self._check_data(data)
-
-        if self.has_data:
-            self._check_data_dtype(data)
-
+        self._check_data_dtype(data)
         self._col.append(data)
 
         if self.has_index:
@@ -343,7 +391,7 @@ class Column(FileBase):
 
         if self.verbose:
             print('creating index for column', self.name)
-            print(f'cache mem gb: {self._cache_mem_gb:.3g}')
+            print(f'cache mem: {self.cache_mem}')
             print(f'required gb: {size_gb:.3g}')
 
         with tempfile.TemporaryDirectory(dir=self.dir) as tmpdir:
@@ -356,7 +404,7 @@ class Column(FileBase):
                 os.path.basename(self.sorted_filename),
             )
 
-            if size_gb < self._cache_mem_gb:
+            if size_gb < self.cache_mem_gb:
                 self._write_index_memory(ifile, sfile)
             else:
                 self._write_index_mergesort(tmpdir, ifile, sfile)
@@ -401,7 +449,7 @@ class Column(FileBase):
         if self.verbose:
             print(f'creating index for {self.name} with mergesort on disk')
 
-        chunksize_bytes = int(self._cache_mem_gb * 1024**3)
+        chunksize_bytes = int(self.cache_mem_gb * 1024**3)
 
         bytes_per_element = self.index_dtype.itemsize + self.dtype.itemsize
 
@@ -460,36 +508,6 @@ class Column(FileBase):
             self._has_index = False
             self._index = None
             self._sorted = None
-
-    @property
-    def index_filename(self):
-        """
-        get the filename for the index of this column
-        """
-        if self.filename is None:
-            return None
-
-        if not hasattr(self, '_index_filename'):
-            # remove the final extension
-            bname = '.'.join(self.filename.split('.')[0:-1])
-            self._index_filename = bname+'.index'
-
-        return self._index_filename
-
-    @property
-    def sorted_filename(self):
-        """
-        get the filename for the index of this column
-        """
-        if self.filename is None:
-            return None
-
-        if not hasattr(self, '_sorted_filename'):
-            # remove the final extension
-            bname = '.'.join(self.filename.split('.')[0:-1])
-            self._sorted_filename = bname+'.sort'
-
-        return self._sorted_filename
 
     def match(self, values):
         """
@@ -703,14 +721,13 @@ class Column(FileBase):
                 s += 'Column: %-15s' % self.name
 
             s += ' type: %10s' % self.type
-            if self.has_data:
 
-                # if self.shape is not None:
-                #     s += ' shape: %12s' % (self.shape,)
-                s += ' nrows: %12s' % self.nrows
+            # if self.shape is not None:
+            #     s += ' shape: %12s' % (self.shape,)
+            s += ' nrows: %12s' % self.nrows
 
-                if self.name is not None:
-                    s += ' has index: %s' % self.has_index
+            if self.name is not None:
+                s += ' has index: %s' % self.has_index
 
             s = [s]
         else:
@@ -723,19 +740,26 @@ class Column(FileBase):
 
             s += ['type: array']
 
-            if self.has_data:
-                s += ['has index: %s' % self.has_index]
+            s += ['has index: %s' % self.has_index]
 
-                c_dtype = self.dtype.descr[0][1]
-                s += ['dtype: %s' % c_dtype]
+            c_dtype = self.dtype.descr[0][1]
+            s += ['dtype: %s' % c_dtype]
 
-                # if self.shape is not None:
-                #     s += ['shape: %s' % (self.shape,)]
-                s += ['nrows: %s' % self.nrows]
+            # if self.shape is not None:
+            #     s += ['shape: %s' % (self.shape,)]
+            s += ['nrows: %s' % self.nrows]
 
             s = [indent + tmp for tmp in s]
             s = ['Column: '] + s
 
+        return s
+
+    def __repr__(self):
+        """
+        Print out some info about this column
+        """
+        s = self._get_repr_list(full=True)
+        s = "\n".join(s)
         return s
 
 

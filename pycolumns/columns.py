@@ -1,45 +1,77 @@
 """
 TODO
 
-    - Indices store sort_index which can be used in the read_rows code
-      (if sent) to put the data into the right place in the array
-      If is_sorted is set, then this would be None
-
-      This obviously uses more memory.
-    - add read_into so we don't have to make copies, but that would be slower
-    when reading slices into rec since it could not do one big fread
-    - allow update index without completely redoing it
-    - tests for sub columns
-    - Maybe add option "unsort" to put indices back in original unsorted order
-    - add updating a set of columns/column
-    - make it possible to add_column for array if we then eventually verify
-    - if reading single row, scalar, doing from column gives a number but
-      on columns with read gives length 1 array
-    - support update on dict column, which would be like a normal dict
-      update
-    - allow appending without updating index, which we would do at the end
-      of a series of appends
-    - add aux index for chunks of the index.  Each chunk would contain 1/N
-        if the elements and a min/max which can be searched quickly.
-        Can even have 2, a .aux1 and .aux2 to speed up more
-    - this has ideas from B trees but without the file system block based
-      sizes for leaves of the tree
-
-    - eventually could chunk the data or indices into files, ala zarr, but
-      keeping the file handles open for speed (zarr is too slow for binary
-      search due to that). then for searches one can move
-      through the files.  For the search on the sort we would have the aux1/aux2
-      with aux2 in memory
-
+    - ability to add a column
+    - Maybe don't have dicts and subcols in self as a name
+        - get_dict()
+        - get_subcols()
 """
 import os
 import numpy as np
-from .filebase import FileBase
 from .column import Column
 from .dictfile import Dict
 from . import util
+from .defaults import DEFAULT_CACHE_MEM
 
-ALLOWED_COL_TYPES = ['array', 'dict', 'cols']
+
+def create_columns(dir, info, overwrite=False):
+    """
+    Initialize a columns database
+
+    Parameters
+    ----------
+    dir: str
+        Path to columns directory
+    info: dict
+        Dictionary holding information for each column.
+
+    Examples
+    --------
+        dir = 'test.cols'
+        info = {
+            'id': {
+                'dtype': 'i8',
+                'compression': 'zstd',
+                'clevel': 5,
+            },
+            'ra': {
+                'dtype': 'f8',
+            },
+            'name': {
+                'dtype': 'U5',
+                'compression': 'zstd',
+                'clevel': 5,
+            },
+        }
+        pyc.create_columns(dir, info)
+    """
+    import shutil
+
+    if dir is not None:
+        dir = os.path.expandvars(dir)
+
+    if os.path.exists(dir):
+        if not overwrite:
+            raise RuntimeError(
+                f'directory {dir} already exists, send '
+                f'overwrite=True to replace'
+            )
+
+        print(f'removing {dir}')
+        shutil.rmtree(dir)
+
+    print(f'creating: {dir}')
+    os.makedirs(dir)
+
+    for name in info:
+        print('    creating:', name)
+        metafile = util.get_filename(dir, name, 'meta')
+        util.write_json(metafile, info[name])
+
+        dfile = util.get_filename(dir, name, 'array')
+        with open(dfile, 'w') as fobj:  # noqa
+            # just to create the empty file
+            pass
 
 
 class Columns(dict):
@@ -50,17 +82,32 @@ class Columns(dict):
     ----------
     dir: str
         Path to database
-    cache_mem: number, optional
-        Cache memory for index creation in gigabytes.  Default 1.0
+    cache_mem: str or number
+        Cache memory for index creation, default '1g' or one gigabyte.
+        Can be a number in gigabytes or a string
+        Strings should be like '{amount}{unit}'
+            '1g' = 1 gigabytes
+            '100m' = 100 metabytes
+            '1000k' = 1000 kilobytes
+        Units can be g, m or k, case insenitive
     verbose: bool, optional
         If set to True, print messages
     """
 
-    def __init__(self, dir=None, cache_mem=1, verbose=False):
+    def __init__(self, dir, cache_mem=DEFAULT_CACHE_MEM, verbose=False):
+
+        dir = os.path.expandvars(dir)
+
+        if not os.path.exists(dir):
+            raise RuntimeError(
+                f'dir {dir} does not exist.  Use create_columns to initialize'
+            )
+
+        self._dir = dir
         self._type = 'cols'
         self._verbose = verbose
-        self._cache_mem_gb = float(cache_mem)
-        self._set_dir(dir)
+        self._cache_mem = cache_mem
+        self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
         self._load()
 
     @property
@@ -115,19 +162,11 @@ class Columns(dict):
 
     @property
     def cache_mem(self):
+        return self._cache_mem
+
+    @property
+    def cache_mem_gb(self):
         return self._cache_mem_gb
-
-    def _set_dir(self, dir=None):
-        """
-        Set the database directory, creating if none exists.
-        """
-        if dir is not None:
-            dir = os.path.expandvars(dir)
-
-        self._dir = dir
-
-        if not os.path.exists(dir):
-            os.makedirs(dir)
 
     def delete(self, yes=False):
         """
@@ -162,34 +201,31 @@ class Columns(dict):
 
     def _load(self):
         """
-
-        Load all existing columns in the
-        directory.  Column files must have the right extensions to be noticed
-        so far these can be
-
-            .col
-            .json
-
-        and other column directories can be loaded if they have the extension
-
-            .cols
-
+        Load all entries
         """
         from glob import glob
 
         # clear out the existing columns and start from scratch
-        self._clear()
+        self._clear_all()
 
-        for type in ALLOWED_COL_TYPES:
-            if self.dir is not None:
-                pattern = os.path.join(self.dir, '*.'+type)
-                fnames = glob(pattern)
+        # load the table columns
+        pattern = os.path.join(self.dir, '*')
+        fnames = glob(pattern)
+        for fname in fnames:
+            name = util.extract_colname(fname)
+            type = util.extract_coltype(fname)
 
-                for f in fnames:
-                    if type == 'cols':
-                        self._load_coldir(f)
-                    else:
-                        self._load_entry(f)
+            if type == 'meta':
+                self[name] = Column(
+                    fname, cache_mem=self.cache_mem, verbose=self.verbose,
+                )
+            elif type == 'dict':
+                self[name] = Dict(fname, verbose=self.verbose)
+            elif type == 'cols':
+                self[name] = Columns(
+                    fname, cache_mem=self.cache_mem, verbose=self.verbose,
+                )
+
         self.verify()
 
     def verify(self):
@@ -212,50 +248,7 @@ class Columns(dict):
                             'got %d vs %d' % (c, this_nrows, self.nrows)
                         )
 
-    def _load_entry(self, filename):
-        """
-        Load the specified column
-        """
-
-        name = util.extract_colname(filename)
-        type = util.extract_coltype(filename)
-
-        if type not in ALLOWED_COL_TYPES:
-            raise ValueError("bad column type: '%s'" % type)
-
-        col = self._open_entry(
-            filename=filename,
-            name=name,
-            type=type,
-        )
-
-        name = col.name
-        self._clear(name)
-        self[name] = col
-
-    def _open_entry(self, filename, name, type):
-
-        if type == 'array':
-            col = Column(
-                filename=filename,
-                dir=self.dir,
-                name=name,
-                verbose=self.verbose,
-                cache_mem=self.cache_mem,
-            )
-        elif type == 'dict':
-            col = Dict(
-                filename=filename,
-                dir=self.dir,
-                name=name,
-                verbose=self.verbose,
-            )
-        else:
-            raise ValueError("bad column type '%s'" % type)
-
-        return col
-
-    def create_dict(self, name):
+    def create_dict(self, name, data={}):
         """
         create a new dict column
 
@@ -263,26 +256,16 @@ class Columns(dict):
         ----------
         name: str
             Column name
+        data: dict, optional
+            Optional initial data, default {}
         """
 
-        type = 'dict'
         if name in self.dict_names:
             raise ValueError("column '%s' already exists" % name)
 
-        if self.dir is None:
-            raise ValueError("no dir is set for Columns db, can't "
-                             "construct names")
-
-        filename = util.create_filename(dir=self.dir, name=name, type=type)
-
-        dictfile = self._open_entry(
-            filename=filename,
-            name=name,
-            type=type,
-        )
-
-        name = dictfile.name
-        self[name] = dictfile
+        filename = util.get_filename(dir=self.dir, name=name, type='dict')
+        self[name] = Dict(filename, verbose=self.verbose)
+        self[name].write(data)
 
     def _create_column(self, name, verify=True):
         """
@@ -310,7 +293,7 @@ class Columns(dict):
             raise ValueError("no dir is set for Columns db, can't "
                              "construct names")
 
-        filename = util.create_filename(dir=self.dir, name=name, type=type)
+        filename = util.get_filename(dir=self.dir, name=name, type=type)
 
         col = self._open_entry(
             filename=filename,
@@ -324,24 +307,10 @@ class Columns(dict):
         if verify:
             self.verify()
 
-    def _load_coldir(self, dir):
-        """
-        Load a coldir under this coldir
-        """
-        if not os.path.exists(dir):
-            raise RuntimeError("coldir does not exists: '%s'" % dir)
-
-        cols = Columns(
-            dir, cache_mem=self.cache_mem, verbose=self.verbose,
-        )
-
-        name = cols._dirbase()
-        self._clear(name)
-        self[name] = cols
-
     def reload(self, columns=None):
         """
-        reload the database or a subset of columns
+        reload the database or a subset of columns.  Note discovery
+        of new entries is not performed
 
         parameters
         ----------
@@ -357,22 +326,19 @@ class Columns(dict):
         for column in columns:
             if column not in self:
                 raise ValueError("Unknown column '%s'" % column)
+
             self[column].reload()
 
         self.verify()
 
-    def _clear(self, name=None):
+    def clear(self):
+        raise RuntimeError('clear() not supported on Columns')
+
+    def _clear_all(self, name=None):
         """
         Clear out the dictionary of column info
         """
-        if name is not None:
-            if isinstance(name, (list, tuple)):
-                for n in name:
-                    if n in self:
-                        del self[n]
-        else:
-            if name in self:
-                del self[name]
+        super().clear()
 
     def append(self, data, verify=True):
         """
@@ -445,7 +411,7 @@ class Columns(dict):
             byteswap = False
 
         # step size in bytes
-        step_bytes = int(self._cache_mem_gb * 1024**3)
+        step_bytes = int(self.cache_mem_gb * 1024**3)
 
         with fitsio.FITS(filename, lower=lower) as fits:
             hdu = fits[ext]
@@ -640,7 +606,7 @@ class Columns(dict):
 
         return columns
 
-    def _get_repr_list(self):
+    def __repr__(self):
         """
         Get a list of metadata for this columns directory and it's
         columns
@@ -672,7 +638,10 @@ class Columns(dict):
 
             for name in sorted(self):
                 c = self[name]
-                if isinstance(c, FileBase):
+                if c.type == 'cols':
+                    cdir = os.path.basename(c.dir).replace('.cols', '')
+                    subcols += ['  %s' % cdir]
+                else:
 
                     name = c.name
 
@@ -682,7 +651,7 @@ class Columns(dict):
                     else:
                         name_entry = ['  %-15s' % c.name]
 
-                    if c.type == 'array':
+                    if c.type == 'col':
                         s += name_entry
                         c_dtype = c.dtype.descr[0][1]
                         s[-1] += ' %6s' % c_dtype
@@ -692,9 +661,6 @@ class Columns(dict):
                         dicts += name_entry
                     else:
                         raise ValueError(f'bad type: {c.type}')
-                else:
-                    cdir = os.path.basename(c.dir).replace('.cols', '')
-                    subcols += ['  %s' % cdir]
 
         s = [indent + tmp for tmp in s]
         s = ['Columns Directory: '] + s
@@ -709,12 +675,4 @@ class Columns(dict):
             subcols = [indent + tmp for tmp in subcols]
             s += subcols
 
-        return s
-
-    def __repr__(self):
-        """
-        The columns representation to the world
-        """
-        s = self._get_repr_list()
-        s = '\n'.join(s)
-        return s
+        return '\n'.join(s)

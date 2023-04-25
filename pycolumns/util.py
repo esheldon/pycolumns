@@ -1,6 +1,6 @@
 import os
-import json
 import numpy as np
+from .defaults import ALLOWED_COL_TYPES
 
 
 def extract_rows(rows, nrows, sort=True):
@@ -70,43 +70,45 @@ def extract_coltype(filename):
     return filename.split('.')[-1]
 
 
-def create_filename(dir, name, type):
+def get_filename(dir, name, type):
     """
     genearte a file name from dir, column name and column type
     """
-    if dir is None:
-        raise ValueError('Cannot create column filename, dir is None')
+    if type not in ALLOWED_COL_TYPES:
+        raise ValueError(f'unknown file type {type}')
 
-    if name is None:
-        raise ValueError('Cannot create column filename: name is None')
+    return os.path.join(dir, f'{name}.{type}')
 
-    if type is None:
-        raise ValueError('Cannot create column filename: type is None')
 
-    if type == 'dict':
-        ext = 'json'
-    elif type == 'array':
-        ext = 'array'
-    else:
-        raise ValueError("bad file type: '%s'" % type)
-
-    return os.path.join(dir, name+'.'+ext)
-
+def meta_to_colfiles(metafile):
+    dir, bname = os.path.split(metafile)
+    name = extract_colname(metafile)
+    return {
+        'dir': dir,
+        'name': name,
+        'array': get_filename(dir, name, 'array'),
+        'index': get_filename(dir, name, 'index'),
+        'index1': get_filename(dir, name, 'index1'),
+        'sorted': get_filename(dir, name, 'sorted'),
+        'chunks': get_filename(dir, name, 'chunks'),
+    }
 
 def read_json(fname):
     """
     wrapper to read json
     """
+    import json
 
     with open(fname) as fobj:
         data = json.load(fobj)
     return data
 
 
-def write_json(obj, fname, pretty=True):
+def write_json(fname, obj):
     """
     wrapper for writing json
     """
+    import json
 
     with open(fname, 'w') as fobj:
         json.dump(obj, fobj, indent=1, separators=(',', ':'))
@@ -137,3 +139,23 @@ def get_native_data(data):
         new_data[n] = data[n]
 
     return new_data
+
+
+def convert_to_gigabytes(s):
+    try:
+        gigs = float(s)
+    except ValueError:
+        slow = s.lower()
+
+        units = slow[-1]
+        amount = slow[:-1]
+        if units == 'g':
+            gigs = float(amount)
+        elif units == 'm':
+            gigs = float(amount) / 1000
+        elif units == 'k':
+            gigs = float(amount) / 1000 / 1000
+        else:
+            raise ValueError(f'band unit in {s}')
+
+    return gigs

@@ -2,12 +2,12 @@
 
 from .version import __version__
 
+from . import defaults
 from . import columns
-from .columns import Columns
+from .columns import Columns, create_columns
 
 from . import util
 
-from . import filebase
 from . import column
 from .column import Column
 

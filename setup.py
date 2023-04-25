@@ -31,7 +31,6 @@ class BuildExt(build_ext.build_ext):
         build_ext.build_ext.finalize_options(self)
         import numpy as np
         self.include_dirs.append(np.get_include())
-        self.include_dirs.extend(glob.glob("pymangle/*h"))
 
 
 setup(
