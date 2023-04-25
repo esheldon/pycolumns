@@ -3,7 +3,11 @@
 from .version import __version__
 
 from . import defaults
-from .defaults import DEFAULT_COMPRESSION, DEFAULT_CLEVEL
+from .defaults import (
+    DEFAULT_COMPRESSION,
+    DEFAULT_CLEVEL,
+    DEFAULT_SHUFFLE,
+)
 from . import columns
 from .columns import Columns, create_columns
 

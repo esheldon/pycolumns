@@ -51,6 +51,16 @@ def create_columns(dir, schema={}, verbose=False, overwrite=False):
             },
         }
         pyc.create_columns(dir, schema)
+
+        # set default compression on some columns
+        schema = {
+            'id': {'dtype': 'i8'},
+            'ra': {'dtype': 'f8'},
+            'name': {'dtype': 'U5'},
+        }
+
+        schema = pyc.util.add_schema_compression(schema, ['id', 'name'])
+        pyc.create_columns(dir, schema)
     """
     import shutil
 
@@ -456,10 +466,10 @@ class Columns(dict):
             If set to True, create the columns
         compression: list or dict, optional
             Either
-                1. A list of names to get default compression
-                2. A dict with keys set to columns names and entries
-                  for 'compression' and/or 'clevel', with defaults being filled
-                  in if needed.  See pycolumns.array_to_schema for examples
+                1. A list of names that get default compression
+                   see defaults.DEFAULT_COMPRESSION
+                2. A dict with keys set to columns names, possibly with
+                   detailed compression settings.
         """
         import fitsio
 

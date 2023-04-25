@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from .defaults import ALLOWED_COL_TYPES, DEFAULT_COMPRESSION, DEFAULT_CLEVEL
+from . import defaults
 
 
 def extract_rows(rows, nrows, sort=True):
@@ -74,7 +74,7 @@ def get_filename(dir, name, type):
     """
     genearte a file name from dir, column name and column type
     """
-    if type not in ALLOWED_COL_TYPES:
+    if type not in defaults.ALLOWED_COL_TYPES:
         raise ValueError(f'unknown file type {type}')
 
     return os.path.join(dir, f'{name}.{type}')
@@ -184,56 +184,97 @@ def array_to_schema(array, compression=None):
 
         e.g.
         compression={
-            'id': {'compression': 'zstd':, 'clevel': 5}
-            'name': {'compression': 'zstd':},
+            'id': {'compressor': 'zstd':, 'clevel': 5}
+            'name': {'compressor': 'zstd':},
             'x': {},  # means use defaults
         }
 
         If the entry is itself an empty dict {}, then defaults are filled in
-        from pycolumns.DEFAULT_COMPRESSION
-             pycolumns.DEFAULT_CLEVEL
+        from pycolumns.DEFAULT_COMPRESSION, pycolumns.DEFAULT_CLEVEL,
+        pycolumns.DEFAULT_SHUFFLE
 
         You can also add compression to some columns after the fact
 
         import pycolumns as pyc
         schema = pyc.array_to_schema(array)
-        schema['id']['compression'] = 'zstd'
+        schema['id']['compressor'] = 'zstd'
         schema['id']['clevel'] = 5
 
     Returns
     -------
-    A simple schema with no compression set
-
+    A schema
     """
     if array.dtype.names is None:
         raise ValueError('array must have fields')
 
     schema = {}
 
+    for name in array.dtype.names:
+        schema[name] = {'dtype': array[name].dtype.str}
+
+    if compression is not None:
+        schema = add_schema_compression(schema, compression)
+
+    return schema
+
+
+def add_schema_compression(schema, compression):
+    """
+    Convenience function to get a new schema with compression settings added,
+    falling back to defaults as needed
+
+    Parameters
+    ----------
+    schema: dict
+        A schema
+    compression: list or dict, optional
+        An optional list or dictionary with compression information for
+        specific columns.
+
+        If the input is a list of names, then default compression values
+        are used (see pycolumns.DEFAULT_COMPRESSION, pycolumns.DEFAULT_CLEVEL)
+
+            e.g. compression=['id', 'name']
+
+        If the input is a dict, then each dict entry can specify
+        the compression and clevel.
+
+            e.g.
+            compression={
+                'id': {'compressor': 'zstd':, 'clevel': 5}
+                'name': {'compressor': 'zstd':},
+                'x': {},  # means use defaults
+            }
+
+        If the entry is itself an empty dict {}, then defaults are filled in.
+        See pycolumns.defaults.DEFAULT_COMPRESSION
+
+    Returns
+    -------
+    A schema with compression possibly set for some columns
+    """
+
+    new_schema = schema.copy()
+
     if hasattr(compression, 'keys'):
         isdict = True
     else:
         isdict = False
 
-    for name in array.dtype.names:
+    for name in compression:
 
-        schema[name] = {'dtype': array[name].dtype.str}
+        if name in new_schema:
+            this = new_schema[name]
 
-        if compression is not None:
+            # start with defaults and then update if detailed settings
+            # were entered
+            this.update(defaults.DEFAULT_COMPRESSION)
+
             if isdict:
-                if name in compression:
-                    tc = compression[name]
-                    schema['compression'] = tc.get(
-                        'compression', DEFAULT_COMPRESSION
-                    )
-                    schema['clevel'] = tc['clevel'].get(
-                        'clevel', DEFAULT_CLEVEL
-                    )
-            else:
-                if name in compression:
-                    schema['compression'] = DEFAULT_COMPRESSION
-                    schema['clevel'] = DEFAULT_CLEVEL
-    return schema
+                # now update to the input
+                this.update(compression[name])
+
+    return new_schema
 
 
 def schema_to_dtype(schema):
