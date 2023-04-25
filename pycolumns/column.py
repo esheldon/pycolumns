@@ -599,20 +599,50 @@ class Column(object):
         return val
 
     def _bisect_right(self, val):
-        return _bisect_right(
-            func=self._read_one_from_index,
-            x=val,
-            lo=0,
-            hi=self.nrows,
-        )
+        """
+        bisect on the hierarch index1 then possibly the full index
+        """
+        import bisect
+        idata = self._index1_data
+        i1 = bisect.bisect_right(idata['value'], x=val)
+
+        if i1 == 0 or i1 == idata.size:
+            sind = i1
+        else:
+            start = idata['index'][i1 - 1]
+            end = idata['index'][i1]
+
+            sind = _bisect_right_func(
+                func=self._read_one_from_index,
+                x=val,
+                lo=start,
+                hi=end,
+            )
+
+        return sind
 
     def _bisect_left(self, val):
-        return _bisect_left(
-            func=self._read_one_from_index,
-            x=val,
-            lo=0,
-            hi=self.nrows,
-        )
+        """
+        bisect on the hierarch index1 then possibly the full index
+        """
+        import bisect
+        idata = self._index1_data
+        i1 = bisect.bisect_left(idata['value'], x=val)
+
+        if i1 == 0 or i1 == idata.size:
+            sind = i1
+        else:
+            start = idata['index'][i1 - 1]
+            end = idata['index'][i1]
+
+            sind = _bisect_left_func(
+                func=self._read_one_from_index,
+                x=val,
+                lo=start,
+                hi=end,
+            )
+
+        return sind
 
     # one-sided range operators
     def __gt__(self, val):
@@ -623,7 +653,7 @@ class Column(object):
 
         self.verify_index_available()
         i = self._bisect_right(val)
-        indices = self._index.read_slice(slice(i, None))
+        indices = self._index[i:]
 
         return Indices(indices)
 
@@ -636,7 +666,7 @@ class Column(object):
         self.verify_index_available()
 
         i = self._bisect_left(val)
-        indices = self._index.read_slice(slice(i, None))
+        indices = self._index[i:]
 
         return Indices(indices)
 
@@ -649,7 +679,7 @@ class Column(object):
         self.verify_index_available()
 
         i = self._bisect_left(val)
-        indices = self._index.read_slice(slice(0, i))
+        indices = self._index[:i]
 
         return Indices(indices)
 
@@ -662,7 +692,7 @@ class Column(object):
         self.verify_index_available()
 
         i = self._bisect_right(val)
-        indices = self._index.read_slice(slice(0, i))
+        indices = self._index[:i]
 
         return Indices(indices)
 
@@ -737,7 +767,7 @@ class Column(object):
         else:
             raise ValueError('bad interval type: %s' % interval)
 
-        indices = self._index.read_slice(slice(ilow, ihigh))
+        indices = self._index[ilow:ihigh]
 
         return Indices(indices)
 
@@ -796,7 +826,7 @@ class Column(object):
         return s
 
 
-def _bisect_right(func, x, lo, hi):
+def _bisect_right_func(func, x, lo, hi):
     """
     bisect right with function call to get value
     """
@@ -811,7 +841,7 @@ def _bisect_right(func, x, lo, hi):
     return lo
 
 
-def _bisect_left(func, x, lo, hi):
+def _bisect_left_func(func, x, lo, hi):
     """
     bisect left with function call to get value
     """

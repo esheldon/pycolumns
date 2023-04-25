@@ -8,20 +8,25 @@ def test_query():
     import os
     import tempfile
     import numpy as np
-    from ..columns import Columns
+    from ..columns import Columns, create_columns
+    from ..util import array_to_schema
 
     seed = 333
     num = 20
 
     rng = np.random.RandomState(seed)
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns(cdir, verbose=True)
+    data = np.zeros(num, dtype=[('id', 'i8'), ('rand', 'f4')])
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num, high=num)
 
-        data = np.zeros(num, dtype=[('id', 'i8'), ('rand', 'f4')])
-        data['id'] = np.arange(num)
-        data['rand'] = rng.uniform(size=num, high=num)
+    schema = array_to_schema(data)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        cdir = os.path.join(tmpdir, 'test.cols')
+        create_columns(cdir, schema, verbose=True)
+        cols = Columns(cdir, verbose=True)
 
         cols.append(data)
 
