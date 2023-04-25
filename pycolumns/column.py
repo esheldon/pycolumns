@@ -786,8 +786,6 @@ class Column(object):
 
             s += ' type: %10s' % self.type
 
-            # if self.shape is not None:
-            #     s += ' shape: %12s' % (self.shape,)
             s += ' nrows: %12s' % self.nrows
 
             if self.name is not None:
@@ -808,8 +806,6 @@ class Column(object):
             c_dtype = self.dtype.descr[0][1]
             s += ['dtype: %s' % c_dtype]
 
-            # if self.shape is not None:
-            #     s += ['shape: %s' % (self.shape,)]
             s += ['nrows: %s' % self.nrows]
 
             s = [indent + tmp for tmp in s]

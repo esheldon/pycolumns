@@ -1,6 +1,7 @@
 """
 TODO
 
+    - deletion of columns/dicts etc.
     - ability to add a column
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
