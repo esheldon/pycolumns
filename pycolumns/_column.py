@@ -188,10 +188,9 @@ class Column(_column_pywrap.Column):
         -------
         None
         """
-        from .indices import Indices
         self._check_dtype(data)
         if data.ndim == 0:
-            raise ValueError(f'data must have ndim > 0')
+            raise ValueError('data must have ndim > 0')
 
         super()._read_row(data, row)
         # super()._read_row_pages(data, rows)

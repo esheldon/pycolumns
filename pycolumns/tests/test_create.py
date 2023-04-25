@@ -1,7 +1,7 @@
 import pytest
 
 
-@pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+@pytest.mark.parametrize('cache_mem', ['1g', '10k'])
 @pytest.mark.parametrize('verbose', [True, False])
 def test_create(cache_mem, verbose):
     """
@@ -10,27 +10,30 @@ def test_create(cache_mem, verbose):
     import os
     import tempfile
     import numpy as np
-    from ..columns import Columns
+    from ..columns import Columns, create_columns
+    from ..util import array_to_schema
 
     seed = 333
     num = 20
 
     rng = np.random.RandomState(seed)
 
+    dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+    data = np.zeros(num, dtype=dtype)
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num)
+    data['scol'] = [str(val) for val in data['id']]
+
     with tempfile.TemporaryDirectory() as tmpdir:
+        schema = array_to_schema(data)
+
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns(cdir, cache_mem=cache_mem, verbose=verbose)
-        assert len(cols.names) == 0
+        create_columns(cdir, schema, verbose=verbose)
+        cols = Columns(cdir, verbose=verbose, cache_mem=cache_mem)
 
         assert cols.dir == cdir
         assert cols.verbose == verbose
         assert cols.cache_mem == cache_mem
-
-        dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
-        data = np.zeros(num, dtype=dtype)
-        data['id'] = np.arange(num)
-        data['rand'] = rng.uniform(size=num)
-        data['scol'] = [str(val) for val in data['id']]
 
         cols.append(data)
 

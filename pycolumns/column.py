@@ -243,7 +243,7 @@ class Column(object):
 
     @property
     def cache_mem(self):
-        return self._cache_mem_gb
+        return self._cache_mem
 
     @property
     def cache_mem_gb(self):
@@ -303,21 +303,7 @@ class Column(object):
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-
-        self.ensure_has_data()
-
-        # converts to slice or Indices and converts stepped slices to
-        # arange
-        rows = util.extract_rows(arg, self.nrows, sort=True)
-
-        if isinstance(rows, slice):
-            # can ignore step since we convert stepped slices to rows in
-            # extract_rows
-            data = self._col.read_slice(rows)
-        else:
-            data = self._col.read_rows(rows)
-
-        return data
+        return self._col[arg]
 
     def __setitem__(self, arg, values):
         """
@@ -335,7 +321,7 @@ class Column(object):
         rows: sequence, slice, Indices or None, optional
             A subset of the rows to read.
         """
-        return self[rows]
+        return self._col[rows]
 
     def _delete(self):
         """
@@ -494,19 +480,35 @@ class Column(object):
         import os
         import numpy as np
 
+        self._arr1 = np.zeros(1, dtype=self.dtype)
+
         index_fname = self.index_filename
         if os.path.exists(index_fname):
             sort_fname = self.sorted_filename
             if not os.path.exists(sort_fname):
                 raise RuntimeError(f'missing sorted file {sort_fname}')
 
+            index_fname = self.index_filename
+            if not os.path.exists(index_fname):
+                raise RuntimeError(f'missing index file {index_fname}')
+
+            index1_fname = self.index1_filename
+            if not os.path.exists(index1_fname):
+                raise RuntimeError(f'missing index1 file {index1_fname}')
+
             self._has_index = True
-            self._index = _column.Column(index_fname)
-            self._sorted = _column.Column(sort_fname)
-            self._arr1 = np.zeros(1, dtype=self.dtype)
+            self._index = _column.Column(index_fname, dtype=self.index_dtype)
+            self._index1 = _column.Column(
+                index1_fname, dtype=self.index1_dtype,
+            )
+            self._sorted = _column.Column(sort_fname, dtype=self.dtype)
+
+            self._index1_data = self._index1[:]
         else:
             self._has_index = False
             self._index = None
+            self._index1 = None
+            self._index1_data = None
             self._sorted = None
 
     def match(self, values):

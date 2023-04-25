@@ -5,6 +5,7 @@ TODO
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
         - get_subcols()
+    - setters for some things like cache_mem, verbose etc.
 """
 import os
 import numpy as np
@@ -14,7 +15,7 @@ from . import util
 from .defaults import DEFAULT_CACHE_MEM
 
 
-def create_columns(dir, info, overwrite=False):
+def create_columns(dir, schema={}, verbose=False, overwrite=False):
     """
     Initialize a columns database
 
@@ -22,13 +23,17 @@ def create_columns(dir, info, overwrite=False):
     ----------
     dir: str
         Path to columns directory
-    info: dict
+    schema: dict, optional
         Dictionary holding information for each column.
+    verbose: bool, optional
+        If set to True, display information
+    overwrite: bool, optional
+        If the directory exists, remove existing data
 
     Examples
     --------
         dir = 'test.cols'
-        info = {
+        schema = {
             'id': {
                 'dtype': 'i8',
                 'compression': 'zstd',
@@ -43,7 +48,7 @@ def create_columns(dir, info, overwrite=False):
                 'clevel': 5,
             },
         }
-        pyc.create_columns(dir, info)
+        pyc.create_columns(dir, schema)
     """
     import shutil
 
@@ -57,21 +62,18 @@ def create_columns(dir, info, overwrite=False):
                 f'overwrite=True to replace'
             )
 
-        print(f'removing {dir}')
+        if verbose:
+            print(f'removing {dir}')
         shutil.rmtree(dir)
 
-    print(f'creating: {dir}')
+    if verbose:
+        print(f'creating: {dir}')
+
     os.makedirs(dir)
 
-    for name in info:
-        print('    creating:', name)
-        metafile = util.get_filename(dir, name, 'meta')
-        util.write_json(metafile, info[name])
-
-        dfile = util.get_filename(dir, name, 'array')
-        with open(dfile, 'w') as fobj:  # noqa
-            # just to create the empty file
-            pass
+    cols = Columns(dir, verbose=verbose)
+    cols.add_columns(schema)
+    return cols
 
 
 class Columns(dict):
@@ -129,7 +131,7 @@ class Columns(dict):
         """
         Get a list of all column names
         """
-        return [c for c in self if self[c].type == 'array']
+        return [c for c in self if self[c].type == 'col']
 
     @property
     def dict_names(self):
@@ -192,12 +194,9 @@ class Columns(dict):
         """
         Return the dir basename minus any extension
         """
-        if self.dir is not None:
-            bname = os.path.basename(self.dir)
-            name = '.'.join(bname.split('.')[0:-1])
-            return name
-        else:
-            return None
+        bname = os.path.basename(self.dir)
+        name = '.'.join(bname.split('.')[0:-1])
+        return name
 
     def _load(self):
         """
@@ -234,9 +233,11 @@ class Columns(dict):
         """
 
         first = True
+        self._nrows = 0
+
         for c in self.keys():
             col = self[c]
-            if col.type == 'array':
+            if col.type == 'col':
                 this_nrows = col.nrows
                 if first:
                     self._nrows = this_nrows
@@ -340,6 +341,54 @@ class Columns(dict):
         """
         super().clear()
 
+    def add_columns(self, schema):
+        """
+        Initialize new columns.  Currently this must be done while all other
+        columns are zero size to have consistency
+
+        Parameters
+        ----------
+        schema: dict, optional
+            Dictionary holding information for each column.
+
+        Examples
+        --------
+            dir = 'test.cols'
+            cols = pyc.Columns(dir)
+            schema = {
+                'id': {
+                    'dtype': 'i8',
+                    'compression': 'zstd',
+                    'clevel': 5,
+                },
+                'ra': {
+                    'dtype': 'f8',
+                },
+                'name': {
+                    'dtype': 'U5',
+                    'compression': 'zstd',
+                    'clevel': 5,
+                },
+            }
+            cols.add_columns(schema)
+        """
+        for name in schema:
+            if self.verbose:
+                print('    creating:', name)
+
+            metafile = util.get_filename(self.dir, name, 'meta')
+            if os.path.exists(metafile):
+                raise RuntimeError(f'column {name} already exists')
+
+            util.write_json(metafile, schema[name])
+
+            dfile = util.get_filename(self.dir, name, 'array')
+            with open(dfile, 'w') as fobj:  # noqa
+                # just to create the empty file
+                pass
+
+        self._load()
+
     def append(self, data, verify=True):
         """
         Append data for the fields of a structured array to columns
@@ -355,7 +404,7 @@ class Columns(dict):
             column_names = set(self.column_names)
             if in_names != column_names:
                 raise ValueError(
-                    f'input columns {in_names}'
+                    f'input columns {in_names} '
                     f'do not match existing table columns {column_names}'
                 )
 
@@ -373,12 +422,13 @@ class Columns(dict):
         """
 
         if name not in self:
-            self._create_column(name, verify=False)
+            raise RuntimeError(f'column {name} does not exist')
 
         self[name]._append(data)
 
     def from_fits(
         self, filename, ext=1, native=False, little=True, lower=False,
+        create=False, compression=None,
     ):
         """
         Write columns to the database, reading from the input fits file.
@@ -399,7 +449,15 @@ class Columns(dict):
             If little is True, convert to little endian byte order. Default
             True.
         lower: bool, optional
-            if True, lower-case all names.  Default False.
+            if set to True, lower-case all names.  Default False.
+        create: bool, optional
+            If set to True, create the columns
+        compression: list or dict, optional
+            Either
+                1. A list of names to get default compression
+                2. A dict with keys set to columns names and entries
+                  for 'compression' and/or 'clevel', with defaults being filled
+                  in if needed.  See pycolumns.array_to_schema for examples
         """
         import fitsio
 
@@ -417,6 +475,11 @@ class Columns(dict):
             hdu = fits[ext]
 
             one = hdu[0:0+1]
+
+            if create:
+                schema = util.array_to_schema(one, compression=compression)
+                self.add_columns(schema)
+
             nrows = hdu.get_nrows()
             rowsize = one.itemsize
 
@@ -614,21 +677,22 @@ class Columns(dict):
         indent = '  '
         s = []
         if self.dir is not None:
-            dbase = self._dirbase()
-            s += [dbase]
+            # dbase = self._dirbase()
+            # s += [dbase]
             s += ['dir: '+self.dir]
             if hasattr(self, '_nrows'):
                 s += ['nrows: %s' % self.nrows]
 
         s += ['']
+        dicts = []
         subcols = []
         if len(self) > 0:
-            s += ['Columns:']
+            s += ['Table Columns:']
             cnames = 'name', 'dtype', 'index'
             s += ['  %-15s %6s %-6s' % cnames]
             s += ['  '+'-'*(28)]
 
-            dicts = ['Dictionaries:']
+            dicts += ['Dictionaries:']
             dicts += ['  %-15s' % ('name',)]
             dicts += ['  '+'-'*(28)]
 
@@ -663,7 +727,7 @@ class Columns(dict):
                         raise ValueError(f'bad type: {c.type}')
 
         s = [indent + tmp for tmp in s]
-        s = ['Columns Directory: '] + s
+        s = ['Columns: '] + s
 
         if len(dicts) > 3:
             s += [indent]
