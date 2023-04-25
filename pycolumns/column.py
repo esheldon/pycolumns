@@ -735,8 +735,7 @@ class Column(object):
             if self.name is not None:
                 s += ['name: %s' % self.name]
 
-            if self.filename is not None:
-                s += ['filename: %s' % self.filename]
+            s += ['filename: %s' % self.array_filename]
 
             s += ['type: array']
 
