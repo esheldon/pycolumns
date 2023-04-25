@@ -136,7 +136,7 @@ PyColumn_read_slice(
         // NPY_END_ALLOW_THREADS;
         if (nread != num) {
             PyErr_Format(PyExc_IOError,
-                "Error reading slice [%" NPY_INTP_FMT ", %" NPY_INTP_FMT ")"
+                "Error reading slice [%" NPY_INTP_FMT ", %" NPY_INTP_FMT ") "
                 "from %s", start, start+num, self->fname);
             return NULL;
         }

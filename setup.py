@@ -1,5 +1,4 @@
 import os
-import glob
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 from setuptools.command import build_ext

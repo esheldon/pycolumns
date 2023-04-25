@@ -181,26 +181,6 @@ class Column(object):
         return self._meta.copy()
 
     @property
-    def has_data(self):
-        """
-        returns True if this column has a header defined, even if there are no
-        rows
-        """
-        has_data = False
-
-        if hasattr(self, '_col'):
-            if self._col.has_header():
-                has_data = True
-        return has_data
-
-    def ensure_has_data(self):
-        """
-        raise RuntimeError if no data is present
-        """
-        if not self.nrows > 0:
-            raise ValueError('this column has no data')
-
-    @property
     def dtype(self):
         """
         get the data type of the column
@@ -404,13 +384,13 @@ class Column(object):
                 tmpdir,
                 os.path.basename(self.sorted_filename),
             )
-            with CColumn(ifile, mode='w+', dtype=self.index_dtype) as iobj:
-                with CColumn(sfile, mode='w+', dtype=self.dtype) as sobj:
+            with CColumn(ifile, mode='w+', dtype=self.index_dtype) as ifobj:
+                with CColumn(sfile, mode='w+', dtype=self.dtype) as sfobj:
 
                     if size_gb < self.cache_mem_gb:
-                        self._write_index_memory(iobj, sobj)
+                        self._write_index_memory(ifobj, sfobj)
                     else:
-                        self._write_index_mergesort(tmpdir, ifile, sfile)
+                        self._write_index_mergesort(tmpdir, ifobj, sfobj)
 
                     if self.verbose:
                         print(f'  {ifile} -> {self.index_filename}')
@@ -423,7 +403,7 @@ class Column(object):
         self._write_index1()
         self._init_index()
 
-    def _write_index_memory(self, iobj, sobj):
+    def _write_index_memory(self, ifobj, sfobj):
         if self.verbose:
             print(f'creating index for {self.name} in memory')
 
@@ -436,10 +416,10 @@ class Column(object):
         if self.verbose:
             print('  writing')
 
-        iobj.append(sort_index)
-        sobj.append(data[sort_index])
+        ifobj.append(sort_index)
+        sfobj.append(data[sort_index])
 
-    def _write_index_mergesort(self, tmpdir, index_file, sorted_file):
+    def _write_index_mergesort(self, tmpdir, ifobj, sfobj):
         from .mergesort import create_mergesort_index
 
         if self.verbose:
@@ -455,8 +435,8 @@ class Column(object):
 
         create_mergesort_index(
             source=self,
-            ifile=index_file,
-            sfile=sorted_file,
+            isink=ifobj,
+            ssink=sfobj,
             chunksize=chunksize,
             tmpdir=tmpdir,
             verbose=self.verbose,

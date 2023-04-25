@@ -47,7 +47,7 @@ def extract_slice(s, nrows):
     if start is None:
         start = 0
 
-    if stop is None:
+    if stop is None or stop > nrows:
         stop = nrows
 
     return slice(start, stop, s.step)

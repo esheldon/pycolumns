@@ -1,8 +1,8 @@
 import pytest
 
 
-# @pytest.mark.parametrize('cache_mem', [1.0, 0.01])
-@pytest.mark.parametrize('cache_mem', [1.0])
+@pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+# @pytest.mark.parametrize('cache_mem', [1.0])
 def test_create_index(cache_mem):
     """
     cache_mem of 0.01 will force use of mergesort

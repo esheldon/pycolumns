@@ -1,15 +1,15 @@
 
 def create_mergesort_index(
     source,
-    ifile,
-    sfile,
+    isink,
+    ssink,
     chunksize,
     tmpdir,
     verbose=False,
 ):
     import tempfile
     import numpy as np
-    from . import _column
+    from ._column import Column as CColumn
     import time
 
     atm0 = time.time()
@@ -75,11 +75,11 @@ def create_mergesort_index(
 
         tm0write = time.time()
         itmpf = tempfile.mktemp(dir=tmpdir, suffix='.index')
-        ifobj = _column.Column(itmpf, mode='w+')
+        ifobj = CColumn(itmpf, dtype=source.index_dtype, mode='w+')
         ifobj.append(ichunk_data)
 
         stmpf = tempfile.mktemp(dir=tmpdir, suffix='.sort')
-        sfobj = _column.Column(stmpf, mode='w+')
+        sfobj = CColumn(stmpf, dtype=source.dtype, mode='w+')
         sfobj.append(schunk_data)
 
         if verbose:
@@ -123,62 +123,59 @@ def create_mergesort_index(
         print('Doing mergesort')
 
     mtm0 = time.time()
-    with _column.Column(ifile, mode='w+') as isink:
-        with _column.Column(sfile, mode='w+') as ssink:
 
-            nwritten = 0
-            it = 0
-            while len(mergers) > 0:
-                it += 1
-                imin = stack_stops.argmin()
+    nwritten = 0
+    it = 0
+    while len(mergers) > 0:
+        it += 1
+        imin = stack_stops.argmin()
 
-                iscratch[scratch_ind] = stack_itops[imin]
-                sscratch[scratch_ind] = stack_stops[imin]
-                scratch_ind += 1
+        iscratch[scratch_ind] = stack_itops[imin]
+        sscratch[scratch_ind] = stack_stops[imin]
+        scratch_ind += 1
 
-                data = mergers[imin]
+        data = mergers[imin]
 
-                copy_new_top = True
-                if data['cache_index'] == data['icache'].size:
+        copy_new_top = True
+        if data['cache_index'] == data['icache'].size:
 
-                    if data['main_index'] == data['ifile'].get_nrows():
-                        # there is no more data left for this chunk
-                        ind = [i for i in range(stack_itops.size) if i != imin]
-                        stack_itops = stack_itops[ind]
-                        stack_stops = stack_stops[ind]
+            if data['main_index'] == data['ifile'].nrows:
+                # there is no more data left for this chunk
+                ind = [i for i in range(stack_itops.size) if i != imin]
+                stack_itops = stack_itops[ind]
+                stack_stops = stack_stops[ind]
 
-                        mergers[imin]['ifile'].close()
-                        mergers[imin]['sfile'].close()
-                        del mergers[imin]
-                        copy_new_top = False
-                    else:
-                        # we have more data, lets load some into the cache
-                        main_index = data['main_index']
-                        next_index = main_index + cache_size
-                        s = slice(main_index, next_index)
-                        data['icache'] = data['ifile'].read_slice(s)
-                        data['scache'] = data['sfile'].read_slice(s)
-                        data['cache_index'] = 0
-                        data['main_index'] = main_index + data['icache'].size
+                mergers[imin]['ifile'].close()
+                mergers[imin]['sfile'].close()
+                del mergers[imin]
+                copy_new_top = False
+            else:
+                # we have more data, lets load some into the cache
+                main_index = data['main_index']
+                next_index = main_index + cache_size
+                data['icache'] = data['ifile'][main_index:next_index]
+                data['scache'] = data['sfile'][main_index:next_index]
+                data['cache_index'] = 0
+                data['main_index'] = main_index + data['icache'].size
 
-                if copy_new_top:
-                    stack_itops[imin] = data['icache'][data['cache_index']]
-                    stack_stops[imin] = data['scache'][data['cache_index']]
-                    data['cache_index'] += 1
+        if copy_new_top:
+            stack_itops[imin] = data['icache'][data['cache_index']]
+            stack_stops[imin] = data['scache'][data['cache_index']]
+            data['cache_index'] += 1
 
-                if scratch_ind == iscratch.size or len(mergers) == 0:
-                    num2write = scratch_ind
-                    nwritten += num2write
-                    if verbose:
-                        print(f'\nwriting {nwritten}/{nrows}')
+        if scratch_ind == iscratch.size or len(mergers) == 0:
+            num2write = scratch_ind
+            nwritten += num2write
+            if verbose:
+                print(f'\nwriting {nwritten}/{nrows}')
 
-                    isink.append(iscratch[:num2write])
-                    ssink.append(sscratch[:num2write])
+            isink.append(iscratch[:num2write])
+            ssink.append(sscratch[:num2write])
 
-                    scratch_ind = 0
-                else:
-                    if verbose and it % (chunksize // 20) == 0:
-                        print('.', end='', flush=True)
+            scratch_ind = 0
+        else:
+            if verbose and it % (chunksize // 20) == 0:
+                print('.', end='', flush=True)
 
     if verbose:
         print('merge time: %.3g min' % ((time.time() - mtm0)/60))
@@ -310,7 +307,7 @@ def create_mergesort_index_old(
             copy_new_top = True
             if data['cache_index'] == data['cache'].size:
 
-                if data['main_index'] == data['fits'][1].get_nrows():
+                if data['main_index'] == data['fits'][1].nrows:
                     # there is no more data left for this chunk
                     ind = [i for i in range(stack_tops.size) if i != imin]
                     stack_tops = stack_tops[ind]
