@@ -24,8 +24,9 @@ def test_create(cache_mem, verbose):
     data['rand'] = rng.uniform(size=num)
     data['scol'] = [str(val) for val in data['id']]
 
+    schema = array_to_schema(data)
+
     with tempfile.TemporaryDirectory() as tmpdir:
-        schema = array_to_schema(data)
 
         cdir = os.path.join(tmpdir, 'test.cols')
         create_columns(cdir, schema, verbose=verbose)
