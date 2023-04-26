@@ -41,16 +41,20 @@ def create_columns(dir, schema={}, verbose=False, overwrite=False):
         schema = {
             'id': {
                 'dtype': 'i8',
-                'compression': 'zstd',
-                'clevel': 5,
+                'compression': {
+                    'cname': 'zstd',
+                    'clevel': 5,
+                    'shuffle': 'bitshuffle',
+                }
             },
             'ra': {
                 'dtype': 'f8',
             },
             'name': {
                 'dtype': 'U5',
-                'compression': 'zstd',
-                'clevel': 5,
+                'compression': {
+                    'cname': 'zstd',
+                }
             },
         }
         pyc.create_columns(dir, schema)
@@ -373,21 +377,28 @@ class Columns(dict):
             schema = {
                 'id': {
                     'dtype': 'i8',
-                    'compression': 'zstd',
-                    'clevel': 5,
+                    'compression': {
+                        'cname': 'zstd',
+                        'shuffle': 'bitshuffle',
+                        'clevel': 5,
+                    }
                 },
                 'ra': {
                     'dtype': 'f8',
                 },
                 'name': {
                     'dtype': 'U5',
-                    'compression': 'zstd',
-                    'clevel': 5,
+                    'compression': True,  # gets converted to defaults
                 },
             }
             cols.add_columns(schema)
         """
-        for name in schema:
+
+        # clears out compression None/False from schema, fills
+        # in defaults if needed
+        schema = util.get_schema(schema)
+
+        for name, this in schema.items():
             if self.verbose:
                 print('    creating:', name)
 
@@ -395,12 +406,18 @@ class Columns(dict):
             if os.path.exists(metafile):
                 raise RuntimeError(f'column {name} already exists')
 
-            util.write_json(metafile, schema[name])
+            util.write_json(metafile, this)
 
             dfile = util.get_filename(self.dir, name, 'array')
             with open(dfile, 'w') as fobj:  # noqa
                 # just to create the empty file
                 pass
+
+            if 'compression' in this:
+                cfile = util.get_filename(self.dir, name, 'chunks')
+                with open(cfile, 'w') as fobj:  # noqa
+                    # just to create the empty file
+                    pass
 
         self._load()
 

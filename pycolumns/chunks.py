@@ -137,12 +137,22 @@ class Chunks(object):
         # seek to end
         self._fobj.seek(0, 2)
 
-        compressed_bytes = blosc.compress_ptr(
-            data.__array_interface__['data'][0],
-            data.size,
-            data.dtype.itemsize,
-            **self.compression
-        )
+        if data.flags['C_CONTIGUOUS'] or data.flags['F_CONTIGUOUS']:
+            # this saves memory
+            compressed_bytes = blosc.compress_ptr(
+                data.__array_interface__['data'][0],
+                data.size,
+                data.dtype.itemsize,
+                **self.compression
+            )
+        else:
+            dbytes = data.tobytes()
+            compressed_bytes = blosc.compress(
+                dbytes,
+                data.dtype.itemsize,
+                **self.compression
+            )
+
         self._fobj.write(compressed_bytes)
         nbytes = len(compressed_bytes)
         return nbytes
@@ -176,7 +186,7 @@ class Chunks(object):
 
         buff = bytearray(chunk['nbytes'])
 
-        output = np.zeros(chunk['nrows'], dtype=self.dtype)
+        output = np.empty(chunk['nrows'], dtype=self.dtype)
 
         self._fobj.readinto(buff)
         blosc.decompress_ptr(buff, output.__array_interface__['data'][0])
@@ -216,8 +226,8 @@ class Chunks(object):
         """
         defaults get filled in
         """
-        if compression is None or compression is False:
-            self._compression = compression
+        if not compression:
+            self._compression = False
         else:
             self._compression = util.get_compression_with_defaults(
                 compression,
@@ -546,7 +556,6 @@ def test():
 
                 rsub1allslice = chunks[:]
                 assert np.all(rsub1allslice == data[0:chunks.nrows])
-
 
                 rslice1 = chunks[:20]
                 assert np.all(rslice1 == data[:20])

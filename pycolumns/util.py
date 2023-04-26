@@ -183,7 +183,7 @@ def array_to_schema(array, compression=None):
         the compression and clevel.
 
         e.g.
-        compression={
+        compression = {
             'id': {'cname': 'zstd':, 'clevel': 5}
             'name': {'cname': 'zstd':},
             'x': {},  # means use defaults
@@ -233,13 +233,13 @@ def add_schema_compression(schema, compression):
         If the input is a list of names, then default compression values
         are used (see pycolumns.DEFAULT_COMPRESSION, pycolumns.DEFAULT_CLEVEL)
 
-            e.g. compression=['id', 'name']
+            e.g. compression = ['id', 'name']
 
         If the input is a dict, then each dict entry can specify
         the compression and clevel.
 
             e.g.
-            compression={
+            compression = {
                 'id': {'cname': 'zstd':, 'clevel': 5}
                 'name': {'cname': 'zstd':},
                 'x': {},  # means use defaults
@@ -265,13 +265,14 @@ def add_schema_compression(schema, compression):
         if name in new_schema:
             this = new_schema[name]
 
+            if isdict:
+                compsend = compression[name]
+            else:
+                compsend = True
+
             # start with defaults and then update if detailed settings
             # were entered
-            this.update(defaults.DEFAULT_COMPRESSION)
-
-            if isdict:
-                # now update to the input
-                this.update(compression[name])
+            this['compression'] = get_compression_with_defaults(compsend)
 
     return new_schema
 
@@ -283,7 +284,7 @@ def get_compression_with_defaults(compression=None, convert=False):
     Parameters
     ----------
     compression: dict, optional
-        If not sent (None), the default compression is returned
+        If not sent (None), or set to True, the default compression is returned
         If sent, defaults are filled in as needed
     convert: bool, optional
         If set to True, convert the shuffle to the blosc integer
@@ -293,18 +294,35 @@ def get_compression_with_defaults(compression=None, convert=False):
     -------
     dict with compression set
     """
-    if compression is True:
-        compression = {}
 
     comp = defaults.DEFAULT_COMPRESSION.copy()
 
-    if compression is not None:
+    if compression is not True and compression is not None:
         comp.update(compression)
 
     if convert:
         comp['shuffle'] = convert_shuffle(comp['shuffle'])
 
     return comp
+
+
+def get_schema(schema):
+    """
+    Get a properly formatted schema based on input.
+
+    Currently just deals with compression, adding defaults, etc.
+    """
+    new_schema = schema.copy()
+
+    for name, this in new_schema.items():
+        if 'compression' in this:
+            if not this['compression']:
+                del this['compression']
+            else:
+                this['compression'] = get_compression_with_defaults(
+                    this['compression'],
+                )
+    return new_schema
 
 
 def convert_shuffle(shuffle):

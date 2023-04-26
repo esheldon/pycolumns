@@ -1,6 +1,7 @@
 import numpy as np
 from . import util
 from ._column import Column as CColumn
+from .chunks import Chunks
 from .defaults import DEFAULT_CACHE_MEM, DEFAULT_MERGESORT_CHUNKSIZE_GB
 
 
@@ -101,7 +102,7 @@ class Column(object):
         self._index_dtype = np.dtype('i8')
         self._index1_dtype = np.dtype([('index', 'i8'), ('value', self.dtype)])
 
-        self._open_array_file()
+        self._open()
 
         # get info for index if it exists
         self._init_index()
@@ -234,13 +235,24 @@ class Column(object):
     def cache_mem_gb(self):
         return self._cache_mem_gb
 
-    def _open_array_file(self):
-        self._col = CColumn(
-            self.array_filename,
-            dtype=self._meta['dtype'],
-            mode='r+',
-            verbose=self.verbose,
-        )
+    def _open(self):
+        meta = self._meta
+        if 'compression' in meta and meta['compression']:
+            self._col = Chunks(
+                self.array_filename,
+                self.chunks_filename,
+                dtype=self._meta['dtype'],
+                mode='r+',
+                compression=meta['compression'],
+                verbose=self.verbose,
+            )
+        else:
+            self._col = CColumn(
+                self.array_filename,
+                dtype=self._meta['dtype'],
+                mode='r+',
+                verbose=self.verbose,
+            )
 
     def _append(self, data):
         """

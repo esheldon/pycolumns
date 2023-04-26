@@ -2,8 +2,9 @@ import pytest
 
 
 @pytest.mark.parametrize('cache_mem', ['1g', '10k'])
+@pytest.mark.parametrize('compression', [True])
 @pytest.mark.parametrize('verbose', [True, False])
-def test_create(cache_mem, verbose):
+def test_create(cache_mem, compression, verbose):
     """
     cache_mem of 0.01 will force use of mergesort
     """
@@ -24,7 +25,13 @@ def test_create(cache_mem, verbose):
     data['rand'] = rng.uniform(size=num)
     data['scol'] = [str(val) for val in data['id']]
 
-    schema = array_to_schema(data)
+    if compression:
+        ccols = ['id', 'scol']
+    else:
+        ccols = None
+
+    schema = array_to_schema(data, compression=ccols)
+    print(schema)
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
