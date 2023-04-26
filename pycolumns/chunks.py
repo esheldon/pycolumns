@@ -93,8 +93,8 @@ class Chunks(object):
         get number of chunks
         """
         nchunks = 0
-        if self._chunks_data is not None:
-            nchunks = self._chunks_data.size
+        if self._chunk_data is not None:
+            nchunks = self._chunk_data.size
 
         return nchunks
 
@@ -141,8 +141,8 @@ class Chunks(object):
             return self._read_compressed_chunk(chunk_index)
 
     def _read_uncompressed_chunk(self, chunk_index):
-        offset = self._chunks_data['offset'][chunk_index]
-        nrows = self._chunks_data['nrows'][chunk_index]
+        offset = self._chunk_data['offset'][chunk_index]
+        nrows = self._chunk_data['nrows'][chunk_index]
         self._fobj.seek(offset, 0)
         return np.fromfile(
             self._fobj,
@@ -166,19 +166,19 @@ class Chunks(object):
         chunk['nbytes'] = nbytes
         chunk['nrows'] = nrows
 
-        if self._chunks_data is None:
-            self._chunks_data = chunk
+        if self._chunk_data is None:
+            self._chunk_data = chunk
         else:
             # note we probably don't want the chunks to be defined by what
             # gets appended, but rather keep the chunksize fixed
             # for compressed this would mean reading in the chunk that will
             # get appended, appending it, writing it back out with new
             # nbytes, nrows
-            cd = self._chunks_data
+            cd = self._chunk_data
             chunk['offset'][0] = cd['offset'][-1] + cd['nbytes'][-1]
             chunk['rowstart'][0] = cd['rowstart'][-1] + cd['nrows'][-1]
             self._chunks_fobj.append(chunk)
-            self._chunks_data = np.hstack([self._chunks_data, chunk])
+            self._chunk_data = np.hstack([self._chunk_data, chunk])
 
         self._set_nrows()
 
@@ -202,9 +202,9 @@ class Chunks(object):
             verbose=self.verbose,
         )
         if self._chunks_fobj.nrows > 0:
-            self._chunks_data = self._chunks_fobj[:]
+            self._chunk_data = self._chunks_fobj[:]
         else:
-            self._chunks_data = None
+            self._chunk_data = None
 
         self._fobj = open(self.filename, self.mode)
 
@@ -351,13 +351,45 @@ class Chunks(object):
         super()._read_row(data, row)
         # super()._read_row_pages(data, rows)
 
+    def _read_rows(self, data, rows):
+        chunk_indices = util.get_chunks(
+            chunkrows_sorted=self._chunk_data['rowstart'],
+            rows=rows,
+        )
+        # for this we assume rows are sorted
+        h, _ = np.histogram(chunk_indices, np.arange(self.nchunks+1))
+
+        w, = np.where(h > 0)
+        start = 0
+
+        for ci in w:
+            num = h[ci]
+            chunk_data = self.read_chunk(ci)
+
+            end = start + num
+            rowstart = self._chunk_data['rowstart'][ci]
+
+            # this gives us rows within the chunk
+            trows = rows[start:end] - rowstart
+
+            data[start:end] = chunk_data[trows]
+
+            start += num
+        return data
+
     def __getitem__(self, arg):
 
         # returns either Indices or slice
         # converts slice with step to indices
         rows = util.extract_rows(arg, self.nrows)
 
+        # TODO, make an optimized slice reader
+        # for now, convert
         if isinstance(rows, slice):
+            rows = np.arange(rows.start, rows.stop, rows.step)
+
+        if isinstance(rows, slice):
+            raise NotImplementedError('implement fast slice')
             nrows = rows.stop - rows.start
             data = np.empty(nrows, dtype=self.dtype)
             super()._read_slice(data, rows.start)
@@ -394,10 +426,10 @@ class Chunks(object):
 
     def _set_nrows(self):
         self._nrows = 0
-        if self._chunks_data is not None:
+        if self._chunk_data is not None:
             self._nrows = (
-                self._chunks_data['rowstart'][-1]
-                + self._chunks_data['nrows'][-1]
+                self._chunk_data['rowstart'][-1]
+                + self._chunk_data['nrows'][-1]
             )
 
     def __enter__(self):
@@ -472,16 +504,22 @@ def test():
             rsub2 = chunks.read_chunk(1)
             assert np.all(rsub2 == sub2)
 
+            rsub1allslice = chunks[:]
+            assert np.all(rsub1allslice == data[0:chunks.nrows])
+
+            rslice1 = chunks[:20]
+            assert np.all(rslice1 == data[:20])
+
+            rslice2 = chunks[20:40]
+            assert np.all(rslice2 == data[20:40])
+
+            rows = np.array([3, 8, 17, 25])
+            rr = chunks[rows]
+            assert np.all(rr == data[rows])
+
             with pytest.raises(ValueError):
                 chunks.read_chunk(3)
 
-            #
-            # print('-' * 70)
-            # print('before append')
-            # print(col)
-            #
-            # indata = col[:]
-            # assert np.all(indata == data)
             #
             # indata = col[2:8]
             # assert np.all(indata == data[2:8])

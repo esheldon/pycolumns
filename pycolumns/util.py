@@ -344,3 +344,25 @@ def schema_to_dtype(schema):
         descr.append((name, schema[name]['dtype']))
 
     return np.dtype(descr)
+
+
+def get_chunks(chunkrows_sorted, rows):
+    """
+    Get chunk assignments for the input rows
+
+    Parameters
+    ----------
+    chunkrows_sorted: array
+        Sorted array of chunk row start positions
+    rows: array
+        Rows to assign
+
+    Returns
+    -------
+    chunk_indices: array
+        chunk index for each row
+    """
+    s = np.searchsorted(chunkrows_sorted, rows, side='right')
+    s -= 1
+    s.clip(min=0, max=chunkrows_sorted.size-1, out=s)
+    return s
