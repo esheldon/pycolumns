@@ -8,12 +8,12 @@ ALLOWED_COL_TYPES = [
 
 DEFAULT_CACHE_MEM = '1g'
 
-DEFAULT_COMPRESSOR = 'zstd'
+DEFAULT_CNAME = 'zstd'
 DEFAULT_CLEVEL = 5
 DEFAULT_SHUFFLE = 'bitshuffle'
 
 DEFAULT_COMPRESSION = {
-    'compressor': DEFAULT_COMPRESSOR,
+    'cname': DEFAULT_CNAME,
     'clevel': DEFAULT_CLEVEL,
     'shuffle': DEFAULT_SHUFFLE,
 }

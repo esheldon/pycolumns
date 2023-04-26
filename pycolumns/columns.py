@@ -1,7 +1,10 @@
 """
 TODO
 
-    - compression/chunks files
+    - incorporate new compressed/chunk data into main column/columns as
+      type zarray
+    - Instead of each append is a chunk, use predefined chunk sizes
+    - look into optimizing slice reads for chunks
     - deletion of columns/dicts etc.
     - ability to add a column
     - Maybe don't have dicts and subcols in self as a name

@@ -184,20 +184,19 @@ def array_to_schema(array, compression=None):
 
         e.g.
         compression={
-            'id': {'compressor': 'zstd':, 'clevel': 5}
-            'name': {'compressor': 'zstd':},
+            'id': {'cname': 'zstd':, 'clevel': 5}
+            'name': {'cname': 'zstd':},
             'x': {},  # means use defaults
         }
 
         If the entry is itself an empty dict {}, then defaults are filled in
-        from pycolumns.DEFAULT_COMPRESSION, pycolumns.DEFAULT_CLEVEL,
-        pycolumns.DEFAULT_SHUFFLE
+        from pycolumns.DEFAULT_COMPRESSION
 
         You can also add compression to some columns after the fact
 
         import pycolumns as pyc
         schema = pyc.array_to_schema(array)
-        schema['id']['compressor'] = 'zstd'
+        schema['id']['cname'] = 'zstd'
         schema['id']['clevel'] = 5
 
     Returns
@@ -241,8 +240,8 @@ def add_schema_compression(schema, compression):
 
             e.g.
             compression={
-                'id': {'compressor': 'zstd':, 'clevel': 5}
-                'name': {'compressor': 'zstd':},
+                'id': {'cname': 'zstd':, 'clevel': 5}
+                'name': {'cname': 'zstd':},
                 'x': {},  # means use defaults
             }
 
@@ -284,7 +283,7 @@ def get_compression_with_defaults(compression=None, convert=False):
     Parameters
     ----------
     compression: dict, optional
-        If not sent, the default compression is returned
+        If not sent (None), the default compression is returned
         If sent, defaults are filled in as needed
     convert: bool, optional
         If set to True, convert the shuffle to the blosc integer
@@ -294,11 +293,17 @@ def get_compression_with_defaults(compression=None, convert=False):
     -------
     dict with compression set
     """
+    if compression is True:
+        compression = {}
+
     comp = defaults.DEFAULT_COMPRESSION.copy()
+
     if compression is not None:
         comp.update(compression)
+
     if convert:
         comp['shuffle'] = convert_shuffle(comp['shuffle'])
+
     return comp
 
 
@@ -310,6 +315,7 @@ def convert_shuffle(shuffle):
     ----------
     shuffle: str or int
         'shuffle', blosc.SHUFFLE, 'bitshuffle' or blosc.BITSHUFFLE
+        'noshuffle', blosc.NOSHUFFLE
         String is case insensitive
 
     Returns
@@ -324,6 +330,8 @@ def convert_shuffle(shuffle):
         new_shuf = blosc.SHUFFLE
     elif shuffle in ('BITSHUFFLE', blosc.BITSHUFFLE):
         new_shuf = blosc.BITSHUFFLE
+    elif shuffle in ('NOSHUFFLE', blosc.NOSHUFFLE):
+        new_shuf = blosc.NOSHUFFLE
     else:
         raise ValueError(f'bad shuffle: {shuffle}')
     return new_shuf

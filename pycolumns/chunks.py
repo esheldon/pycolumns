@@ -1,4 +1,3 @@
-# import os
 import numpy as np
 from ._column import Column as CColumn
 from . import util
@@ -118,16 +117,35 @@ class Chunks(object):
         """
         self._check_dtype(data)
 
-        assert self.compression is None, 'no compression for now'
-        if self.compression is None:
-            # see to end
-            self._fobj.seek(0, 2)
-            data.tofile(self._fobj)
-            nbytes = data.nbytes
+        if self.compression:
+            nbytes = self._append_compressed_data(data)
         else:
-            raise NotImplementedError('implement compression')
+            nbytes = self._append_uncompressed_data(data)
 
         self._update_chunks(data.size, nbytes)
+
+    def _append_uncompressed_data(self, data):
+        # seek to end
+        self._fobj.seek(0, 2)
+        data.tofile(self._fobj)
+        nbytes = data.nbytes
+        return nbytes
+
+    def _append_compressed_data(self, data):
+        import blosc
+
+        # seek to end
+        self._fobj.seek(0, 2)
+
+        compressed_bytes = blosc.compress_ptr(
+            data.__array_interface__['data'][0],
+            data.size,
+            data.dtype.itemsize,
+            **self.compression
+        )
+        self._fobj.write(compressed_bytes)
+        nbytes = len(compressed_bytes)
+        return nbytes
 
     def read_chunk(self, chunk_index):
         """
@@ -135,10 +153,10 @@ class Chunks(object):
         """
         self._check_chunk(chunk_index)
 
-        if self.compression is None:
-            return self._read_uncompressed_chunk(chunk_index)
-        else:
+        if self.compression:
             return self._read_compressed_chunk(chunk_index)
+        else:
+            return self._read_uncompressed_chunk(chunk_index)
 
     def _read_uncompressed_chunk(self, chunk_index):
         offset = self._chunk_data['offset'][chunk_index]
@@ -151,7 +169,19 @@ class Chunks(object):
         )
 
     def _read_compressed_chunk(self, chunk_index):
-        raise NotImplementedError('implement reading compressed chunk')
+        import blosc
+        chunk = self._chunk_data[chunk_index]
+
+        self._fobj.seek(chunk['offset'], 0)
+
+        buff = bytearray(chunk['nbytes'])
+
+        output = np.zeros(chunk['nrows'], dtype=self.dtype)
+
+        self._fobj.readinto(buff)
+        blosc.decompress_ptr(buff, output.__array_interface__['data'][0])
+
+        return output
 
     def _check_chunk(self, chunk_index):
         if self.nrows == 0:
@@ -186,8 +216,8 @@ class Chunks(object):
         """
         defaults get filled in
         """
-        if compression is None:
-            self._compression = None
+        if compression is None or compression is False:
+            self._compression = compression
         else:
             self._compression = util.get_compression_with_defaults(
                 compression,
@@ -206,7 +236,12 @@ class Chunks(object):
         else:
             self._chunk_data = None
 
-        self._fobj = open(self.filename, self.mode)
+        # needed to read/write bytes
+        mode = self.mode
+        if 'b' not in mode:
+            mode = 'b' + mode
+
+        self._fobj = open(self.filename, mode)
 
     # def read(self):
     #     """
@@ -466,81 +501,87 @@ def test():
     import os
     import pytest
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        data = np.arange(60)
-        fname = os.path.join(tmpdir, 'test.zarray')
-        chunks_fname = os.path.join(tmpdir, 'test.chunks')
-        with Chunks(
-            filename=fname,
-            chunks_filename=chunks_fname,
-            dtype=data.dtype,
-            mode='w+',
-            verbose=True,
-        ) as chunks:
+    for compression in [False, True]:
+        print('=' * 70)
+        print('with compression:', compression)
 
-            print('-' * 70)
-            print('before append')
-            print(chunks)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            data = np.arange(60)
+            fname = os.path.join(tmpdir, 'test.zarray')
+            chunks_fname = os.path.join(tmpdir, 'test.chunks')
+            with Chunks(
+                filename=fname,
+                chunks_filename=chunks_fname,
+                dtype=data.dtype,
+                mode='w+',
+                compression=compression,
+                verbose=True,
+            ) as chunks:
 
-            sub1 = data[0:0 + 20]
-            chunks.append(sub1)
+                print('-' * 70)
+                print('before append')
+                print(chunks)
 
-            print('-' * 70)
-            print('after append')
-            print(chunks)
-            assert chunks.nrows == sub1.size
+                sub1 = data[0:0 + 20]
+                chunks.append(sub1)
 
-            sub2 = data[20:20 + 20]
-            chunks.append(sub2)
+                print('-' * 70)
+                print('after append')
+                print(chunks)
+                assert chunks.nrows == sub1.size
 
-            print('-' * 70)
-            print('after another append')
-            print(chunks)
-            assert chunks.nrows == sub1.size + sub2.size
+                sub2 = data[20:20 + 20]
+                chunks.append(sub2)
 
-            rsub1 = chunks.read_chunk(0)
-            assert np.all(rsub1 == sub1)
+                print('-' * 70)
+                print('after another append')
+                print(chunks)
+                assert chunks.nrows == sub1.size + sub2.size
 
-            rsub2 = chunks.read_chunk(1)
-            assert np.all(rsub2 == sub2)
+                rsub1 = chunks.read_chunk(0)
+                assert np.all(rsub1 == sub1)
 
-            rsub1allslice = chunks[:]
-            assert np.all(rsub1allslice == data[0:chunks.nrows])
+                rsub2 = chunks.read_chunk(1)
+                assert np.all(rsub2 == sub2)
 
-            rslice1 = chunks[:20]
-            assert np.all(rslice1 == data[:20])
+                rsub1allslice = chunks[:]
+                assert np.all(rsub1allslice == data[0:chunks.nrows])
 
-            rslice2 = chunks[20:40]
-            assert np.all(rslice2 == data[20:40])
 
-            rows = np.array([3, 8, 17, 25])
-            rr = chunks[rows]
-            assert np.all(rr == data[rows])
+                rslice1 = chunks[:20]
+                assert np.all(rslice1 == data[:20])
 
-            with pytest.raises(ValueError):
-                chunks.read_chunk(3)
+                rslice2 = chunks[20:40]
+                assert np.all(rslice2 == data[20:40])
 
-            #
-            # indata = col[2:8]
-            # assert np.all(indata == data[2:8])
-            #
-            # indata = col[2:18:2]
-            # assert np.all(indata == data[2:18:2])
-            #
-            # ind = [3, 5, 7]
-            # indata = col[ind]
-            # assert np.all(indata == data[ind])
-            #
-            # ind = 5
-            # indata = col[ind]
-            # assert np.all(indata == data[ind])
-            #
-            # s = slice(2, 8)
-            # indata = np.zeros(s.stop - s.start, dtype=data.dtype)
-            # col.read_slice_into(indata, s)
-            # assert np.all(indata == data[s])
-            #
-            # ind = [3, 5, 7]
-            # indata = np.zeros(len(ind), dtype=data.dtype)
-            # col.read_rows_into(indata, ind)
-            # assert np.all(indata == data[ind])
+                rows = np.array([3, 8, 17, 25])
+                rr = chunks[rows]
+                assert np.all(rr == data[rows])
+
+                with pytest.raises(ValueError):
+                    chunks.read_chunk(3)
+
+                #
+                # indata = col[2:8]
+                # assert np.all(indata == data[2:8])
+                #
+                # indata = col[2:18:2]
+                # assert np.all(indata == data[2:18:2])
+                #
+                # ind = [3, 5, 7]
+                # indata = col[ind]
+                # assert np.all(indata == data[ind])
+                #
+                # ind = 5
+                # indata = col[ind]
+                # assert np.all(indata == data[ind])
+                #
+                # s = slice(2, 8)
+                # indata = np.zeros(s.stop - s.start, dtype=data.dtype)
+                # col.read_slice_into(indata, s)
+                # assert np.all(indata == data[s])
+                #
+                # ind = [3, 5, 7]
+                # indata = np.zeros(len(ind), dtype=data.dtype)
+                # col.read_rows_into(indata, ind)
+                # assert np.all(indata == data[ind])
