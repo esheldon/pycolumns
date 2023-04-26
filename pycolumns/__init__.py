@@ -11,6 +11,8 @@ from .defaults import (
 from . import columns
 from .columns import Columns, create_columns
 
+from . import chunks
+
 from . import util
 from .util import array_to_schema
 

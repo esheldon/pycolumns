@@ -277,6 +277,58 @@ def add_schema_compression(schema, compression):
     return new_schema
 
 
+def get_compression_with_defaults(compression=None, convert=False):
+    """
+    get compression with defaults set
+
+    Parameters
+    ----------
+    compression: dict, optional
+        If not sent, the default compression is returned
+        If sent, defaults are filled in as needed
+    convert: bool, optional
+        If set to True, convert the shuffle to the blosc integer
+        value
+
+    Returns
+    -------
+    dict with compression set
+    """
+    comp = defaults.DEFAULT_COMPRESSION.copy()
+    if compression is not None:
+        comp.update(compression)
+    if convert:
+        comp['shuffle'] = convert_shuffle(comp['shuffle'])
+    return comp
+
+
+def convert_shuffle(shuffle):
+    """
+    convert shuffle to the integer value
+
+    Parameters
+    ----------
+    shuffle: str or int
+        'shuffle', blosc.SHUFFLE, 'bitshuffle' or blosc.BITSHUFFLE
+        String is case insensitive
+
+    Returns
+    -------
+    The integer value, e.g. blosc.SHUFFLE
+    """
+    import blosc
+
+    shuffle = shuffle.upper()
+
+    if shuffle in ('SHUFFLE', blosc.SHUFFLE):
+        new_shuf = blosc.SHUFFLE
+    elif shuffle in ('BITSHUFFLE', blosc.BITSHUFFLE):
+        new_shuf = blosc.BITSHUFFLE
+    else:
+        raise ValueError(f'bad shuffle: {shuffle}')
+    return new_shuf
+
+
 def schema_to_dtype(schema):
     """
     convert a schema into a numpy dtype

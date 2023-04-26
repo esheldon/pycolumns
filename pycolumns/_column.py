@@ -11,6 +11,8 @@ class Column(_column_pywrap.Column):
     def __init__(self, filename, dtype, mode='r', verbose=False):
         self._filename = filename
         self._dtype = np.dtype(dtype)
+        self._mode = mode
+        self._verbose = verbose
         super().__init__(filename, mode, verbose)
         self._set_nrows()
 
@@ -20,6 +22,13 @@ class Column(_column_pywrap.Column):
         get the filename
         """
         return self._filename
+
+    @property
+    def mode(self):
+        """
+        get the file open mode
+        """
+        return self._mode
 
     @property
     def dtype(self):
@@ -41,6 +50,13 @@ class Column(_column_pywrap.Column):
         get numbe of rows
         """
         return self._nrows
+
+    @property
+    def verbose(self):
+        """
+        get the filename
+        """
+        return self._verbose
 
     def append(self, data):
         """
@@ -255,6 +271,7 @@ class Column(_column_pywrap.Column):
     def __repr__(self):
         rep = _repr_template % {
             'filename': self.filename,
+            'mode': self.mode,
             'dtype': self.dtype,
             'nrows': self.nrows,
         }
@@ -264,6 +281,7 @@ class Column(_column_pywrap.Column):
 _repr_template = """
 Column:
     filename: %(filename)s
+    mode: %(mode)s
     dtype: %(dtype)s
     nrows: %(nrows)d
 """

@@ -2,6 +2,7 @@
 
 ALLOWED_COL_TYPES = [
     'array', 'meta', 'index', 'index1', 'sorted', 'dict', 'cols', 'chunks',
+    'zarray',
 ]
 
 
