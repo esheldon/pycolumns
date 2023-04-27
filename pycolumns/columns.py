@@ -1,7 +1,6 @@
 """
 TODO
 
-    - Instead of each append is a chunk, use predefined chunk sizes
     - get chunks into schema, with defaults
     - test speed, do we need C reader for chunks?
     - look into optimizing slice reads for chunks

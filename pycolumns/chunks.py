@@ -155,7 +155,7 @@ class Chunks(object):
             fill_last_chunk = False
         else:
             # see if nrows is less than the chunksize
-            fill_last_chunk = (cd['nrows'] != self.row_chunksize)
+            fill_last_chunk = (cd['nrows'][-1] != self.row_chunksize)
 
         if fill_last_chunk:
             # we need to append some to this chunk
@@ -255,6 +255,29 @@ class Chunks(object):
         nbytes = len(compressed_bytes)
         return nbytes
 
+    def _update_chunks_after_write(self, nrows, nbytes):
+        chunk = np.zeros(1, dtype=self.chunks_dtype)
+        chunk['nbytes'] = nbytes
+        chunk['nrows'] = nrows
+
+        if self._chunk_data is None:
+            self._chunk_data = chunk
+        else:
+            # note we probably don't want the chunks to be defined by what
+            # gets appended, but rather keep the chunksize fixed
+            # for compressed this would mean reading in the chunk that will
+            # get appended, appending it, writing it back out with new
+            # nbytes, nrows
+            cd = self._chunk_data
+            chunk['offset'][0] = cd['offset'][-1] + cd['nbytes'][-1]
+            chunk['rowstart'][0] = cd['rowstart'][-1] + cd['nrows'][-1]
+
+            self._chunk_data = np.hstack([self._chunk_data, chunk])
+
+        self._chunks_fobj.append(chunk)
+
+        self._set_nrows()
+
     def read_chunk(self, chunk_index):
         """
         Read the indicated chunk
@@ -331,29 +354,6 @@ class Chunks(object):
             raise ValueError(
                 f'chunk {chunk_index} out of range [0, {self.nchunks-1}')
 
-    def _update_chunks_after_write(self, nrows, nbytes):
-        chunk = np.zeros(1, dtype=self.chunks_dtype)
-        chunk['nbytes'] = nbytes
-        chunk['nrows'] = nrows
-
-        if self._chunk_data is None:
-            self._chunk_data = chunk
-        else:
-            # note we probably don't want the chunks to be defined by what
-            # gets appended, but rather keep the chunksize fixed
-            # for compressed this would mean reading in the chunk that will
-            # get appended, appending it, writing it back out with new
-            # nbytes, nrows
-            cd = self._chunk_data
-            chunk['offset'][0] = cd['offset'][-1] + cd['nbytes'][-1]
-            chunk['rowstart'][0] = cd['rowstart'][-1] + cd['nrows'][-1]
-
-            self._chunk_data = np.hstack([self._chunk_data, chunk])
-
-        self._chunks_fobj.append(chunk)
-
-        self._set_nrows()
-
     def _set_compression(self, compression):
         """
         defaults get filled in
@@ -368,12 +368,24 @@ class Chunks(object):
 
     def _set_row_chunksize(self, chunksize):
         self._chunksize = chunksize
+        try:
+            end = chunksize[-1]
+            if end == 'r':
+                self._row_chunksize = int(chunksize[:-1])
+                return
+        except TypeError:
+            pass
+
 
         chunksize_gb = util.convert_to_gigabytes(chunksize)
         chunksize_bytes = int(chunksize_gb * 1024 ** 3)
 
         bytes_per_element = self.dtype.itemsize
         self._row_chunksize = chunksize_bytes // (bytes_per_element * 2)
+        if self._row_chunksize < 1:
+            raise ValueError(
+                f'chunksize {chunksize} results in less than one row per chunk'
+            )
 
     def _open_files(self):
         if self.verbose:
@@ -412,24 +424,24 @@ class Chunks(object):
     #     super()._read_slice(data, 0)
     #     return data
 
-    def read_into(self, data):
-        """
-        read rows from the start of the file, storing in the input array
-
-        Returns
-        -------
-        data: array
-            The output data
-        """
-
-        self._check_dtype(data)
-
-        nrows = self.nrows
-        if data.size > nrows:
-            raise ValueError(
-                f'input data rows {data.size} > file nrows {nrows}'
-            )
-        super()._read_slice(data, 0)
+    # def read_into(self, data):
+    #     """
+    #     read rows from the start of the file, storing in the input array
+    #
+    #     Returns
+    #     -------
+    #     data: array
+    #         The output data
+    #     """
+    #
+    #     self._check_dtype(data)
+    #
+    #     nrows = self.nrows
+    #     if data.size > nrows:
+    #         raise ValueError(
+    #             f'input data rows {data.size} > file nrows {nrows}'
+    #         )
+    #     super()._read_slice(data, 0)
 
     # def read_slice(self, s):
     #     """
@@ -451,29 +463,29 @@ class Chunks(object):
     #     super()._read_slice(data, start)
     #     return data
 
-    def read_slice_into(self, data, s):
-        """
-        read rows into the input data
-
-        Parameters
-        ----------
-        data: array
-            The slice.  Must have a start
-        s: slice
-            The slice.  Must have a start and no step
-
-        Returns
-        -------
-        None
-        """
-
-        self._check_dtype(data)
-
-        start, stop = self._extract_slice_start_stop(s)
-        nrows = stop - start
-        if data.size != nrows:
-            raise ValueError(f'data size {data.size} != slice nrows {nrows}')
-        super()._read_slice(data, start)
+    # def read_slice_into(self, data, s):
+    #     """
+    #     read rows into the input data
+    #
+    #     Parameters
+    #     ----------
+    #     data: array
+    #         The slice.  Must have a start
+    #     s: slice
+    #         The slice.  Must have a start and no step
+    #
+    #     Returns
+    #     -------
+    #     None
+    #     """
+    #
+    #     self._check_dtype(data)
+    #
+    #     start, stop = self._extract_slice_start_stop(s)
+    #     nrows = stop - start
+    #     if data.size != nrows:
+    #         raise ValueError(f'data size {data.size} != slice nrows {nrows}')
+    #     super()._read_slice(data, start)
 
     # def read_rows(self, rows):
     #     """
@@ -494,53 +506,53 @@ class Chunks(object):
     #     # super()._read_rows_pages(data, rows)
     #     return data
 
-    def read_rows_into(self, data, rows):
-        """
-        read rows into the input data
-
-        Parameters
-        ----------
-        data: array
-            Array in which to store the values
-        rows: array
-            The rows array
-
-        Returns
-        -------
-        None
-        """
-        from .indices import Indices
-        self._check_dtype(data)
-
-        rows_use = util.extract_rows(rows, self.nrows)
-        if not isinstance(rows_use, Indices):
-            raise ValueError(f'git unexpected rows type {type(rows_use)}')
-
-        super()._read_rows(data, rows_use)
-        # super()._read_rows_pages(data, rows)
-
-    def read_row_into(self, data, row):
-        """
-        read rows into the input data
-
-        Parameters
-        ----------
-        data: array
-            Array in which to store the values. Even though reading
-            a single row, still must be length one array not scalar
-        rows: array
-            The rows array
-
-        Returns
-        -------
-        None
-        """
-        self._check_dtype(data)
-        if data.ndim == 0:
-            raise ValueError('data must have ndim > 0')
-
-        super()._read_row(data, row)
-        # super()._read_row_pages(data, rows)
+    # def read_rows_into(self, data, rows):
+    #     """
+    #     read rows into the input data
+    #
+    #     Parameters
+    #     ----------
+    #     data: array
+    #         Array in which to store the values
+    #     rows: array
+    #         The rows array
+    #
+    #     Returns
+    #     -------
+    #     None
+    #     """
+    #     from .indices import Indices
+    #     self._check_dtype(data)
+    #
+    #     rows_use = util.extract_rows(rows, self.nrows)
+    #     if not isinstance(rows_use, Indices):
+    #         raise ValueError(f'git unexpected rows type {type(rows_use)}')
+    #
+    #     super()._read_rows(data, rows_use)
+    #     # super()._read_rows_pages(data, rows)
+    #
+    # def read_row_into(self, data, row):
+    #     """
+    #     read rows into the input data
+    #
+    #     Parameters
+    #     ----------
+    #     data: array
+    #         Array in which to store the values. Even though reading
+    #         a single row, still must be length one array not scalar
+    #     rows: array
+    #         The rows array
+    #
+    #     Returns
+    #     -------
+    #     None
+    #     """
+    #     self._check_dtype(data)
+    #     if data.ndim == 0:
+    #         raise ValueError('data must have ndim > 0')
+    #
+    #     super()._read_row(data, row)
+    #     # super()._read_row_pages(data, rows)
 
     def _read_rows(self, data, rows):
         chunk_indices = util.get_chunks(
@@ -588,7 +600,8 @@ class Chunks(object):
             data = np.empty(rows.size, dtype=self.dtype)
 
             if rows.ndim == 0:
-                self._read_row(data, rows)
+                send_rows = np.array(rows, ndmin=1)
+                self._read_rows(data, send_rows)
                 data = data[0]
             else:
                 self._read_rows(data, rows)
