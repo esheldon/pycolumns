@@ -17,3 +17,6 @@ DEFAULT_COMPRESSION = {
     'clevel': DEFAULT_CLEVEL,
     'shuffle': DEFAULT_SHUFFLE,
 }
+
+# 1 megabyte
+DEFAULT_CHUNKSIZE = '1m'
