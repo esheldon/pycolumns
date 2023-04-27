@@ -1,7 +1,7 @@
 # flake8: noqa
 
 ALLOWED_COL_TYPES = [
-    'array', 'zarray', 'meta', 'index', 'index1', 'sorted', 'dict', 'cols',
+    'array', 'meta', 'index', 'index1', 'sorted', 'dict', 'cols',
     'chunks',
 ]
 

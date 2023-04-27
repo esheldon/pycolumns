@@ -239,8 +239,8 @@ class Column(object):
         meta = self._meta
         if 'compression' in meta and meta['compression']:
             self._col = Chunks(
-                self.array_filename,
-                self.chunks_filename,
+                filename=self.array_filename,
+                chunks_filename=self.chunks_filename,
                 dtype=self._meta['dtype'],
                 mode='r+',
                 compression=meta['compression'],

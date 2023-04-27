@@ -1,8 +1,7 @@
 """
 TODO
 
-    - incorporate new compressed/chunk data into main column/columns as
-      type zarray
+    - test speed, do we need C reader for chunks?
     - Instead of each append is a chunk, use predefined chunk sizes
     - look into optimizing slice reads for chunks
     - deletion of columns/dicts etc.
@@ -11,6 +10,7 @@ TODO
         - get_dict()
         - get_subcols()
     - setters for some things like cache_mem, verbose etc.
+    - partitioning of data
 """
 import os
 import numpy as np

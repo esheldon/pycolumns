@@ -112,7 +112,7 @@ def write_json(fname, obj):
     import json
 
     with open(fname, 'w') as fobj:
-        json.dump(obj, fobj, indent=1, separators=(',', ':'))
+        json.dump(obj, fobj, indent=4, separators=(',', ':'))
 
 
 def get_native_data(data):

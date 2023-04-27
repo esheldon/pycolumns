@@ -18,11 +18,13 @@ class Chunks(object):
     ):
         self._filename = filename
         self._chunks_filename = chunks_filename
+
         self._dtype = np.dtype(dtype)
         self._chunks_dtype = np.dtype(
             [('offset', 'i8'), ('nbytes', 'i8'),
              ('rowstart', 'i8'), ('nrows', 'i8')]
         )
+
         self._set_compression(compression)
         self._mode = mode
         self._verbose = verbose
@@ -42,7 +44,7 @@ class Chunks(object):
         """
         get the filename
         """
-        return self._filename
+        return self._chunks_filename
 
     @property
     def mode(self):
@@ -122,7 +124,7 @@ class Chunks(object):
         else:
             nbytes = self._append_uncompressed_data(data)
 
-        self._update_chunks(data.size, nbytes)
+        self._update_chunks_after_write(data.size, nbytes)
 
     def _append_uncompressed_data(self, data):
         # seek to end
@@ -201,7 +203,7 @@ class Chunks(object):
             raise ValueError(
                 f'chunk {chunk_index} out of range [0, {self.nchunks-1}')
 
-    def _update_chunks(self, nrows, nbytes):
+    def _update_chunks_after_write(self, nrows, nbytes):
         chunk = np.zeros(1, dtype=self.chunks_dtype)
         chunk['nbytes'] = nbytes
         chunk['nrows'] = nrows
@@ -217,8 +219,11 @@ class Chunks(object):
             cd = self._chunk_data
             chunk['offset'][0] = cd['offset'][-1] + cd['nbytes'][-1]
             chunk['rowstart'][0] = cd['rowstart'][-1] + cd['nrows'][-1]
-            self._chunks_fobj.append(chunk)
+
             self._chunk_data = np.hstack([self._chunk_data, chunk])
+
+        print('appending chunk')
+        self._chunks_fobj.append(chunk)
 
         self._set_nrows()
 
@@ -235,6 +240,11 @@ class Chunks(object):
             )
 
     def _open_files(self):
+        if self.verbose:
+            print(
+                f'opening chunks file {self.chunks_filename} '
+                f'with mode: {self.mode}'
+            )
         self._chunks_fobj = CColumn(
             self.chunks_filename,
             dtype=self.chunks_dtype,
@@ -517,7 +527,7 @@ def test():
 
         with tempfile.TemporaryDirectory() as tmpdir:
             data = np.arange(60)
-            fname = os.path.join(tmpdir, 'test.zarray')
+            fname = os.path.join(tmpdir, 'test.array')
             chunks_fname = os.path.join(tmpdir, 'test.chunks')
             with Chunks(
                 filename=fname,
