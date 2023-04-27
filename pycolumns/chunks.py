@@ -376,9 +376,8 @@ class Chunks(object):
         except TypeError:
             pass
 
-
-        chunksize_gb = util.convert_to_gigabytes(chunksize)
-        chunksize_bytes = int(chunksize_gb * 1024 ** 3)
+        chunksize_bytes = util.convert_to_bytes(chunksize)
+        chunksize_bytes = int(chunksize_bytes)
 
         bytes_per_element = self.dtype.itemsize
         self._row_chunksize = chunksize_bytes // (bytes_per_element * 2)

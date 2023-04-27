@@ -163,8 +163,8 @@ Column:
 >>> c.delete_entry('ra')
 
 # to configure the amount of memory used during index creation, specify
-# cache_mem in gigabytes.  Default 1 gig
->>> cols = pyc.Columns(fname, cache_mem=0.5)
+# cache_mem is 0.5 gigabytes
+>>> cols = pyc.Columns(fname, cache_mem='0.5g')
 
 # columns can actually be another pycolumns directory
 >>> psfcols = cols['psfstars']

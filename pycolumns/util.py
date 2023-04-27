@@ -153,13 +153,37 @@ def convert_to_gigabytes(s):
         if units == 'g':
             gigs = float(amount)
         elif units == 'm':
-            gigs = float(amount) / 1000
+            gigs = float(amount) / 1024
         elif units == 'k':
-            gigs = float(amount) / 1000 / 1000
+            gigs = float(amount) / 1024 ** 2
+        elif units == 'b':
+            gigs = float(amount) / 1024 ** 3
         else:
             raise ValueError(f'band unit in {s}')
 
     return gigs
+
+
+def convert_to_bytes(s):
+    try:
+        bts = float(s)
+    except ValueError:
+        slow = s.lower()
+
+        units = slow[-1]
+        amount = slow[:-1]
+        if units == 'g':
+            bts = float(amount) * 1024 ** 3
+        elif units == 'm':
+            bts = float(amount) * 1024 ** 2
+        elif units == 'k':
+            bts = float(amount) * 1024
+        elif units == 'b':
+            bts = float(amount)
+        else:
+            raise ValueError(f'band unit in {s}')
+
+    return bts
 
 
 def array_to_schema(array, compression=None):

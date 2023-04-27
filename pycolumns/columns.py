@@ -128,7 +128,7 @@ class Columns(dict):
         self._type = 'cols'
         self._verbose = verbose
         self._cache_mem = cache_mem
-        self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
+        self._cache_mem_bytes = util.convert_to_bytes(cache_mem)
         self._load()
 
     @property
@@ -186,8 +186,8 @@ class Columns(dict):
         return self._cache_mem
 
     @property
-    def cache_mem_gb(self):
-        return self._cache_mem_gb
+    def cache_mem_bytes(self):
+        return self._cache_mem_bytes
 
     def delete(self, yes=False):
         """
