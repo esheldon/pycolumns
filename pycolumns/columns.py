@@ -1,8 +1,8 @@
 """
 TODO
 
-    - test speed, do we need C reader for chunks?
     - Instead of each append is a chunk, use predefined chunk sizes
+    - test speed, do we need C reader for chunks?
     - look into optimizing slice reads for chunks
     - deletion of columns/dicts etc.
     - ability to add a column

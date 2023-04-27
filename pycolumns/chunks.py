@@ -32,6 +32,9 @@ class Chunks(object):
         # super().__init__(filename, mode, verbose)
         self._set_nrows()
 
+        self._cached_chunk_index = -1
+        self._cached_chunk = None
+
     @property
     def filename(self):
         """
@@ -161,14 +164,46 @@ class Chunks(object):
 
     def read_chunk(self, chunk_index):
         """
-        Read a chunk of data from the file
+        Read the indicated chunk
+
+        Parameters
+        ----------
+        chunk_index: int
+            The index of the chunk
+
+        Returns
+        -------
+        array
         """
+        # make a writeable copy
+        return self._read_chunk.copy()
+
+    def _read_chunk(self, chunk_index):
+        """
+        Read a chunk of data from the file
+
+        This version does not make a copy, but returns a readonly view.
+        """
+        self._cache_chunk(chunk_index)
+
+        view = self._cached_chunk.view()
+        view.flags['WRITEABLE'] = False
+        return view
+
+    def _cache_chunk(self, chunk_index):
         self._check_chunk(chunk_index)
 
+        if chunk_index == self._cached_chunk_index:
+            print('re using chunk')
+            return
+
         if self.compression:
-            return self._read_compressed_chunk(chunk_index)
+            chunk = self._read_compressed_chunk(chunk_index)
         else:
-            return self._read_uncompressed_chunk(chunk_index)
+            chunk = self._read_uncompressed_chunk(chunk_index)
+
+        self._cached_chunk_index = chunk_index
+        self._cached_chunk = chunk
 
     def _read_uncompressed_chunk(self, chunk_index):
         offset = self._chunk_data['offset'][chunk_index]
@@ -419,7 +454,7 @@ class Chunks(object):
 
         for ci in w:
             num = h[ci]
-            chunk_data = self.read_chunk(ci)
+            chunk_data = self._read_chunk(ci)
 
             end = start + num
             rowstart = self._chunk_data['rowstart'][ci]
