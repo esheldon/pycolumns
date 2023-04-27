@@ -12,6 +12,9 @@ class Chunks(object):
         filename,
         chunks_filename,
         dtype,
+        # Set a default here for now, but eventually this should be part of
+        # schema
+        chunksize='1m',
         mode='r',
         compression=None,
         verbose=False,
@@ -29,8 +32,8 @@ class Chunks(object):
         self._mode = mode
         self._verbose = verbose
         self._open_files()
-        # super().__init__(filename, mode, verbose)
         self._set_nrows()
+        self._set_row_chunksize(chunksize)
 
         self._cached_chunk_index = -1
         self._cached_chunk = None
@@ -103,6 +106,20 @@ class Chunks(object):
         return nchunks
 
     @property
+    def chunksize(self):
+        """
+        get string chunk size
+        """
+        return self._chunksize
+
+    @property
+    def row_chunksize(self):
+        """
+        get chunk size in rows
+        """
+        return self._row_chunksize
+
+    @property
     def verbose(self):
         """
         get the filename
@@ -116,31 +133,107 @@ class Chunks(object):
         self._chunks_fobj.close()
         self._fobj.close()
 
-    def append(self, data):
+    def append_old(self, data):
         """
         append data to the file
         """
         self._check_dtype(data)
-
-        if self.compression:
-            nbytes = self._append_compressed_data(data)
-        else:
-            nbytes = self._append_uncompressed_data(data)
-
+        nbytes = self._write(data)
         self._update_chunks_after_write(data.size, nbytes)
 
-    def _append_uncompressed_data(self, data):
-        # seek to end
-        self._fobj.seek(0, 2)
+    def append(self, data):
+        """
+        Append data to the file. If the last chunk is not filled it
+        will be filled before appending in a new chunk
+        """
+
+        self._check_dtype(data)
+
+        cd = self._chunk_data
+        if cd is None:
+            # nothing in file, so just append
+            fill_last_chunk = False
+        else:
+            # see if nrows is less than the chunksize
+            fill_last_chunk = (cd['nrows'] != self.row_chunksize)
+
+        if fill_last_chunk:
+            # we need to append some to this chunk
+            num_to_append = self.row_chunksize - cd['nrows'][-1]
+
+            self._append_last_chunk(data[:num_to_append])
+
+            if num_to_append == data.size:
+                # we already appended all the data
+                return
+
+            adata = data[num_to_append:]
+        else:
+            adata = data
+
+        # Write data in chunks, the last one may be unfilled.
+        nwrites = adata.size // self.row_chunksize
+        if adata.size % self.row_chunksize != 0:
+            nwrites += 1
+
+        for i in range(nwrites):
+            start = i * self.row_chunksize
+            end = (i + 1) * self.row_chunksize
+            data_to_write = data[start:end]
+            nbytes = self._write(data_to_write)
+            self._update_chunks_after_write(data_to_write.size, nbytes)
+
+    def _append_last_chunk(self, data):
+        """
+        append data within chunk; if the input data overfills
+        the chunk, an exception is raised
+        """
+        cd = self._chunk_data
+
+        last_chunk_data = self.read_chunk(self.nchunks - 1)
+        new_chunk_data = np.hstack([last_chunk_data, data])
+        if new_chunk_data.size > self.row_chunksize:
+            raise ValueError(
+                f'appending last chunk got size {new_chunk_data.size} '
+                f'> chunksize {self.row_chunksize}'
+            )
+
+        # overwrite old chunk data and append new
+        offset = cd['offset'][-1]
+        nbytes = self._write(new_chunk_data, offset=offset)
+
+        cd['nbytes'][-1] = nbytes
+        cd['nrows'][-1] = new_chunk_data.size
+
+        cd_to_write = cd[-1:]
+        # update the last entry in the chunks file
+        self._chunks_fobj.update_row(cd.size-1, cd_to_write)
+        self._set_nrows()
+
+    def _write(self, data, offset=None):
+        """
+        write data, possibly at the specified offset, otherwise at the end
+        """
+        if offset is not None:
+            self._fobj.seek(offset)
+        else:
+            # seek to end
+            self._fobj.seek(0, 2)
+
+        if self.compression:
+            nbytes = self._write_compressed_data(data)
+        else:
+            nbytes = self._write_uncompressed_data(data)
+
+        return nbytes
+
+    def _write_uncompressed_data(self, data):
         data.tofile(self._fobj)
         nbytes = data.nbytes
         return nbytes
 
-    def _append_compressed_data(self, data):
+    def _write_compressed_data(self, data):
         import blosc
-
-        # seek to end
-        self._fobj.seek(0, 2)
 
         if data.flags['C_CONTIGUOUS'] or data.flags['F_CONTIGUOUS']:
             # this saves memory
@@ -176,7 +269,7 @@ class Chunks(object):
         array
         """
         # make a writeable copy
-        return self._read_chunk.copy()
+        return self._read_chunk(chunk_index).copy()
 
     def _read_chunk(self, chunk_index):
         """
@@ -257,7 +350,6 @@ class Chunks(object):
 
             self._chunk_data = np.hstack([self._chunk_data, chunk])
 
-        print('appending chunk')
         self._chunks_fobj.append(chunk)
 
         self._set_nrows()
@@ -273,6 +365,15 @@ class Chunks(object):
                 compression,
                 convert=True,
             )
+
+    def _set_row_chunksize(self, chunksize):
+        self._chunksize = chunksize
+
+        chunksize_gb = util.convert_to_gigabytes(chunksize)
+        chunksize_bytes = int(chunksize_gb * 1024 ** 3)
+
+        bytes_per_element = self.dtype.itemsize
+        self._row_chunksize = chunksize_bytes // (bytes_per_element * 2)
 
     def _open_files(self):
         if self.verbose:

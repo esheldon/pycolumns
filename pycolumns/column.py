@@ -2,7 +2,7 @@ import numpy as np
 from . import util
 from ._column import Column as CColumn
 from .chunks import Chunks
-from .defaults import DEFAULT_CACHE_MEM, DEFAULT_MERGESORT_CHUNKSIZE_GB
+from .defaults import DEFAULT_CACHE_MEM
 
 
 class Column(object):
@@ -351,9 +351,7 @@ class Column(object):
         if not self.has_index:
             raise ValueError('no index exists for column %s' % self.name)
 
-    def create_index(
-        self, overwrite=False, chunksize=DEFAULT_MERGESORT_CHUNKSIZE_GB,
-    ):
+    def create_index(self, overwrite=False):
         """
         Create an index for this column.
 
@@ -362,8 +360,6 @@ class Column(object):
         overwrite: bool, optional
             If set to True, overwrite any existing index.  See also
             update_index()
-        chunksize: number
-            Size of chunks for mergesort in gigabytes
         """
         import os
         from tempfile import TemporaryDirectory
@@ -485,14 +481,9 @@ class Column(object):
                 dtype=self.index1_dtype) as i1col:
             i1col.append(output)
 
-    def update_index(self, chunksize=DEFAULT_MERGESORT_CHUNKSIZE_GB):
+    def update_index(self):
         """
         Recreate the index for this column.
-
-        Parameters
-        ----------
-        chunksize: number
-            Size of chunks for mergesort in gigabytes
         """
         self.create_index(overwrite=True)
 

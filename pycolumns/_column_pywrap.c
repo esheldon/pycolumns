@@ -98,6 +98,34 @@ PyColumn_append(
     Py_RETURN_NONE;
 }
 
+// write data from the specified row location
+static PyObject*
+PyColumn_write_at(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL;
+    long long start = 0;
+    npy_intp elsize = 0;
+
+    if (!PyArg_ParseTuple(args, (char*)"LO", &start, &array)) {
+        return NULL;
+    }
+
+    elsize = PyArray_ITEMSIZE(array);
+    pyc_seek_row(self, start, elsize);
+
+    if (PyArray_ToFile(array, self->fptr, "", "") != 0) {
+        PyErr_Format(PyExc_IOError,
+                     "Error writing data to %s with mode %s",
+                     self->fname, self->mode);
+        return NULL;
+    }
+
+    Py_RETURN_NONE;
+}
 
 /*
    Read slice into array
@@ -347,6 +375,13 @@ static PyMethodDef PyColumn_methods[] = {
      "append()\n"
      "\n"
      "Append data.\n"},
+
+    {"_write_at",
+     (PyCFunction)PyColumn_write_at,
+     METH_VARARGS, 
+     "write_at()\n"
+     "\n"
+     "Write data from the specified row.\n"},
 
     {"_read_slice",
      (PyCFunction)PyColumn_read_slice,

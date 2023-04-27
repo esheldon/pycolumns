@@ -68,6 +68,32 @@ class Column(_column_pywrap.Column):
 
         self._nrows += data.size
 
+    def update_row(self, row, data):
+        """
+        Update the specified row
+        """
+        if data.size != 1:
+            raise ValueError(
+                f'attemting to update row with data of size {data.size}'
+            )
+        self._check_dtype(data)
+        self.write_at(row, data)
+
+    def write_at(self, row, data):
+        """
+        write data starting at the specified row
+        """
+        if row > self.nrows - 1:
+            raise ValueError(
+                f'attempt to write at row {row} > {self.nrows-1}'
+            )
+        self._check_dtype(data)
+
+        super()._write_at(row, data)
+
+        if row + data.size > self.nrows:
+            self._nrows = row + data.size
+
     # def read(self):
     #     """
     #     read all rows, creating the output

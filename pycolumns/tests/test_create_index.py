@@ -2,8 +2,9 @@ import pytest
 
 
 @pytest.mark.parametrize('cache_mem', [1.0, 0.01])
+@pytest.mark.parametrize('compression', [False, True])
 # @pytest.mark.parametrize('cache_mem', [1.0])
-def test_create_index(cache_mem):
+def test_create_index(cache_mem, compression):
     """
     cache_mem of 0.01 will force use of mergesort
     """
@@ -20,7 +21,13 @@ def test_create_index(cache_mem):
     data = np.zeros(num, dtype=[('rand', 'f8')])
     data['rand'] = rng.uniform(size=num)
 
-    schema = array_to_schema(data)
+    if compression:
+        ccols = ['id', 'scol']
+    else:
+        ccols = None
+
+    schema = array_to_schema(data, compression=ccols)
+    print(schema)
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -43,7 +50,8 @@ def test_create_index(cache_mem):
         assert np.all(sdata == data['rand'][s])
 
 
-def test_create_index_str():
+@pytest.mark.parametrize('compression', [False, True])
+def test_create_index_str(compression):
     """
     cache_mem of 0.01 will force use of mergesort
     """
@@ -63,7 +71,13 @@ def test_create_index_str():
     rand = rng.uniform(size=num)
     data['scol'] = rand.astype(dt)
 
-    schema = array_to_schema(data)
+    if compression:
+        ccols = ['id', 'scol']
+    else:
+        ccols = None
+
+    schema = array_to_schema(data, compression=ccols)
+    print(schema)
 
     with tempfile.TemporaryDirectory() as tmpdir:
 

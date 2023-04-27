@@ -17,6 +17,3 @@ DEFAULT_COMPRESSION = {
     'clevel': DEFAULT_CLEVEL,
     'shuffle': DEFAULT_SHUFFLE,
 }
-
-# for the mergesort
-DEFAULT_MERGESORT_CHUNKSIZE_GB = 0.1

@@ -83,3 +83,15 @@ def test_column(dtype):
 
             col.append(data)
             assert col.nrows == data.size * 2
+
+            one = data[:1]
+            row2update = 3
+            col.update_row(row2update, one)
+            check = col[3]
+            assert check == one[0]
+
+            two = data[3:3+2]
+            start = 15
+            col.write_at(start, two)
+            check = col[start:start+2]
+            assert np.all(check == two)

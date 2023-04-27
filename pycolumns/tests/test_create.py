@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.mark.parametrize('cache_mem', ['1g', '10k'])
-@pytest.mark.parametrize('compression', [True])
+@pytest.mark.parametrize('compression', [False, True])
 @pytest.mark.parametrize('verbose', [True, False])
 def test_create(cache_mem, compression, verbose):
     """
