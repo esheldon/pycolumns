@@ -20,81 +20,6 @@ from . import util
 from .defaults import DEFAULT_CACHE_MEM
 
 
-def create_columns(dir, schema={}, verbose=False, overwrite=False):
-    """
-    Initialize a columns database
-
-    Parameters
-    ----------
-    dir: str
-        Path to columns directory
-    schema: dict, optional
-        Dictionary holding information for each column.
-    verbose: bool, optional
-        If set to True, display information
-    overwrite: bool, optional
-        If the directory exists, remove existing data
-
-    Examples
-    --------
-        dir = 'test.cols'
-        schema = {
-            'id': {
-                'dtype': 'i8',
-                'compression': {
-                    'cname': 'zstd',
-                    'clevel': 5,
-                    'shuffle': 'bitshuffle',
-                }
-            },
-            'ra': {
-                'dtype': 'f8',
-            },
-            'name': {
-                'dtype': 'U5',
-                'compression': {
-                    'cname': 'zstd',
-                }
-            },
-        }
-        pyc.create_columns(dir, schema)
-
-        # set default compression on some columns
-        schema = {
-            'id': {'dtype': 'i8'},
-            'ra': {'dtype': 'f8'},
-            'name': {'dtype': 'U5'},
-        }
-
-        schema = pyc.util.add_schema_compression(schema, ['id', 'name'])
-        pyc.create_columns(dir, schema)
-    """
-    import shutil
-
-    if dir is not None:
-        dir = os.path.expandvars(dir)
-
-    if os.path.exists(dir):
-        if not overwrite:
-            raise RuntimeError(
-                f'directory {dir} already exists, send '
-                f'overwrite=True to replace'
-            )
-
-        if verbose:
-            print(f'removing {dir}')
-        shutil.rmtree(dir)
-
-    if verbose:
-        print(f'creating: {dir}')
-
-    os.makedirs(dir)
-
-    cols = Columns(dir, verbose=verbose)
-    cols.add_columns(schema)
-    return cols
-
-
 class Columns(dict):
     """
     Manage a database of "columns" represented by simple flat files.
@@ -130,6 +55,94 @@ class Columns(dict):
         self._cache_mem = cache_mem
         self._cache_mem_bytes = util.convert_to_bytes(cache_mem)
         self._load()
+
+    @classmethod
+    def create(
+        cls, dir, schema={}, cache_mem=DEFAULT_CACHE_MEM, verbose=False,
+        overwrite=False,
+    ):
+        """
+        Initialize a new columns database.  The new Columns object
+        is returned.
+
+        Parameters
+        ----------
+        dir: str
+            Path to columns directory
+        schema: dict, optional
+            Dictionary holding information for each column.
+        verbose: bool, optional
+            If set to True, display information
+        cache_mem: str or number
+            Cache memory for index creation, default '1g' or one gigabyte.
+            Can be a number in gigabytes or a string
+            Strings should be like '{amount}{unit}'
+                '1g' = 1 gigabytes
+                '100m' = 100 metabytes
+                '1000k' = 1000 kilobytes
+        Units can be g, m or k, case insenitive
+
+        overwrite: bool, optional
+            If the directory exists, remove existing data
+
+        Examples
+        --------
+            dir = 'test.cols'
+            schema = {
+                'id': {
+                    'dtype': 'i8',
+                    'compression': {
+                        'cname': 'zstd',
+                        'clevel': 5,
+                        'shuffle': 'bitshuffle',
+                    }
+                },
+                'ra': {
+                    'dtype': 'f8',
+                },
+                'name': {
+                    'dtype': 'U5',
+                    'compression': {
+                        'cname': 'zstd',
+                    }
+                },
+            }
+            pyc.create_columns(dir, schema)
+
+            # set default compression on some columns
+            schema = {
+                'id': {'dtype': 'i8'},
+                'ra': {'dtype': 'f8'},
+                'name': {'dtype': 'U5'},
+            }
+
+            schema = pyc.util.add_schema_compression(schema, ['id', 'name'])
+            pyc.create_columns(dir, schema)
+        """
+        import shutil
+
+        if dir is not None:
+            dir = os.path.expandvars(dir)
+
+        if os.path.exists(dir):
+            if not overwrite:
+                raise RuntimeError(
+                    f'directory {dir} already exists, send '
+                    f'overwrite=True to replace'
+                )
+
+            if verbose:
+                print(f'removing {dir}')
+            shutil.rmtree(dir)
+
+        if verbose:
+            print(f'creating: {dir}')
+
+        os.makedirs(dir)
+
+        cols = Columns(dir, cache_mem=cache_mem, verbose=verbose)
+        cols.add_columns(schema)
+        return cols
 
     @property
     def nrows(self):

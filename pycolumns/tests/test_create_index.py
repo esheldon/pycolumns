@@ -12,7 +12,7 @@ def test_create_index(cache_mem, compression):
     import tempfile
     import numpy as np
     from .. import _column
-    from ..columns import Columns, create_columns
+    from ..columns import Columns
     from ..util import array_to_schema
 
     seed = 333
@@ -32,9 +32,9 @@ def test_create_index(cache_mem, compression):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        create_columns(cdir, schema, verbose=True)
-
-        cols = Columns(cdir, cache_mem=cache_mem, verbose=True)
+        cols = Columns.create(
+            cdir, schema=schema, cache_mem=cache_mem, verbose=True,
+        )
 
         cols.append(data)
         cols['rand'].create_index()
@@ -59,7 +59,7 @@ def test_create_index_str(compression):
     import tempfile
     import numpy as np
     from .. import _column
-    from ..columns import Columns, create_columns
+    from ..columns import Columns
     from ..util import array_to_schema
 
     seed = 55
@@ -82,9 +82,9 @@ def test_create_index_str(compression):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        create_columns(cdir, schema, verbose=True)
-
-        cols = Columns(cdir, verbose=True)
+        cols = Columns.create(
+            cdir, schema=schema, overwrite=True, verbose=True,
+        )
 
         cols.append(data)
         print(cols)

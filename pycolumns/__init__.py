@@ -10,7 +10,7 @@ from .defaults import (
     DEFAULT_SHUFFLE,
 )
 from . import columns
-from .columns import Columns, create_columns
+from .columns import Columns
 
 from . import chunks
 

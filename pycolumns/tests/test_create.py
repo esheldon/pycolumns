@@ -11,7 +11,7 @@ def test_create(cache_mem, compression, verbose):
     import os
     import tempfile
     import numpy as np
-    from ..columns import Columns, create_columns
+    from ..columns import Columns
     from ..util import array_to_schema
 
     seed = 333
@@ -36,8 +36,7 @@ def test_create(cache_mem, compression, verbose):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        create_columns(cdir, schema, verbose=verbose)
-        cols = Columns(cdir, verbose=verbose, cache_mem=cache_mem)
+        cols = Columns.create(cdir, schema, cache_mem=cache_mem, verbose=verbose)
 
         assert cols.dir == cdir
         assert cols.verbose == verbose

@@ -8,7 +8,7 @@ def test_query():
     import os
     import tempfile
     import numpy as np
-    from ..columns import Columns, create_columns
+    from ..columns import Columns
     from ..util import array_to_schema
 
     seed = 333
@@ -25,8 +25,7 @@ def test_query():
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        create_columns(cdir, schema, verbose=True)
-        cols = Columns(cdir, verbose=True)
+        cols = Columns.create(cdir, schema=schema, verbose=True)
 
         cols.append(data)
 
