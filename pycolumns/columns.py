@@ -348,46 +348,6 @@ class Columns(dict):
         self[name] = Dict(filename, verbose=self.verbose)
         self[name].write(data)
 
-    def _create_column(self, name, verify=True):
-        """
-        create the specified column
-
-        You usually don't want to use this directly for array types if columns
-        already exist, because consistency will be broken, at least
-        temporarily. In fact an exception will be raised.  Better to use the
-        append method to ensure row length consistency
-
-        It is fine to use it for dict types
-
-        parameters
-        ----------
-        name: str
-            Column name
-        """
-
-        type = 'array'
-
-        if name in self:
-            raise ValueError("column '%s' already exists" % name)
-
-        if self.dir is None:
-            raise ValueError("no dir is set for Columns db, can't "
-                             "construct names")
-
-        filename = util.get_filename(dir=self.dir, name=name, type=type)
-
-        col = self._open_entry(
-            filename=filename,
-            name=name,
-            type=type,
-        )
-
-        name = col.name
-        self[name] = col
-
-        if verify:
-            self.verify()
-
     def reload(self, columns=None):
         """
         reload the database or a subset of columns.  Note discovery
@@ -581,7 +541,7 @@ class Columns(dict):
 
                 # just read the data and put in dict, simpler than below
                 col = self[colname]
-                if col.type == 'array':
+                if col.type == 'col':
                     data[colname] = col.read(rows=rows)
                 else:
                     data[colname] = col.read()
@@ -643,10 +603,10 @@ class Columns(dict):
                 if c not in self:
                     raise ValueError("Column '%s' not found" % c)
 
-                if not asdict and self[c].type != 'array':
+                if not asdict and self[c].type != 'col':
                     if not asdict:
                         raise ValueError(
-                            "requested non-array column '%s.' "
+                            "requested non-array column '%s' "
                             "Use asdict=True to read non-array "
                             "columns with general read() method" % c
                         )
