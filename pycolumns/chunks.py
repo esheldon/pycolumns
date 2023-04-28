@@ -147,17 +147,18 @@ class Chunks(object):
 
         self._check_dtype(data)
 
-        cd = self._chunk_data
-        if cd is None:
+        if self._chunk_data is None:
             # nothing in file, so just append
             fill_last_chunk = False
         else:
             # see if nrows is less than the chunksize
-            fill_last_chunk = (cd['nrows'][-1] != self.row_chunksize)
+            fill_last_chunk = (
+                self._chunk_data['nrows'][-1] != self.row_chunksize
+            )
 
         if fill_last_chunk:
             # we need to append some to this chunk
-            num_to_append = self.row_chunksize - cd['nrows'][-1]
+            num_to_append = self.row_chunksize - self._chunk_data['nrows'][-1]
 
             self._append_last_chunk(data[:num_to_append])
 
@@ -186,7 +187,6 @@ class Chunks(object):
         append data within chunk; if the input data overfills
         the chunk, an exception is raised
         """
-        cd = self._chunk_data
 
         last_chunk_data = self.read_chunk(self.nchunks - 1)
         new_chunk_data = np.hstack([last_chunk_data, data])
@@ -197,15 +197,17 @@ class Chunks(object):
             )
 
         # overwrite old chunk data and append new
-        offset = cd['offset'][-1]
+        offset = self._chunk_data['offset'][-1]
         nbytes = self._write(new_chunk_data, offset=offset)
 
-        cd['nbytes'][-1] = nbytes
-        cd['nrows'][-1] = new_chunk_data.size
+        assert self._fobj.tell() == offset + nbytes
+
+        self._chunk_data['nbytes'][-1] = nbytes
+        self._chunk_data['nrows'][-1] = new_chunk_data.size
 
         # update the last entry in the chunks file
-        cd_to_write = cd[-1:]
-        self._chunks_fobj.update_row(cd.size-1, cd_to_write)
+        cd_to_write = self._chunk_data[-1:]
+        self._chunks_fobj.update_row(self._chunk_data.size-1, cd_to_write)
 
         old_nrows = self.nrows
         self._set_nrows()
@@ -270,13 +272,25 @@ class Chunks(object):
             # for compressed this would mean reading in the chunk that will
             # get appended, appending it, writing it back out with new
             # nbytes, nrows
-            cd = self._chunk_data
-            chunk['offset'][0] = cd['offset'][-1] + cd['nbytes'][-1]
-            chunk['rowstart'][0] = cd['rowstart'][-1] + cd['nrows'][-1]
+            chunk['offset'][0] = (
+                self._chunk_data['offset'][-1] + self._chunk_data['nbytes'][-1]
+            )
+            chunk['rowstart'][0] = (
+                self._chunk_data['rowstart'][-1]
+                + self._chunk_data['nrows'][-1]
+            )
 
             self._chunk_data = np.hstack([self._chunk_data, chunk])
 
+            assert (
+                self._fobj.tell() ==
+                self._chunk_data['offset'][-1] + self._chunk_data['nbytes'][-1]
+            )
+
         self._chunks_fobj.append(chunk)
+        # import esutil as eu
+        # tmp = self._chunks_fobj[:]
+        # assert eu.numpy_util.compare_arrays(tmp, self._chunk_data)
 
         old_nrows = self.nrows
         self._set_nrows()
