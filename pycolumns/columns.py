@@ -694,7 +694,8 @@ class Columns(dict):
                     name = c.name
 
                     if len(name) > 15:
-                        name_entry = ['  %s' % name]
+                        # name_entry = ['  %s' % name]
+                        name_entry = [f'  {name}\n' + ' '*19]
                         # s += ['%23s' % (c.type,)]
                     else:
                         name_entry = ['  %-15s' % c.name]
