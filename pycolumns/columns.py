@@ -144,7 +144,7 @@ class Columns(dict):
         ----------
         dir: str
             Path to columns directory
-        array: numpy array with fields
+        array: numpy array with fields or dict of arrays
             An array with fields defined
         compression: dict, list, bool, or None, optional
             See TableSchema.from_array for a full explanation
@@ -456,12 +456,18 @@ class Columns(dict):
 
     def append(self, data, verify=True):
         """
-        Append data for the fields of a structured array to columns
+        Append data to the table columns
+
+        Parameters
+        ----------
+        data: array or dict
+            A structured array or dict with arrays
+        verify: bool, optional
+            If set to True, verify all the columns have the same number of rows
+            after appending.  Default True
         """
 
-        names = data.dtype.names
-        if names is None:
-            raise ValueError('append() takes a structured array as input')
+        names = util.get_data_names(data)
 
         if len(self) > 0:
             # make sure the input data matches the existing column names

@@ -81,6 +81,8 @@ class TableSchema(dict):
 
         Parameters
         ----------
+        array: numpy array with fields or dict of arrays
+            An array with fields defined, or a dict holding arrays
         compression: dict, list, bool, or None, optional
             - If None or False, do not set compression
             - If True, use default compression
@@ -100,11 +102,15 @@ class TableSchema(dict):
         -------
         TableSchema
         """
-        if array.dtype.names is None:
-            raise ValueError('array must have fields')
+        if isinstance(array, dict):
+            names = list(array.keys())
+        else:
+            names = array.dtype.names
+            if names is None:
+                raise ValueError('array must have fields')
 
         table_schema = TableSchema()
-        for name in array.dtype.names:
+        for name in names:
             keys = {}
             comp = _get_column_compression(compression, name)
             if comp:

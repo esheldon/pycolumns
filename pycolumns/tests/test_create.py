@@ -4,7 +4,8 @@ import pytest
 @pytest.mark.parametrize('cache_mem', ['1g', '10k'])
 @pytest.mark.parametrize('compression', [False, True])
 @pytest.mark.parametrize('verbose', [True, False])
-def test_create(cache_mem, compression, verbose):
+@pytest.mark.parametrize('fromdict', [False, True])
+def test_create(cache_mem, compression, verbose, fromdict):
     """
     cache_mem of 0.01 will force use of mergesort
     """
@@ -30,7 +31,14 @@ def test_create(cache_mem, compression, verbose):
     else:
         ccols = None
 
-    schema = TableSchema.from_array(data, compression=ccols)
+    if fromdict:
+        ddict = {}
+        for name in data.dtype.names:
+            ddict[name] = data[name]
+        schema = TableSchema.from_array(ddict, compression=ccols)
+    else:
+        schema = TableSchema.from_array(data, compression=ccols)
+
     print(schema)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -44,7 +52,10 @@ def test_create(cache_mem, compression, verbose):
         assert cols.verbose == verbose
         assert cols.cache_mem == cache_mem
 
-        cols.append(data)
+        if fromdict:
+            cols.append(ddict)
+        else:
+            cols.append(data)
 
         assert len(cols.names) == len(data.dtype.names)
         meta = {'version': '0.1', 'seeing': 0.9}

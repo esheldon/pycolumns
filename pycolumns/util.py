@@ -281,3 +281,27 @@ def get_chunks(chunkrows_sorted, rows):
     s -= 1
     s.clip(min=0, max=chunkrows_sorted.size-1, out=s)
     return s
+
+
+def get_data_names(data):
+    """
+    Get names for the data, either keys for a dict of arrays or names
+    from a structured array
+
+    Parameters
+    ----------
+    data: array or dict
+        A structured array or dict with arrays
+
+    Returns
+    -------
+    List of names
+    """
+    if hasattr(data, 'keys'):
+        names = list(data.keys())
+    else:
+        names = data.dtype.names
+        if names is None:
+            raise ValueError('array must have fields')
+
+    return names
