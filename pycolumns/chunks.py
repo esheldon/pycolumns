@@ -668,27 +668,24 @@ class Chunks(object):
     def __exit__(self, exception_type, exception_value, traceback):
         self.close()
 
+    def _get_repr_list(self, full=False):
+        indent = '    '
+
+        rep = [f'filename: {self.filename}']
+        rep += [f'mode: {self.mode}']
+        rep += [f'dtype: {self.dtype.str}']
+        rep += [f'nrows: {self.nrows}']
+        rep += [f'chunksize: {self.chunksize}']
+        rep += [f'chunks_filename: {self.chunks_filename}']
+
+        rep = [indent + r for r in rep]
+
+        rep = ['Chunks:'] + rep
+        return rep
+
     def __repr__(self):
-        rep = _repr_template % {
-            'filename': self.filename,
-            'chunks_filename': self.chunks_filename,
-            'mode': self.mode,
-            'dtype': self.dtype,
-            'nchunks': self.nchunks,
-            'nrows': self.nrows,
-        }
-        return rep.strip()
-
-
-_repr_template = """
-Chunks:
-    filename: %(filename)s
-    chunks_filename: %(chunks_filename)s
-    mode: %(mode)s
-    dtype: %(dtype)s
-    nchunks: %(nchunks)d
-    nrows: %(nrows)d
-"""
+        replist = self._get_repr_list(full=True)
+        return '\n'.join(replist)
 
 
 def test():

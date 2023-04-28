@@ -294,23 +294,22 @@ class Column(_column_pywrap.Column):
     def __exit__(self, exception_type, exception_value, traceback):
         self.close()
 
+    def _get_repr_list(self, full=False):
+        indent = '    '
+
+        rep = [f'filename: {self.filename}']
+        rep += [f'mode: {self.mode}']
+        rep += [f'dtype: {self.dtype.str}']
+        rep += [f'nrows: {self.nrows}']
+
+        rep = [indent + r for r in rep]
+
+        rep = ['Column:'] + rep
+        return rep
+
     def __repr__(self):
-        rep = _repr_template % {
-            'filename': self.filename,
-            'mode': self.mode,
-            'dtype': self.dtype,
-            'nrows': self.nrows,
-        }
-        return rep.strip()
-
-
-_repr_template = """
-Column:
-    filename: %(filename)s
-    mode: %(mode)s
-    dtype: %(dtype)s
-    nrows: %(nrows)d
-"""
+        replist = self._get_repr_list(full=True)
+        return '\n'.join(replist)
 
 
 def read(fname, dtype, rows=None, verbose=False):

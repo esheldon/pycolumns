@@ -804,7 +804,15 @@ class Column(object):
 
             s += ['type: array']
 
-            s += ['has index: %s' % self.has_index]
+            s += ['index: %s' % self.has_index]
+
+            if 'compression' in self.meta and self.meta['compression']:
+                c = self.meta['compression']
+                s += ['compression:']
+                s += ['    cname: %s' % c['cname']]
+                s += ['    clevel: %s' % c['clevel']]
+                s += ['    shuffle: %s' % c['shuffle']]
+                s += ['chunksize: %s' % self._col.chunksize]
 
             c_dtype = self.dtype.descr[0][1]
             s += ['dtype: %s' % c_dtype]

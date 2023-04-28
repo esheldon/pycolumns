@@ -672,9 +672,9 @@ class Columns(dict):
         subcols = []
         if len(self) > 0:
             s += ['Table Columns:']
-            cnames = 'name', 'dtype', 'index'
-            s += ['  %-15s %6s %-6s' % cnames]
-            s += ['  '+'-'*(28)]
+            cnames = 'name', 'dtype', 'comp', 'index'
+            s += ['  %-15s %6s %7s %-6s' % cnames]
+            s += ['  '+'-'*(35)]
 
             dicts += ['Dictionaries:']
             dicts += ['  %-15s' % ('name',)]
@@ -700,11 +700,17 @@ class Columns(dict):
                         name_entry = ['  %-15s' % c.name]
 
                     if c.type == 'col':
+
+                        if 'compression' in c.meta:
+                            comp = c.meta['compression']['cname']
+                        else:
+                            comp = 'None'
+
                         s += name_entry
                         c_dtype = c.dtype.descr[0][1]
                         s[-1] += ' %6s' % c_dtype
+                        s[-1] += ' %7s' % comp
                         s[-1] += ' %-6s' % self[name].has_index
-                        # s[-1] += ' %s' % self[name].nrows
                     elif c.type == 'dict':
                         dicts += name_entry
                     else:
