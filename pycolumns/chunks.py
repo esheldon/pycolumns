@@ -668,7 +668,7 @@ class Chunks(object):
     def __exit__(self, exception_type, exception_value, traceback):
         self.close()
 
-    def _get_repr_list(self, full=False):
+    def __repr__(self):
         indent = '    '
 
         rep = [f'filename: {self.filename}']
@@ -681,11 +681,7 @@ class Chunks(object):
         rep = [indent + r for r in rep]
 
         rep = ['Chunks:'] + rep
-        return rep
-
-    def __repr__(self):
-        replist = self._get_repr_list(full=True)
-        return '\n'.join(replist)
+        return '\n'.join(rep)
 
 
 def test():

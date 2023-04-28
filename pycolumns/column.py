@@ -774,61 +774,33 @@ class Column(object):
 
         return Indices(indices)
 
-    def _get_repr_list(self, full=False):
-        """
-
-        Get a list of metadat for this column.
-
-        """
+    def __repr__(self):
         indent = '  '
 
-        if not full:
-            s = ''
-            if self.name is not None:
-                s += 'Column: %-15s' % self.name
+        s = []
+        if self.name is not None:
+            s += ['name: %s' % self.name]
 
-            s += ' type: %10s' % self.type
+        s += ['filename: %s' % self.array_filename]
+        s += ['type: array']
+        s += ['index: %s' % self.has_index]
 
-            s += ' nrows: %12s' % self.nrows
+        if 'compression' in self.meta and self.meta['compression']:
+            c = self.meta['compression']
+            s += ['compression:']
+            s += ['    cname: %s' % c['cname']]
+            s += ['    clevel: %s' % c['clevel']]
+            s += ['    shuffle: %s' % c['shuffle']]
+            s += ['chunksize: %s' % self._col.chunksize]
 
-            if self.name is not None:
-                s += ' has index: %s' % self.has_index
+        c_dtype = self.dtype.descr[0][1]
+        s += ['dtype: %s' % c_dtype]
 
-            s = [s]
-        else:
-            s = []
-            if self.name is not None:
-                s += ['name: %s' % self.name]
+        s += ['nrows: %s' % self.nrows]
 
-            s += ['filename: %s' % self.array_filename]
+        s = [indent + tmp for tmp in s]
+        s = ['Column: '] + s
 
-            s += ['type: array']
-
-            s += ['index: %s' % self.has_index]
-
-            if 'compression' in self.meta and self.meta['compression']:
-                c = self.meta['compression']
-                s += ['compression:']
-                s += ['    cname: %s' % c['cname']]
-                s += ['    clevel: %s' % c['clevel']]
-                s += ['    shuffle: %s' % c['shuffle']]
-                s += ['chunksize: %s' % self._col.chunksize]
-
-            c_dtype = self.dtype.descr[0][1]
-            s += ['dtype: %s' % c_dtype]
-
-            s += ['nrows: %s' % self.nrows]
-
-            s = [indent + tmp for tmp in s]
-            s = ['Column: '] + s
-
-        return s
-
-    def __repr__(self):
-        """
-        Print out some info about this column
-        """
-        s = self._get_repr_list(full=True)
         s = "\n".join(s)
         return s
 

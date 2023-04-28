@@ -294,7 +294,7 @@ class Column(_column_pywrap.Column):
     def __exit__(self, exception_type, exception_value, traceback):
         self.close()
 
-    def _get_repr_list(self, full=False):
+    def __repr__(self):
         indent = '    '
 
         rep = [f'filename: {self.filename}']
@@ -305,11 +305,7 @@ class Column(_column_pywrap.Column):
         rep = [indent + r for r in rep]
 
         rep = ['Column:'] + rep
-        return rep
-
-    def __repr__(self):
-        replist = self._get_repr_list(full=True)
-        return '\n'.join(replist)
+        return '\n'.join(rep)
 
 
 def read(fname, dtype, rows=None, verbose=False):
