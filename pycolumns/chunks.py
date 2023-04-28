@@ -33,8 +33,7 @@ class Chunks(object):
         self._set_nrows()
         self._set_row_chunksize(chunksize)
 
-        self._cached_chunk_index = -1
-        self._cached_chunk = None
+        self._clear_chunk_cache()
 
     @property
     def filename(self):
@@ -170,9 +169,12 @@ class Chunks(object):
         else:
             adata = data
 
+        self._append_in_chunks(adata)
+
+    def _append_in_chunks(self, data):
         # Write data in chunks, the last one may be unfilled.
-        nwrites = adata.size // self.row_chunksize
-        if adata.size % self.row_chunksize != 0:
+        nwrites = data.size // self.row_chunksize
+        if data.size % self.row_chunksize != 0:
             nwrites += 1
 
         for i in range(nwrites):
@@ -213,6 +215,8 @@ class Chunks(object):
         self._set_nrows()
 
         assert self.nrows == old_nrows + data.size
+
+        self._clear_chunk_cache()
 
     def _write(self, data, offset=None):
         """
@@ -283,8 +287,9 @@ class Chunks(object):
             self._chunk_data = np.hstack([self._chunk_data, chunk])
 
             assert (
-                self._fobj.tell() ==
-                self._chunk_data['offset'][-1] + self._chunk_data['nbytes'][-1]
+                self._fobj.tell()
+                == self._chunk_data['offset'][-1]
+                + self._chunk_data['nbytes'][-1]
             )
 
         self._chunks_fobj.append(chunk)
@@ -338,6 +343,10 @@ class Chunks(object):
 
         self._cached_chunk_index = chunk_index
         self._cached_chunk = chunk
+
+    def _clear_chunk_cache(self):
+        self._cached_chunk_index = -1
+        self._cached_chunk = None
 
     def _read_uncompressed_chunk(self, chunk_index):
         offset = self._chunk_data['offset'][chunk_index]
