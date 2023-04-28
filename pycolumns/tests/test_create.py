@@ -12,7 +12,7 @@ def test_create(cache_mem, compression, verbose):
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..util import array_to_schema
+    from ..schema import TableSchema
 
     seed = 333
     num = 20
@@ -30,13 +30,15 @@ def test_create(cache_mem, compression, verbose):
     else:
         ccols = None
 
-    schema = array_to_schema(data, compression=ccols)
+    schema = TableSchema.from_array(data, compression=ccols)
     print(schema)
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, schema, cache_mem=cache_mem, verbose=verbose)
+        cols = Columns.create(
+            cdir, schema, cache_mem=cache_mem, verbose=verbose,
+        )
 
         assert cols.dir == cdir
         assert cols.verbose == verbose

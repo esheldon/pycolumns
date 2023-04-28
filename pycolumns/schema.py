@@ -11,6 +11,55 @@ class TableSchema(dict):
     schemas: [ColumnSchema], optional
         A list of ColumnSchema to be added to the table schema.
         You can add more using schema.add_column(schema)
+
+    Examples
+    --------
+
+    # Construct from ColumnSchema objects
+    cslist = [
+        ColumnSchema(name='id', dtype='i8', compression=True),
+        ColumnSchema(name='ra', dtype='f8'),
+        ColumnSchema(name='name', dtype='U5',
+                     compression={'shuffle': 'shuffle'},
+                     chunksize='0.5m'),
+    ]
+    schema = TableSchema(cslist)
+
+    # Or you can add one by one
+    schema = TableSchema(cslist)
+    for cs in cslist:
+        schema.add(cs)
+
+    # One can also construct TableSchema from dicts, other TableSchema and
+    # arrays (with fields) using class methods
+
+    schema = TableSchema.from_array(array, compression=c, chunksize=ch)
+    schema = TableSchema.from_schema(some_dict)
+    schema = TableSchema.from_columns(cslist)  # same as using constructor
+
+    Layout
+    --------
+    # A TableSchema inherits from a dict. It may look something like this
+    {
+        'id': {'dtype': '<i8'}
+        'ra': {'dtype': '<f8'}
+        'dec': {'dtype': '<f8'}
+        'name': {'dtype': '<U5'}
+    }
+
+    # Compression and chunksize for compressed files can be set
+    {
+        'id': {
+            'dtype': '<i8',
+            'compression': {
+                'cname': 'zlib',
+                'clevel': 5,
+                'shuffle': 'bitshuffle',
+            }
+            'chunksize': '1m',
+        },
+        'ra': {'dtype': '<f8'}
+    }
     """
     def __init__(self, schemas=None):
         if schemas is None:
@@ -32,22 +81,20 @@ class TableSchema(dict):
 
         Parameters
         ----------
-        compression: dict, bool, or None, optional
-            If None (the default) or False, no compression is used for any
-            column.
-
-            If True, the default compression settings are used for all columns.
-
-            Otherwise a dict keyed by name describing the compression for
-            each column to be compressed.  See ColumnSchema for the the options
-
+        compression: dict, list, bool, or None, optional
+            - If None or False, do not set compression
+            - If True, use default compression
+            - If a list, return use default compression if the name is in the
+              list
+            - If a dict, and name is an entry
+                 - if value is True, use default compression
+                 - if value is a dict, return the dict with defaults set for non
+                   specified parameters
         chunksize: dict, str or number
-            A dit or str or number
+            A dict or str or number
 
-            if str or number, it is applied to all compressed columns.
-
-            Otherwise a dict keyed by name giving chunksize for each column.
-            See ColumnSchema for the the options
+            - if str or number, it is applied to all compressed columns.
+            - a dict,  keyed by name, it gives chunksize for certain columns.
 
         Returns
         -------
@@ -56,26 +103,15 @@ class TableSchema(dict):
         if array.dtype.names is None:
             raise ValueError('array must have fields')
 
-        if compression is True:
-            is_dict = False
-        else:
-            is_dict = True
-
         table_schema = TableSchema()
         for name in array.dtype.names:
-
             keys = {}
-            if compression and is_dict:
-                if is_dict and name in compression:
-                    keys['compression'] = compression[name]
-            elif compression and not is_dict:
-                keys['compression'] = compression
-
-            if 'compression' in keys:
-                if name in chunksize:
-                    keys['chunksize'] = chunksize[name]
-                else:
-                    keys['chunksize'] = chunksize
+            comp = _get_column_compression(compression, name)
+            if comp:
+                # Note, if comp is a dict, it gets defaults set for
+                # non specified compression entries in ColumnSchema
+                keys['compression'] = comp
+                keys['chunksize'] = _get_column_chunksize(chunksize, name)
 
             schema = ColumnSchema(
                 name=name,
@@ -87,14 +123,14 @@ class TableSchema(dict):
         return table_schema
 
     @classmethod
-    def from_dict(cls, sdict):
+    def from_schema(cls, sdict):
         """
-        Convert a dict to a TableSchema
+        Convert a TableSchema or dict to a TableSchema
 
         Parameters
         ----------
-        sdict: dict
-            A dict representing a table schema, e.g.
+        sdict: dict or TableSchema
+            e.g.
             {
               'id': {
                 'dtype': 'f8',
@@ -111,13 +147,23 @@ class TableSchema(dict):
         table_schema = TableSchema()
         for name, dschema in sdict.items():
 
-            schema = ColumnSchema(
-                name=name,
-                **dschema
-            )
+            schema = ColumnSchema(name=name, **dschema)
             table_schema.add_column(schema)
 
         return table_schema
+
+    @classmethod
+    def from_columns(cls, schemas):
+        """
+        Construct a new table Schema from a list of ColumnSchema objects
+
+        Parameters
+        ----------
+        schemas: [ColumnSchema], optional
+            A list of ColumnSchema to be added to the table schema.
+            You can add more using schema.add_column(schema)
+        """
+        return TableSchema(schemas)
 
 
 class ColumnSchema(dict):
@@ -190,3 +236,77 @@ def _make_array_schema_dict(
             schema['compression'].update(compression)
 
     return schema
+
+
+def _get_column_compression(compression, name):
+    """
+    extract compression info for a specified column
+
+    Parameters
+    ----------
+    compression: bool, dict or list
+        If a bool, return None for False or defaults for True
+        If a list, return defaults if the name is in the list
+        If a dict, return the entry or None
+    name: str
+        Column name
+
+    Returns
+    -------
+    None or a dict
+    """
+    if hasattr(compression, 'keys'):
+        tcomp = compression.get(name)
+        if tcomp:
+            comp = tcomp
+        else:
+            comp = None
+    elif _has_len(compression):
+        if name in compression:
+            comp = True
+        else:
+            comp = None
+    else:
+        if not compression:
+            comp = None
+        else:
+            comp = True
+
+    return comp
+
+
+def _get_column_chunksize(chunksize, name):
+    """
+    extract chunksize for a specified column
+
+    Parameters
+    ----------
+    chunksize: dict or str or number
+        If an str or number, just return
+        If a dict, return the entry if found or None
+    name: str
+        Column name
+
+    Returns
+    -------
+    str or number
+    """
+    if hasattr(chunksize, 'keys'):
+        return chunksize.get(name, DEFAULT_CHUNKSIZE)
+    else:
+        # catch a bug
+        if hasattr(chunksize, 'append') or hasattr(chunksize, 'discard'):
+            raise ValueError(
+                'expected dict, str, or number, got {type(chunksize)}'
+            )
+        return chunksize
+
+
+def _has_len(x):
+    try:
+        len(x)
+        ret = True
+    except TypeError:
+        ret = False
+
+    return ret

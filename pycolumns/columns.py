@@ -17,7 +17,8 @@ import numpy as np
 from .column import Column
 from .dictfile import Dict
 from . import util
-from .defaults import DEFAULT_CACHE_MEM
+from .schema import TableSchema
+from .defaults import DEFAULT_CACHE_MEM, DEFAULT_CHUNKSIZE
 
 
 class Columns(dict):
@@ -87,37 +88,15 @@ class Columns(dict):
 
         Examples
         --------
-            dir = 'test.cols'
-            schema = {
-                'id': {
-                    'dtype': 'i8',
-                    'compression': {
-                        'cname': 'zstd',
-                        'clevel': 5,
-                        'shuffle': 'bitshuffle',
-                    }
-                },
-                'ra': {
-                    'dtype': 'f8',
-                },
-                'name': {
-                    'dtype': 'U5',
-                    'compression': {
-                        'cname': 'zstd',
-                    }
-                },
-            }
-            pyc.create_columns(dir, schema)
+        import pycolumns as pyc
 
-            # set default compression on some columns
-            schema = {
-                'id': {'dtype': 'i8'},
-                'ra': {'dtype': 'f8'},
-                'name': {'dtype': 'U5'},
-            }
+        # create from column schema
+        idcol = pyc.ColumnSchema(dtype='i8', compress=True)
+        racol = pyc.ColumnSchema(dtype='f8')
+        schema = pyc.TableSchema([idcol, racol])
+        cols = pyc.Columns.create(dir, schema=schema)
 
-            schema = pyc.util.add_schema_compression(schema, ['id', 'name'])
-            pyc.create_columns(dir, schema)
+        # see the TableSchema and ColumnSchema classes for more options
         """
         import shutil
 
@@ -142,6 +121,70 @@ class Columns(dict):
 
         cols = Columns(dir, cache_mem=cache_mem, verbose=verbose)
         cols.add_columns(schema)
+        return cols
+
+    @classmethod
+    def from_array(
+        cls, dir, array,
+        compression=None,
+        chunksize=DEFAULT_CHUNKSIZE,
+        append=True,
+        cache_mem=DEFAULT_CACHE_MEM,
+        verbose=False,
+        overwrite=False,
+    ):
+        """
+        Initialize a new columns database, creating the schema from the input
+        array with fields.  The data from array are also written unless
+        append=False.
+
+        The new Columns object is returned.
+
+        Parameters
+        ----------
+        dir: str
+            Path to columns directory
+        array: numpy array with fields
+            An array with fields defined
+        compression: dict, list, bool, or None, optional
+            See TableSchema.from_array for a full explanation
+        chunksize: dict, str or number
+            See TableSchema.from_array for a full explanation
+        append: bool, optional
+            If set to True, the data are also written to the new
+            Default True
+        cache_mem: str or number
+            Cache memory for index creation, default '1g' or one gigabyte.
+            Can be a number in gigabytes or a string
+            Strings should be like '{amount}{unit}'
+                '1g' = 1 gigabytes
+                '100m' = 100 metabytes
+                '1000k' = 1000 kilobytes
+        Units can be g, m or k, case insenitive
+
+        verbose: bool, optional
+            If set to True, display information
+        overwrite: bool, optional
+            If the directory exists, remove existing data
+
+        Examples
+        --------
+        array = np.zeros(num, dtype=[('id', 'i8'), ('x', 'f4')])
+        cols = Columns.from_array(dir, array)
+        """
+        schema = TableSchema.from_array(
+            array, compression=compression, chunksize=chunksize,
+        )
+        cols = Columns.create(
+            dir,
+            schema=schema,
+            cache_mem=cache_mem,
+            verbose=verbose,
+            overwrite=overwrite,
+        )
+        if append:
+            cols.append(array)
+
         return cols
 
     @property
@@ -380,36 +423,13 @@ class Columns(dict):
 
         Parameters
         ----------
-        schema: dict, optional
-            Dictionary holding information for each column.
-
-        Examples
-        --------
-            dir = 'test.cols'
-            cols = pyc.Columns(dir)
-            schema = {
-                'id': {
-                    'dtype': 'i8',
-                    'compression': {
-                        'cname': 'zstd',
-                        'shuffle': 'bitshuffle',
-                        'clevel': 5,
-                    }
-                },
-                'ra': {
-                    'dtype': 'f8',
-                },
-                'name': {
-                    'dtype': 'U5',
-                    'compression': True,  # gets converted to defaults
-                },
-            }
-            cols.add_columns(schema)
+        schema: TableSchema or dict
+            Schema holding information for each column.
         """
 
-        # clears out compression None/False from schema, fills
-        # in defaults if needed
-        schema = util.get_schema(schema)
+        # Try to convert to schema
+        if not isinstance(schema, TableSchema):
+            schema = TableSchema.from_schema(schema)
 
         for name, this in schema.items():
             if self.verbose:
@@ -473,11 +493,11 @@ class Columns(dict):
 
     def from_fits(
         self, filename, ext=1, native=False, little=True, lower=False,
-        create=False, compression=None,
+        create=False, compression=None, chunksize=DEFAULT_CHUNKSIZE
     ):
         """
         Write columns to the database, reading from the input fits file.
-        Uses chunks of 100MB
+        Uses chunks of size cache_mem
 
         parameters
         ----------
@@ -503,8 +523,11 @@ class Columns(dict):
                    see defaults.DEFAULT_COMPRESSION
                 2. A dict with keys set to columns names, possibly with
                    detailed compression settings.
+        chunksize: dict, str or number
+            The chunksize info compressed columns.
         """
         import fitsio
+        raise NotImplementedError('add chunksize for compression')
 
         if (native and np.little_endian) or little:
             byteswap = True
@@ -522,7 +545,9 @@ class Columns(dict):
             one = hdu[0:0+1]
 
             if create:
-                schema = util.array_to_schema(one, compression=compression)
+                schema = TableSchema.create(
+                    one, compression=compression, chunksize=chunksize,
+                )
                 self.add_columns(schema)
 
             nrows = hdu.get_nrows()

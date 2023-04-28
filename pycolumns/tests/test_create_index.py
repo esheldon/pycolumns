@@ -13,7 +13,6 @@ def test_create_index(cache_mem, compression):
     import numpy as np
     from .. import _column
     from ..columns import Columns
-    from ..util import array_to_schema
 
     seed = 333
     num = 1_000_000
@@ -26,17 +25,13 @@ def test_create_index(cache_mem, compression):
     else:
         ccols = None
 
-    schema = array_to_schema(data, compression=ccols)
-    print(schema)
-
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(
-            cdir, schema=schema, cache_mem=cache_mem, verbose=True,
+        cols = Columns.from_array(
+            cdir, data, cache_mem=cache_mem, compression=ccols, verbose=True,
         )
 
-        cols.append(data)
         cols['rand'].create_index()
         assert cols['rand'].has_index
 
@@ -60,7 +55,6 @@ def test_create_index_str(compression):
     import numpy as np
     from .. import _column
     from ..columns import Columns
-    from ..util import array_to_schema
 
     seed = 55
     num = 20
@@ -76,18 +70,12 @@ def test_create_index_str(compression):
     else:
         ccols = None
 
-    schema = array_to_schema(data, compression=ccols)
-    print(schema)
-
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(
-            cdir, schema=schema, overwrite=True, verbose=True,
+        cols = Columns.from_array(
+            cdir, array=data, compression=ccols, overwrite=True, verbose=True,
         )
-
-        cols.append(data)
-        print(cols)
 
         cols['scol'].create_index()
         assert cols['scol'].has_index

@@ -9,7 +9,6 @@ def test_query():
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..util import array_to_schema
 
     seed = 333
     num = 20
@@ -20,14 +19,10 @@ def test_query():
     data['id'] = np.arange(num)
     data['rand'] = rng.uniform(size=num, high=num)
 
-    schema = array_to_schema(data)
-
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, schema=schema, verbose=True)
-
-        cols.append(data)
+        cols = Columns.from_array(cdir, data, verbose=True)
 
         for name in data.dtype.names:
             assert not cols[name].has_index

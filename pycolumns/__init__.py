@@ -17,7 +17,6 @@ from . import chunks
 from .schema import ColumnSchema, TableSchema
 
 from . import util
-from .util import array_to_schema
 
 from . import column
 from .column import Column
