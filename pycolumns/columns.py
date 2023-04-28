@@ -55,6 +55,7 @@ class Columns(dict):
         self._verbose = verbose
         self._cache_mem = cache_mem
         self._cache_mem_bytes = util.convert_to_bytes(cache_mem)
+        self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
         self._load()
 
     @classmethod
@@ -244,6 +245,10 @@ class Columns(dict):
     @property
     def cache_mem_bytes(self):
         return self._cache_mem_bytes
+
+    @property
+    def cache_mem_gb(self):
+        return self._cache_mem_gb
 
     def delete(self, yes=False):
         """
@@ -496,103 +501,6 @@ class Columns(dict):
             raise RuntimeError(f'column {name} does not exist')
 
         self[name]._append(data)
-
-    def from_fits(
-        self, filename, ext=1, native=False, little=True, lower=False,
-        create=False, compression=None, chunksize=DEFAULT_CHUNKSIZE
-    ):
-        """
-        Write columns to the database, reading from the input fits file.
-        Uses chunks of size cache_mem
-
-        parameters
-        ----------
-        filename: string
-            Name of the file to read
-        ext: extension, optional
-            The FITS extension to read, numerical or string. default 1
-        native: bool, optional
-            FITS files are in big endian byte order.
-            If native is True, ensure the outpt is in native byte order.
-            Default False.
-        little: bool, optional
-            FITS files are in big endian byte order.
-            If little is True, convert to little endian byte order. Default
-            True.
-        lower: bool, optional
-            if set to True, lower-case all names.  Default False.
-        create: bool, optional
-            If set to True, create the columns
-        compression: list or dict, optional
-            Either
-                1. A list of names that get default compression
-                   see defaults.DEFAULT_COMPRESSION
-                2. A dict with keys set to columns names, possibly with
-                   detailed compression settings.
-        chunksize: dict, str or number
-            The chunksize info compressed columns.
-        """
-        import fitsio
-        raise NotImplementedError('add chunksize for compression')
-
-        if (native and np.little_endian) or little:
-            byteswap = True
-            if self.verbose:
-                print('byteswapping')
-        else:
-            byteswap = False
-
-        # step size in bytes
-        step_bytes = int(self.cache_mem_gb * 1024**3)
-
-        with fitsio.FITS(filename, lower=lower) as fits:
-            hdu = fits[ext]
-
-            one = hdu[0:0+1]
-
-            if create:
-                schema = TableSchema.create(
-                    one, compression=compression, chunksize=chunksize,
-                )
-                self.add_columns(schema)
-
-            nrows = hdu.get_nrows()
-            rowsize = one.itemsize
-
-            # step size in rows
-            step = step_bytes // rowsize
-
-            nstep = nrows // step
-            nleft = nrows % step
-
-            if nleft > 0:
-                nstep += 1
-
-            if self.verbose:
-                print('Loading %s rows from file: %s' % (nrows, filename))
-
-            for i in range(nstep):
-
-                start = i * step
-                stop = (i + 1) * step
-
-                if stop > nrows:
-                    # not needed, but use for printouts
-                    stop = nrows
-
-                if self.verbose:
-                    print(f'    {start}:{stop} of {nrows}')
-
-                data = hdu[start:stop]
-
-                if byteswap:
-                    data.byteswap(inplace=True)
-                    data.dtype = data.dtype.newbyteorder()
-
-                self.append(data, verify=False)
-                del data
-
-        self.verify()
 
     def delete_entry(self, name, yes=False):
         """

@@ -31,3 +31,5 @@ from . import mergesort
 
 from . import _column_pywrap
 from . import _column
+
+from . import convenience
