@@ -1,6 +1,7 @@
 import numpy as np
 from ._column import Column as CColumn
 from . import util
+from .defaults import CHUNKS_DTYPE
 
 
 class Chunks(object):
@@ -23,10 +24,7 @@ class Chunks(object):
         self._chunks_filename = chunks_filename
 
         self._dtype = np.dtype(dtype)
-        self._chunks_dtype = np.dtype(
-            [('offset', 'i8'), ('nbytes', 'i8'),
-             ('rowstart', 'i8'), ('nrows', 'i8')]
-        )
+        self._chunks_dtype = np.dtype(CHUNKS_DTYPE)
 
         self._set_compression(compression)
         self._mode = mode
@@ -205,10 +203,14 @@ class Chunks(object):
         cd['nbytes'][-1] = nbytes
         cd['nrows'][-1] = new_chunk_data.size
 
-        cd_to_write = cd[-1:]
         # update the last entry in the chunks file
+        cd_to_write = cd[-1:]
         self._chunks_fobj.update_row(cd.size-1, cd_to_write)
+
+        old_nrows = self.nrows
         self._set_nrows()
+
+        assert self.nrows == old_nrows + data.size
 
     def _write(self, data, offset=None):
         """
@@ -276,7 +278,10 @@ class Chunks(object):
 
         self._chunks_fobj.append(chunk)
 
+        old_nrows = self.nrows
         self._set_nrows()
+
+        assert self.nrows == old_nrows + nrows
 
     def read_chunk(self, chunk_index):
         """
@@ -310,7 +315,6 @@ class Chunks(object):
         self._check_chunk(chunk_index)
 
         if chunk_index == self._cached_chunk_index:
-            print('re using chunk')
             return
 
         if self.compression:

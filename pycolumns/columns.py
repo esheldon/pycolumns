@@ -319,6 +319,7 @@ class Columns(dict):
             col = self[c]
             if col.type == 'col':
                 this_nrows = col.nrows
+                print(col)
                 if first:
                     self._nrows = this_nrows
                     first = False
