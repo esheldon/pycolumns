@@ -1,4 +1,5 @@
 import numpy as np
+from . import util
 from .defaults import DEFAULT_COMPRESSION, DEFAULT_CHUNKSIZE
 
 
@@ -90,8 +91,8 @@ class TableSchema(dict):
               list
             - If a dict, and name is an entry
                  - if value is True, use default compression
-                 - if value is a dict, return the dict with defaults set for non
-                   specified parameters
+                 - if value is a dict, return the dict with defaults set for
+                   non specified parameters
         chunksize: dict, str or number
             A dict or str or number
 
@@ -102,12 +103,7 @@ class TableSchema(dict):
         -------
         TableSchema
         """
-        if isinstance(array, dict):
-            names = list(array.keys())
-        else:
-            names = array.dtype.names
-            if names is None:
-                raise ValueError('array must have fields')
+        names = util.get_data_names(array)
 
         table_schema = TableSchema()
         for name in names:
