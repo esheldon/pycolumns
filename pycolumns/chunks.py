@@ -192,6 +192,7 @@ class Chunks(object):
 
         last_chunk_data = self.read_chunk(self.nchunks - 1)
         new_chunk_data = np.hstack([last_chunk_data, data])
+
         if new_chunk_data.size > self.row_chunksize:
             raise ValueError(
                 f'appending last chunk got size {new_chunk_data.size} '
@@ -202,7 +203,9 @@ class Chunks(object):
         offset = self._chunk_data['offset'][-1]
         nbytes = self._write(new_chunk_data, offset=offset)
 
-        assert self._fobj.tell() == offset + nbytes
+        assert self._fobj.tell() == offset + nbytes, (
+            'file tell == offset + nbytes'
+        )
 
         self._chunk_data['nbytes'][-1] = nbytes
         self._chunk_data['nrows'][-1] = new_chunk_data.size
@@ -214,8 +217,11 @@ class Chunks(object):
         old_nrows = self.nrows
         self._set_nrows()
 
-        assert self.nrows == old_nrows + data.size
+        assert self.nrows == old_nrows + data.size, (
+            'nrows == old_nrows + data.size'
+        )
 
+        # the cache will be out of date
         self._clear_chunk_cache()
 
     def _write(self, data, offset=None):
@@ -271,13 +277,9 @@ class Chunks(object):
         if self._chunk_data is None:
             self._chunk_data = chunk
         else:
-            # note we probably don't want the chunks to be defined by what
-            # gets appended, but rather keep the chunksize fixed
-            # for compressed this would mean reading in the chunk that will
-            # get appended, appending it, writing it back out with new
-            # nbytes, nrows
             chunk['offset'][0] = (
-                self._chunk_data['offset'][-1] + self._chunk_data['nbytes'][-1]
+                self._chunk_data['offset'][-1]
+                + self._chunk_data['nbytes'][-1]
             )
             chunk['rowstart'][0] = (
                 self._chunk_data['rowstart'][-1]
@@ -286,11 +288,7 @@ class Chunks(object):
 
             self._chunk_data = np.hstack([self._chunk_data, chunk])
 
-            assert (
-                self._fobj.tell()
-                == self._chunk_data['offset'][-1]
-                + self._chunk_data['nbytes'][-1]
-            )
+        self._check_file_position_after_append()
 
         self._chunks_fobj.append(chunk)
         # import esutil as eu
@@ -300,7 +298,21 @@ class Chunks(object):
         old_nrows = self.nrows
         self._set_nrows()
 
-        assert self.nrows == old_nrows + nrows
+        assert self.nrows == old_nrows + nrows, 'nrows == old_nrows + nrows'
+
+    def _check_file_position_after_append(self):
+        ftell = self._fobj.tell()
+        predicted = (
+            self._chunk_data['offset'][-1]
+            + self._chunk_data['nbytes'][-1]
+        )
+        if ftell != predicted:
+            s = repr(self)
+            raise RuntimeError(
+                f'predicted file position {predicted} but got {ftell} '
+                f'in column '
+                f'\n{s}'
+            )
 
     def read_chunk(self, chunk_index):
         """
@@ -368,7 +380,10 @@ class Chunks(object):
 
         output = np.empty(chunk['nrows'], dtype=self.dtype)
 
-        self._fobj.readinto(buff)
+        nread = self._fobj.readinto(buff)
+        if nread != len(buff):
+            raise RuntimeError('Expected to read {len(buff)} but read {nread}')
+
         blosc.decompress_ptr(buff, output.__array_interface__['data'][0])
 
         return output
