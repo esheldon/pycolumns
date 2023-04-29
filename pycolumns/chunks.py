@@ -414,16 +414,16 @@ class Chunks(object):
             )
 
     def _open_files(self):
-        if self.verbose:
-            print(
-                f'opening chunks file {self.chunks_filename} '
-                f'with mode: {self.mode}'
-            )
+        # if self.verbose:
+        #     print(
+        #         f'opening chunks file {self.chunks_filename} '
+        #         f'with mode: {self.mode}'
+        #     )
         self._chunks_fobj = CColumn(
             self.chunks_filename,
             dtype=self.chunks_dtype,
             mode=self.mode,
-            verbose=self.verbose,
+            # verbose=self.verbose,
         )
         if self._chunks_fobj.nrows > 0:
             self._chunk_data = self._chunks_fobj[:]

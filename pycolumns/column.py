@@ -251,7 +251,7 @@ class Column(object):
                 self.array_filename,
                 dtype=self._meta['dtype'],
                 mode='r+',
-                verbose=self.verbose,
+                # verbose=self.verbose,
             )
 
     def _append(self, data):

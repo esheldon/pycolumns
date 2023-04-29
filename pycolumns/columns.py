@@ -291,6 +291,8 @@ class Columns(dict):
         pattern = os.path.join(self.dir, '*')
         fnames = glob(pattern)
         for fname in fnames:
+            if self.verbose:
+                print('    loading:', fname)
             name = util.extract_colname(fname)
             type = util.extract_coltype(fname)
 
