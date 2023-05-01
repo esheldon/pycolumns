@@ -151,7 +151,7 @@ class Chunks(object):
             # we need to append some to this chunk
             num_to_append = self.row_chunksize - self._chunk_data['nrows'][-1]
 
-            self._append_last_chunk(data[:num_to_append])
+            self._append_within_last_chunk(data[:num_to_append])
 
             if num_to_append == data.size:
                 # we already appended all the data
@@ -169,17 +169,25 @@ class Chunks(object):
         if data.size % self.row_chunksize != 0:
             nwrites += 1
 
+        nrows_start = self.nrows
+        nrows_written = 0
         for i in range(nwrites):
             start = i * self.row_chunksize
             end = (i + 1) * self.row_chunksize
             data_to_write = data[start:end]
-            nbytes = self._write(data_to_write)
-            self._update_chunks_after_write(data_to_write.size, nbytes)
+            self._append(data_to_write)
+            nrows_written += data_to_write.size
 
-    def _append_last_chunk(self, data):
+        nrec = self.nrows - nrows_start
+        if nrec != nrows_written:
+            raise RuntimeError(
+                f'wrote {nrows_written} but nrows incremented by {nrec}'
+            )
+
+    def _append_within_last_chunk(self, data):
         """
-        append data within chunk; if the input data overfills
-        the chunk, an exception is raised
+        append data within chunk. The new data must fit within a chunk, if the
+        input data overfills the chunk, an exception is raised
         """
 
         last_chunk_data = self.read_chunk(self.nchunks - 1)
@@ -191,14 +199,11 @@ class Chunks(object):
                 f'> chunksize {self.row_chunksize}'
             )
 
-        # overwrite old chunk data and append new
-        offset = self._chunk_data['offset'][-1]
-        nbytes = self._write(new_chunk_data, offset=offset)
+        # overwrite old chunk data and append ne
+        nbytes = self._append(new_chunk_data, overwrite_last=True)
 
-        assert self._fobj.tell() == offset + nbytes, (
-            'file tell == offset + nbytes'
-        )
-        # this can happen it seems
+        # this can happen when compressed size actually decreases after new
+        # data added to compressed chunk
         # oldnbytes = self._chunk_data['nbytes'][-1]
         # if nbytes < oldnbytes:
         #     raise ValueError(
@@ -222,31 +227,50 @@ class Chunks(object):
         # the cache will be out of date
         self._clear_chunk_cache()
 
-    def _write(self, data, offset=None):
+        if False:
+            import esutil as eu
+            tmp = self.read_chunk(self.nchunks - 1)
+            assert eu.numpy_util.compare_arrays(tmp, new_chunk_data)
+
+    def _append(self, data, overwrite_last=False):
         """
-        write data, possibly at the specified offset, otherwise at the end
+        Append data, either appending an entirely new chunk or overwriting the
+        last chunk when filling an incomplete one
+
+        Parameters
+        ----------
+        data: array
+            Data to be appended
+        overwrite_last: bool, optional
+            If set to True, start writing at the offset of the last chunk, to
+            overwrite existing data.  This is needed when updating a compressed
+            chunk.
         """
-        if offset is not None:
-            self._fobj.seek(offset)
+        if self.nrows == 0:
+            offset = 0
         else:
-            # Note the next write offset may not be the end of the file if
-            # compression size changes in filling a chunk
-            # self._fobj.seek(0, 2)
-            if self.nrows > 0:
-                pos = (
+            if overwrite_last:
+                # filling in an existing chunk
+                offset = self._chunk_data['offset'][-1]
+            else:
+                # appending an entirely new chunk
+                offset = (
                     self._chunk_data['offset'][-1]
                     + self._chunk_data['nbytes'][-1]
                 )
-            else:
-                pos = 0
-            self._fobj.seek(pos)
+
+        self._fobj.seek(offset)
 
         if self.compression:
             nbytes = self._write_compressed_data(data)
         else:
             nbytes = self._write_uncompressed_data(data)
 
-        return nbytes
+        assert self._fobj.tell() == offset + nbytes, (
+            'file tell == offset + nbytes'
+        )
+
+        self._update_chunks_after_write(data.size, nbytes)
 
     def _write_uncompressed_data(self, data):
         data.tofile(self._fobj)
@@ -277,6 +301,9 @@ class Chunks(object):
         return nbytes
 
     def _update_chunks_after_write(self, nrows, nbytes):
+        """
+        only used after appending new chunk
+        """
         chunk = np.zeros(1, dtype=self.chunks_dtype)
         chunk['nbytes'] = nbytes
         chunk['nrows'] = nrows
@@ -298,9 +325,10 @@ class Chunks(object):
         self._check_file_position_after_append()
 
         self._chunks_fobj.append(chunk)
-        # import esutil as eu
-        # tmp = self._chunks_fobj[:]
-        # assert eu.numpy_util.compare_arrays(tmp, self._chunk_data)
+        if False:
+            import esutil as eu
+            tmp = self._chunks_fobj[:]
+            assert eu.numpy_util.compare_arrays(tmp, self._chunk_data)
 
         old_nrows = self.nrows
         self._set_nrows()
@@ -688,6 +716,9 @@ class Chunks(object):
             self._nrows = (
                 self._chunk_data['rowstart'][-1]
                 + self._chunk_data['nrows'][-1]
+            )
+            assert self.nrows == self._chunk_data['nrows'].sum(), (
+                'nrows == sum nrows'
             )
 
     def __enter__(self):

@@ -94,6 +94,7 @@ PyColumn_append(
                      self->fname, self->mode);
         return NULL;
     }
+    fflush(self->fptr);
 
     Py_RETURN_NONE;
 }
@@ -123,6 +124,7 @@ PyColumn_write_at(
                      self->fname, self->mode);
         return NULL;
     }
+    fflush(self->fptr);
 
     Py_RETURN_NONE;
 }

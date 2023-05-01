@@ -73,8 +73,6 @@ class Columns(dict):
             Path to columns directory
         schema: dict, optional
             Dictionary holding information for each column.
-        verbose: bool, optional
-            If set to True, display information
         cache_mem: str or number
             Cache memory for index creation, default '1g' or one gigabyte.
             Can be a number in gigabytes or a string
@@ -82,8 +80,10 @@ class Columns(dict):
                 '1g' = 1 gigabytes
                 '100m' = 100 metabytes
                 '1000k' = 1000 kilobytes
-        Units can be g, m or k, case insenitive
+            Units can be g, m or k, case insenitive
 
+        verbose: bool, optional
+            If set to True, display information
         overwrite: bool, optional
             If the directory exists, remove existing data
 
@@ -349,6 +349,81 @@ class Columns(dict):
         filename = util.get_filename(dir=self.dir, name=name, type='dict')
         self[name] = Dict(filename, verbose=self.verbose)
         self[name].write(data)
+
+    def create_sub(
+        self, name, schema={}, cache_mem=DEFAULT_CACHE_MEM, verbose=False,
+        overwrite=False,
+    ):
+        """
+        Create a new sub-columns directory
+
+        parameters
+        ----------
+        name: str
+            Name for sub-columns
+        schema: dict, optional
+            Dictionary holding information for each column.
+        cache_mem: str or number
+            Cache memory for index creation, default '1g' or one gigabyte.
+            Can be a number in gigabytes or a string
+            Strings should be like '{amount}{unit}'
+                '1g' = 1 gigabytes
+                '100m' = 100 metabytes
+                '1000k' = 1000 kilobytes
+            Units can be g, m or k, case insenitive
+
+        verbose: bool, optional
+            If set to True, display information
+        overwrite: bool, optional
+            If the directory exists, remove existing data
+        """
+
+        if name in self.dict_names:
+            raise ValueError("sub Columns '%s' already exists" % name)
+
+        dirname = util.get_filename(dir=self.dir, name=name, type='cols')
+        self[name] = Columns.create(
+            dirname,
+            schema=schema,
+            cache_mem=cache_mem,
+            verbose=self.verbose,
+            overwrite=overwrite,
+        )
+
+    def create_sub_from_array(
+        self,
+        name,
+        array,
+        compression=None,
+        chunksize=DEFAULT_CHUNKSIZE,
+        append=True,
+        cache_mem=DEFAULT_CACHE_MEM,
+        verbose=False,
+        overwrite=False,
+    ):
+        """
+        Create a new sub-columns directory
+
+        Parameters
+        ----------
+        name: str
+            Name for sub-columns
+        """
+
+        if name in self.dict_names:
+            raise ValueError("sub Columns '%s' already exists" % name)
+
+        dirname = util.get_filename(dir=self.dir, name=name, type='cols')
+        self[name] = Columns.from_array(
+            dirname,
+            array=array,
+            compression=compression,
+            chunksize=chunksize,
+            append=append,
+            cache_mem=cache_mem,
+            verbose=self.verbose,
+            overwrite=overwrite,
+        )
 
     def reload(self, columns=None):
         """
@@ -620,23 +695,23 @@ class Columns(dict):
         Get a list of metadata for this columns directory and it's
         columns
         """
+        ncols = len(self.column_names)
         indent = '  '
         s = []
         if self.dir is not None:
             # dbase = self._dirbase()
             # s += [dbase]
             s += ['dir: '+self.dir]
-            if hasattr(self, '_nrows'):
+            if ncols > 0 and hasattr(self, '_nrows'):
                 s += ['nrows: %s' % self.nrows]
 
-        s += ['']
         dicts = []
         subcols = []
         if len(self) > 0:
-            s += ['Table Columns:']
+            acols = ['Table Columns:']
             cnames = 'name', 'dtype', 'comp', 'index'
-            s += ['  %-15s %6s %7s %-6s' % cnames]
-            s += ['  '+'-'*(35)]
+            acols += ['  %-15s %6s %7s %-6s' % cnames]
+            acols += ['  '+'-'*(35)]
 
             dicts += ['Dictionaries:']
             dicts += ['  %-15s' % ('name',)]
@@ -648,6 +723,7 @@ class Columns(dict):
 
             for name in sorted(self):
                 c = self[name]
+
                 if c.type == 'cols':
                     cdir = os.path.basename(c.dir).replace('.cols', '')
                     subcols += ['  %s' % cdir]
@@ -669,11 +745,11 @@ class Columns(dict):
                         else:
                             comp = 'None'
 
-                        s += name_entry
+                        acols += name_entry
                         c_dtype = c.dtype.descr[0][1]
-                        s[-1] += ' %6s' % c_dtype
-                        s[-1] += ' %7s' % comp
-                        s[-1] += ' %-6s' % self[name].has_index
+                        acols[-1] += ' %6s' % c_dtype
+                        acols[-1] += ' %7s' % comp
+                        acols[-1] += ' %-6s' % self[name].has_index
                     elif c.type == 'dict':
                         dicts += name_entry
                     else:
@@ -681,6 +757,11 @@ class Columns(dict):
 
         s = [indent + tmp for tmp in s]
         s = ['Columns: '] + s
+
+        if len(acols) > 3:
+            s += [indent]
+            acols = [indent + tmp for tmp in acols]
+            s += acols
 
         if len(dicts) > 3:
             s += [indent]

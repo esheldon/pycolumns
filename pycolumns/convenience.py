@@ -1,6 +1,7 @@
 import numpy as np
 from .columns import Columns
 from .defaults import DEFAULT_CACHE_MEM, DEFAULT_CHUNKSIZE
+from . import util
 
 
 def from_fits(
@@ -44,7 +45,8 @@ def from_fits(
             2. A dict with keys set to columns names, possibly with
                detailed compression settings.
     chunksize: dict, str or number
-        The chunksize info compressed columns.
+        The chunksize info for compressed columns.
+        See TableSchema.from_array for a full explanation
     cache_mem: str or number
         Cache memory for index creation, default '1g' or one gigabyte.
     verbose: bool, optional
@@ -67,7 +69,7 @@ def from_fits(
         one = hdu[0:0+1]
 
         if byteswap:
-            _do_byteswap_inplace(one)
+            util.byteswap_inplace(one)
 
         cols = Columns.from_array(
             dir=dir,
@@ -112,7 +114,7 @@ def from_fits(
             data = hdu[start:stop]
 
             if byteswap:
-                _do_byteswap_inplace(data)
+                util.byteswap_inplace(data)
 
             cols.append(data, verify=False)
             del data
@@ -120,8 +122,3 @@ def from_fits(
     cols.verify()
 
     return cols
-
-
-def _do_byteswap_inplace(data):
-    data.byteswap(inplace=True)
-    data.dtype = data.dtype.newbyteorder()

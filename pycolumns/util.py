@@ -305,3 +305,11 @@ def get_data_names(data):
             raise ValueError('array must have fields')
 
     return names
+
+
+def byteswap_inplace(data):
+    """
+    Byte swap the data in place and with new dtype
+    """
+    data.byteswap(inplace=True)
+    data.dtype = data.dtype.newbyteorder()
