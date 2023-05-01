@@ -130,14 +130,6 @@ class Chunks(object):
         self._chunks_fobj.close()
         self._fobj.close()
 
-    def append_old(self, data):
-        """
-        append data to the file
-        """
-        self._check_dtype(data)
-        nbytes = self._write(data)
-        self._update_chunks_after_write(data.size, nbytes)
-
     def append(self, data):
         """
         Append data to the file. If the last chunk is not filled it
@@ -206,6 +198,12 @@ class Chunks(object):
         assert self._fobj.tell() == offset + nbytes, (
             'file tell == offset + nbytes'
         )
+        # this can happen it seems
+        # oldnbytes = self._chunk_data['nbytes'][-1]
+        # if nbytes < oldnbytes:
+        #     raise ValueError(
+        #         f'expected nbytes to increase but got {nbytes} < {oldnbytes}'
+        #     )
 
         self._chunk_data['nbytes'][-1] = nbytes
         self._chunk_data['nrows'][-1] = new_chunk_data.size
@@ -231,8 +229,17 @@ class Chunks(object):
         if offset is not None:
             self._fobj.seek(offset)
         else:
-            # seek to end
-            self._fobj.seek(0, 2)
+            # Note the next write offset may not be the end of the file if
+            # compression size changes in filling a chunk
+            # self._fobj.seek(0, 2)
+            if self.nrows > 0:
+                pos = (
+                    self._chunk_data['offset'][-1]
+                    + self._chunk_data['nbytes'][-1]
+                )
+            else:
+                pos = 0
+            self._fobj.seek(pos)
 
         if self.compression:
             nbytes = self._write_compressed_data(data)
@@ -353,6 +360,12 @@ class Chunks(object):
         else:
             chunk = self._read_uncompressed_chunk(chunk_index)
 
+        expected = self._chunk_data['nrows'][chunk_index]
+        if chunk.size != expected:
+            raise RuntimeError(
+                f'read {chunk.size} for chunk {chunk_index} '
+                f'but expected {expected}'
+            )
         self._cached_chunk_index = chunk_index
         self._cached_chunk = chunk
 
