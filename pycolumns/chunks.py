@@ -90,13 +90,22 @@ class Chunks(object):
         return self._nrows
 
     @property
+    def chunk_data(self):
+        """
+        get number of chunks
+        """
+        return self._chunk_data
+
+    @property
     def nchunks(self):
         """
         get number of chunks
         """
+        cd = self.chunk_data
+
         nchunks = 0
-        if self._chunk_data is not None:
-            nchunks = self._chunk_data.size
+        if cd.has_data():
+            nchunks = cd.size
 
         return nchunks
 
@@ -136,18 +145,19 @@ class Chunks(object):
 
         self._check_dtype(data)
 
-        if self._chunk_data is None:
+        cd = self.chunk_data
+        if not cd.has_data():
             # nothing in file, so just append
             fill_last_chunk = False
         else:
             # see if nrows is less than the chunksize
             fill_last_chunk = (
-                self._chunk_data['nrows'][-1] != self.row_chunksize
+                cd['nrows'][-1] != self.row_chunksize
             )
 
         if fill_last_chunk:
             # we need to append some to this chunk
-            num_to_append = self.row_chunksize - self._chunk_data['nrows'][-1]
+            num_to_append = self.row_chunksize - cd['nrows'][-1]
 
             self._append_within_last_chunk(data[:num_to_append])
 
@@ -223,7 +233,7 @@ class Chunks(object):
             chunk.
         """
 
-        cd = self._chunk_data
+        cd = self.chunk_data
 
         if self.nrows == 0:
             offset = 0
@@ -293,37 +303,15 @@ class Chunks(object):
             also overwrite the chunk information
         """
 
-        cd = self._chunk_data
-
+        cd = self.chunk_data
         if overwrite_last:
-            assert cd is not None, (
-                'cannot overwrite last when starting first chunk'
-            )
-
             nrows_added = nrows - cd['nrows'][-1]
-            cd['nrows'][-1] = nrows
-            cd['nbytes'][-1] = nbytes
-            self._chunks_fobj.update_row(cd.size-1, cd[-1:])
-
         else:
             nrows_added = nrows
 
-            chunk = np.zeros(1, dtype=self.chunks_dtype)
-
-            chunk['nbytes'] = nbytes
-            chunk['nrows'] = nrows
-
-            if cd is None:
-                self._chunk_data = chunk
-            else:
-
-                chunk['offset'] = cd['offset'][-1] + cd['nbytes'][-1]
-                chunk['rowstart'] = cd['rowstart'][-1] + cd['nrows'][-1]
-
-                self._chunk_data = np.hstack([self._chunk_data, chunk])
-                cd = self._chunk_data
-
-            self._chunks_fobj.append(chunk)
+        self.chunk_data.update_after_write(
+            nrows=nrows, nbytes=nbytes, overwrite_last=overwrite_last,
+        )
 
         self._check_file_position_after_append()
 
@@ -336,10 +324,11 @@ class Chunks(object):
 
     def _check_file_position_after_append(self):
         ftell = self._fobj.tell()
-        predicted = (
-            self._chunk_data['offset'][-1]
-            + self._chunk_data['nbytes'][-1]
-        )
+
+        cd = self.chunk_data
+
+        predicted = cd['offset'][-1] + cd['nbytes'][-1]
+
         if ftell != predicted:
             s = repr(self)
             raise RuntimeError(
@@ -387,7 +376,9 @@ class Chunks(object):
         else:
             chunk = self._read_uncompressed_chunk(chunk_index)
 
-        expected = self._chunk_data['nrows'][chunk_index]
+        cd = self.chunk_data
+
+        expected = cd['nrows'][chunk_index]
         if chunk.size != expected:
             raise RuntimeError(
                 f'read {chunk.size} for chunk {chunk_index} '
@@ -401,8 +392,10 @@ class Chunks(object):
         self._cached_chunk = None
 
     def _read_uncompressed_chunk(self, chunk_index):
-        offset = self._chunk_data['offset'][chunk_index]
-        nrows = self._chunk_data['nrows'][chunk_index]
+        cd = self.chunk_data
+
+        offset = cd['offset'][chunk_index]
+        nrows = cd['nrows'][chunk_index]
         self._fobj.seek(offset, 0)
         return np.fromfile(
             self._fobj,
@@ -412,7 +405,10 @@ class Chunks(object):
 
     def _read_compressed_chunk(self, chunk_index):
         import blosc
-        chunk = self._chunk_data[chunk_index]
+
+        cd = self.chunk_data
+
+        chunk = cd[chunk_index]
 
         self._fobj.seek(chunk['offset'], 0)
 
@@ -469,21 +465,10 @@ class Chunks(object):
             )
 
     def _open_files(self):
-        # if self.verbose:
-        #     print(
-        #         f'opening chunks file {self.chunks_filename} '
-        #         f'with mode: {self.mode}'
-        #     )
-        self._chunks_fobj = CColumn(
-            self.chunks_filename,
-            dtype=self.chunks_dtype,
+        self._chunk_data = ChunkData(
+            filename=self.chunks_filename,
             mode=self.mode,
-            # verbose=self.verbose,
         )
-        if self._chunks_fobj.nrows > 0:
-            self._chunk_data = self._chunks_fobj[:]
-        else:
-            self._chunk_data = None
 
         # needed to read/write bytes
         mode = self.mode
@@ -492,152 +477,11 @@ class Chunks(object):
 
         self._fobj = open(self.filename, mode)
 
-    # def read(self):
-    #     """
-    #     read all rows, creating the output
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #     data = np.empty(self.nrows, dtype=self.dtype)
-    #     super()._read_slice(data, 0)
-    #     return data
-
-    # def read_into(self, data):
-    #     """
-    #     read rows from the start of the file, storing in the input array
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #
-    #     self._check_dtype(data)
-    #
-    #     nrows = self.nrows
-    #     if data.size > nrows:
-    #         raise ValueError(
-    #             f'input data rows {data.size} > file nrows {nrows}'
-    #         )
-    #     super()._read_slice(data, 0)
-
-    # def read_slice(self, s):
-    #     """
-    #     read slice, creating the output
-    #
-    #     Parameters
-    #     ----------
-    #     s: slice
-    #         The slice.  Must have a stop and start and no step
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #     start, stop = self._extract_slice_start_stop(s)
-    #     nrows = stop - start
-    #     data = np.empty(nrows, dtype=self.dtype)
-    #     super()._read_slice(data, start)
-    #     return data
-
-    # def read_slice_into(self, data, s):
-    #     """
-    #     read rows into the input data
-    #
-    #     Parameters
-    #     ----------
-    #     data: array
-    #         The slice.  Must have a start
-    #     s: slice
-    #         The slice.  Must have a start and no step
-    #
-    #     Returns
-    #     -------
-    #     None
-    #     """
-    #
-    #     self._check_dtype(data)
-    #
-    #     start, stop = self._extract_slice_start_stop(s)
-    #     nrows = stop - start
-    #     if data.size != nrows:
-    #         raise ValueError(f'data size {data.size} != slice nrows {nrows}')
-    #     super()._read_slice(data, start)
-
-    # def read_rows(self, rows):
-    #     """
-    #     read rows, creating the output
-    #
-    #     Parameters
-    #     ----------
-    #     rows: array
-    #         The rows array
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #     data = np.empty(rows.size, dtype=self.dtype)
-    #     super()._read_rows(data, rows)
-    #     # super()._read_rows_pages(data, rows)
-    #     return data
-
-    # def read_rows_into(self, data, rows):
-    #     """
-    #     read rows into the input data
-    #
-    #     Parameters
-    #     ----------
-    #     data: array
-    #         Array in which to store the values
-    #     rows: array
-    #         The rows array
-    #
-    #     Returns
-    #     -------
-    #     None
-    #     """
-    #     from .indices import Indices
-    #     self._check_dtype(data)
-    #
-    #     rows_use = util.extract_rows(rows, self.nrows)
-    #     if not isinstance(rows_use, Indices):
-    #         raise ValueError(f'git unexpected rows type {type(rows_use)}')
-    #
-    #     super()._read_rows(data, rows_use)
-    #     # super()._read_rows_pages(data, rows)
-    #
-    # def read_row_into(self, data, row):
-    #     """
-    #     read rows into the input data
-    #
-    #     Parameters
-    #     ----------
-    #     data: array
-    #         Array in which to store the values. Even though reading
-    #         a single row, still must be length one array not scalar
-    #     rows: array
-    #         The rows array
-    #
-    #     Returns
-    #     -------
-    #     None
-    #     """
-    #     self._check_dtype(data)
-    #     if data.ndim == 0:
-    #         raise ValueError('data must have ndim > 0')
-    #
-    #     super()._read_row(data, row)
-    #     # super()._read_row_pages(data, rows)
-
     def _read_rows(self, data, rows):
+        cd = self.chunk_data
+
         chunk_indices = util.get_chunks(
-            chunkrows_sorted=self._chunk_data['rowstart'],
+            chunkrows_sorted=cd['rowstart'],
             rows=rows,
         )
         # for this we assume rows are sorted
@@ -651,7 +495,7 @@ class Chunks(object):
             chunk_data = self._read_chunk(ci)
 
             end = start + num
-            rowstart = self._chunk_data['rowstart'][ci]
+            rowstart = cd['rowstart'][ci]
 
             # this gives us rows within the chunk
             trows = rows[start:end] - rowstart
@@ -710,13 +554,13 @@ class Chunks(object):
             )
 
     def _set_nrows(self):
+        cd = self.chunk_data
+
         self._nrows = 0
-        if self._chunk_data is not None:
-            self._nrows = (
-                self._chunk_data['rowstart'][-1]
-                + self._chunk_data['nrows'][-1]
-            )
-            assert self.nrows == self._chunk_data['nrows'].sum(), (
+
+        if cd.has_data():
+            self._nrows = cd['rowstart'][-1] + cd['nrows'][-1]
+            assert self.nrows == cd['nrows'].sum(), (
                 'nrows == sum nrows'
             )
 
@@ -740,6 +584,113 @@ class Chunks(object):
 
         rep = ['Chunks:'] + rep
         return '\n'.join(rep)
+
+
+class ChunkData(object):
+    """
+    Manage data about chunks in memory and in a file
+    """
+    def __init__(self, filename, mode='r'):
+        self._filename = filename
+        self._mode = mode
+        self._dtype = np.dtype(CHUNKS_DTYPE)
+
+        self._fobj = CColumn(
+            self.filename,
+            dtype=self.dtype,
+            mode=self.mode,
+        )
+
+        self._data = None
+        if self._fobj.nrows > 0:
+            self._data = self._fobj[:]
+
+    def update_after_write(
+        self, nrows, nbytes, overwrite_last=False,
+    ):
+        """
+        Parameters
+        ----------
+        nrows: int
+            Number of rows now in most recent written chunk
+        nbytes: int
+            Number of bytes now in most recent written chunk
+        overwrite_last: bool
+            If set to True, we overwrote the last chunk so
+            also overwrite the chunk information
+        """
+
+        if overwrite_last:
+            assert self._data is not None, (
+                'cannot overwrite last when starting first chunk'
+            )
+
+            self['nrows'][-1] = nrows
+            self['nbytes'][-1] = nbytes
+            self._fobj.update_row(self.size-1, self[-1:])
+
+        else:
+            chunk = np.zeros(1, dtype=self.dtype)
+
+            chunk['nbytes'] = nbytes
+            chunk['nrows'] = nrows
+
+            if self._data is None:
+                self._data = chunk
+            else:
+
+                chunk['offset'] = self['offset'][-1] + self['nbytes'][-1]
+                chunk['rowstart'] = self['rowstart'][-1] + self['nrows'][-1]
+
+                self._data = np.hstack([self._data, chunk])
+
+            self._fobj.append(chunk)
+
+    @property
+    def filename(self):
+        """
+        get the filename
+        """
+        return self._filename
+
+    @property
+    def mode(self):
+        """
+        get the file open mode
+        """
+        return self._mode
+
+    @property
+    def dtype(self):
+        """
+        get the numpy dtype of the chunks file data
+        """
+        return self._dtype
+
+    @property
+    def size(self):
+        """
+        get the numpy dtype of the chunks file data
+        """
+        self.ensure_has_data()
+        return self._data.size
+
+    def has_data(self):
+        """
+        Returns true if data is present
+        """
+        return self._data is not None
+
+    def ensure_has_data(self):
+        """
+        Raises exception if not data present
+        """
+        if not self.has_data():
+            raise RuntimeError('no chunk data exists')
+
+    def __getitem__(self, arg):
+        self.ensure_has_data()
+        return self._data[arg]
 
 
 def test():
