@@ -134,7 +134,6 @@ class Chunks(object):
         """
         close the data and chunks files
         """
-        self._chunks_fobj.close()
         self._fobj.close()
 
     def append(self, data):
