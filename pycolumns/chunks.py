@@ -13,11 +13,9 @@ class Chunks(object):
         filename,
         chunks_filename,
         dtype,
-        # Set a default here for now, but eventually this should be part of
-        # schema
-        chunksize='1m',
         mode='r',
         compression=None,
+        chunksize='1m',
         verbose=False,
     ):
         self._filename = filename

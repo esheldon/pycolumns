@@ -244,6 +244,7 @@ class Column(object):
                 dtype=self._meta['dtype'],
                 mode='r+',
                 compression=meta['compression'],
+                chunksize=meta['chunksize'],
                 verbose=self.verbose,
             )
         else:
