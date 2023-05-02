@@ -42,7 +42,8 @@ Columns:
     telemetry
 
 # Above we see the main types supported:  A table of columns, dictionaries, and
-# sub-Columns directories, which are themselves full Columns
+# sub-Columns directories, which are themselves full Columns.  the id and name
+# columns have zstd compression and indexes for fast searching
 
 # display info about column 'id'
 >>> c['id']
@@ -61,6 +62,7 @@ Column:
 
 # number of rows in table
 >>> c.nrows
+64348146
 
 # read all columns into a single rec array.  By default the dict
 # columns are not loaded
@@ -96,7 +98,7 @@ Column:
 >>> ind = c['id'][rows]
 >>> ind = c['id'].read(rows=rows)
 
-# get indices for some conditions
+# query on indexed columns
 >>> ind = c['id'] > 25
 >>> ind = c['id'].between(25, 35)
 >>> ind = c['id'] == 25
@@ -106,9 +108,8 @@ Column:
 >>> data = c.read(columns=['ra', 'dec'], rows=ind)
 
 # composite searches over multiple columns
->>> ind = (c['id'] == 25) & (col['x'] < 15.23)
->>> ind = c['id'].between(15, 25) | (c['id'] == 55)
->>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['x'] < 100)
+>>> ind = c['id'].between(15, 25) | (c['name'] == 'cxj2')
+>>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['name'] != 'af23')
 
 # reading a dictionary column
 >>> meta = c['meta'].read()
@@ -212,11 +213,15 @@ schema = pyc.TableSchema.from_schema(sch)
 # to configure the amount of memory used during index creation, specify
 # cache_mem is 0.5 gigabytes
 >>> cols = pyc.Columns(fname, cache_mem='0.5g')
-
 ```
+
+Installation
+------------
+pip install pycolumns
 
 Dependencies
 ------------
-numpy
 
-
+pycolumns depends on numpy and [blosc](https://github.com/Blosc/python-blosc)
+for data compression. Both dependencies will be automatically installed when
+installing pycolumns with pip

@@ -1,6 +1,7 @@
 """
 TODO
 
+    - add examples with compression
     - Add deletion of columns/entries
     - Add update of entries (won't work easily for compressed!)
     - look into optimizing slice reads for chunks
