@@ -1,11 +1,12 @@
 A simple, efficient column-oriented, pythonic data store.
 
-The focus is currently on efficiency of reading and writing.  The code is pure
-python but searching and reading data is fast due to the use of the fitsio
-package for column data and index data.  Basic consistency is ensured for
-the columns in the table, but the database is not fully ACID.
+The focus is currently on efficiency of reading and writing.  Each table column
+can optionally be compressed, and be indexed for fast searches.  Basic
+consistency is ensured for the columns in the table, but the database is not
+fully ACID.
 
-The storage is a simple directory with files on disk.
+The storage is a simple directory with files on disk.  The data for each column
+in a table are stored in separate files for simplicity and efficiency.
 
 Examples
 --------
