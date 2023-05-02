@@ -18,42 +18,44 @@ Examples
 
 # display some info about the columns
 >>> c
-Columns Directory:
-
-  mydata
-  dir: /some/path/mydata.cols
+Columns:
+  dir: test.cols
   nrows: 64348146
-  Columns:
-    name             dtype index
-    -----------------------------
-    ccd                <i2 True
-    dec                <f8 False
-    exposurename      |S20 True
-    id                 <i8 True
-    imag               <f4 False
-    ra                 <f8 False
-    x                  <f4 False
-    y                  <f4 False
-    g                  <f8 False
 
-  Dictionaries
+  Table Columns:
+    name             dtype    comp index
+    -----------------------------------
+    id                 <i8    zstd True
+    name              <U10    zstd True
+    x                  <f4    None False
+    y                  <f4    None False
+
+  Dictionaries:
     name
-    -----------------------------
+    ----------------------------
     meta
 
   Sub-Columns Directories:
     name
-    -----------------------------
-    psfstars
+    ----------------------------
+    telemetry
+
+# Above we see the main types supported:  A table of columns, dictionaries, and
+# sub-Columns directories, which are themselves full Columns
 
 # display info about column 'id'
 >>> c['id']
 Column:
   name: id
-  filename: ./id.array
+  filename: test.cols/id.array
   type: array
+  index: True
+  compression:
+      cname: zstd
+      clevel: 5
+      shuffle: bitshuffle
+  chunksize: 1m
   dtype: <i8
-  has index: False
   nrows: 64348146
 
 # number of rows in table
@@ -69,15 +71,15 @@ Column:
 >>> data = c.read(asdict=True)
 
 # specify columns
->>> data = c.read(columns=['id', 'flux'])
+>>> data = c.read(columns=['id', 'x'])
 
 # dict columns can be specified if asdict is True.  Dicts can also
 # be read as single columns, see below
->>> data = c.read(columns=['id', 'flux', 'meta'], asdict=True)
+>>> data = c.read(columns=['id', 'x', 'meta'], asdict=True)
 
 # specifying a set of rows as sequence/array or slice
->>> data = c.read(columns=['id', 'flux'], rows=[3, 225, 1235])
->>> data = c.read(columns=['id', 'flux'], rows=slice(10, 20))
+>>> data = c.read(columns=['id', 'x'], rows=[3, 225, 1235])
+>>> data = c.read(columns=['id', 'x'], rows=slice(10, 20))
 
 # read all data from column 'id' as an array rather than recarray
 # alternative syntaxes
@@ -93,12 +95,6 @@ Column:
 >>> ind = c['id'][rows]
 >>> ind = c['id'].read(rows=rows)
 
-# reading a dictionary column
->>> meta = c['meta'].read()
-
-# Create indexes for fast searching
->>> c['id'].create_index()
-
 # get indices for some conditions
 >>> ind = c['id'] > 25
 >>> ind = c['id'].between(25, 35)
@@ -109,19 +105,81 @@ Column:
 >>> data = c.read(columns=['ra', 'dec'], rows=ind)
 
 # composite searches over multiple columns
->>> ind = (c['id'] == 25) & (col['ra'] < 15.23)
+>>> ind = (c['id'] == 25) & (col['x'] < 15.23)
 >>> ind = c['id'].between(15, 25) | (c['id'] == 55)
->>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['ra'] < 100)
+>>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['x'] < 100)
 
-# write columns from the fields in a rec array names in the data correspond
-# to column names.  If this is the first time writing data, the columns are
-# created, and on subsequent writes, the columns must match
+# reading a dictionary column
+>>> meta = c['meta'].read()
+
+# enries can actually be another pycolumns directory
+>>> cols['telemetry']
+Columns:
+  dir: test.cols/telemetry.cols
+  nrows: 10
+
+  Table Columns:
+    name             dtype    comp index
+    -----------------------------------
+    obsid              <i8    zstd True
+    voltage            <f4    None False
+
+>>> v = cols['telemetry']['voltage'][:]
+
+#
+# Creating a columns data store
+#
+
+# the easiest way is to create from an existing array or dict of arrays
+
+dtype = [
+    ('id', 'i8'),
+    ('x', 'f4'),
+    ('y', 'f4'),
+    ('name', 'U10'),
+]
+num = 10
+data = np.zeros(num, dtype=dtype)
+data['id'] = np.arange(num)
+data['x'] = rng.uniform(size=num)
+data['y'] = rng.uniform(size=num)
+data['name'] = data['id'].astype('U10')
+
+# use default compression for id and name
+cols = pyc.Columns.from_array(coldir, data, compression=['id', 'name'])
+
+# add indexes for id and name
+cols['id'].create_index()
+cols['name'].create_index()
+
+# you can also create directly from a schema.  The schema itself
+# can be created from an array or from a dict
+# here we set the chunksize for compressed columns to 10 megabytes
+
+schema = pyc.TableSchema.from_array(array, compression=['id'], chunksize='10m')
+cols = pyc.Columns.create(coldir, schema=schema)
+
+# or you can build the schema from columns
+cid = pyc.ColumnSchema('id', dtype='i8', compression=True)
+cx = pyc.ColumnSchema('x', dtype='f4')
+
+schema = pyc.TableSchema([cid, cx])
+
+# or from a dict
+sch = {
+    'id': {
+        'dtype': 'i8',
+        'compress': True,
+    },
+    'x': {'dtype': 'f4'},
+}
+
+schema = pyc.TableSchema.from_schema(sch)
+
+# Append data
 
 >>> c.append(recdata)
 >>> c.append(new_data)
-
-# append data from the fields in a FITS file
->>> c.from_fits(fitsfile_name)
 
 # add a dictionary column.
 >>> c.create_dict('weather')
@@ -130,20 +188,14 @@ Column:
 # overwrite dict column
 >>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})
 
-# update values for an array column
->>> c['id'][35] = 10
->>> c['id'][35:35+3] = [8, 9, 10]
->>> c['id'][rows] = idvalues
-
 # get all names, including dictionary and sub Columns
 # same as list(c.keys())
 >>> c.names
-['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g',
- 'meta', 'psfstars']
+['telemetry', 'id', 'y', 'x', 'name', 'meta']
 
 # only array column names
 >>> c.column_names
-['ccd', 'dec', 'exposurename', 'id', 'imag', 'ra', 'x', 'y', 'g']
+['id', 'y', 'x', 'name']
 
 # only dict columns
 >>> c.dict_names
@@ -151,34 +203,15 @@ Column:
 
 # only sub Columns directories
 >>> c.subcols_names
-['psfstars']
+['telemetry']
 
 # reload all columns or specified column/column list
 >>> c.reload()
-
-# delete all data.  This will ask for confirmation
->>> c.delete()
-
-# delete an entry (column, dict, etc.) and its data
->>> c.delete_entry('ra')
 
 # to configure the amount of memory used during index creation, specify
 # cache_mem is 0.5 gigabytes
 >>> cols = pyc.Columns(fname, cache_mem='0.5g')
 
-# columns can actually be another pycolumns directory
->>> psfcols = cols['psfstars']
->>> psfcols
-  dir: /some/path/mydata.cols/psfstars.cols
-  Columns:
-    name             type  dtype index  shape
-    --------------------------------------------------
-    ccd             array    <i2 True   (64348146,)
-    id              array    <i8 True   (64348146,)
-    imag            array    <f4 False  (64348146,)
-    x               array    <f4 False  (64348146,)
-    y               array    <f4 False  (64348146,)
-    ...etc
 ```
 
 Dependencies
