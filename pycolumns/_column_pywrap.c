@@ -111,7 +111,7 @@ PyColumn_write_at(
     long long start = 0;
     npy_intp elsize = 0;
 
-    if (!PyArg_ParseTuple(args, (char*)"LO", &start, &array)) {
+    if (!PyArg_ParseTuple(args, (char*)"OL", &array, &start)) {
         return NULL;
     }
 
@@ -125,6 +125,66 @@ PyColumn_write_at(
         return NULL;
     }
     fflush(self->fptr);
+
+    Py_RETURN_NONE;
+}
+
+/*
+   Write rows into array
+   No error checking is done on the data type of the input array
+   The rows should be sorted for efficiency, but this is not checked
+   rows should be native npy_int64 but this is not checked
+*/
+
+static PyObject*
+PyColumn_write_rows(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL, *rows = NULL;
+    npy_int64 row = 0, elsize = 0;
+    npy_intp nwrote = 0;
+    PyArrayIterObject *it = NULL;
+    // NPY_BEGIN_THREADS_DEF;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", &array, &rows)) {
+        return NULL;
+    }
+
+    if (!ensure_arrays_same_size(rows, "rows", array, "array")) {
+        return NULL;
+    }
+
+    elsize = PyArray_ITEMSIZE(array);
+    it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)array);
+
+    // NPY_BEGIN_THREADS;
+
+    while (it->index < it->size) {
+        row = *(npy_int64 *) PyArray_GETPTR1(rows, it->index);
+
+        pyc_seek_row(self, row, elsize);
+
+        nwrote = fwrite(
+            (void *) it->dataptr,
+            elsize,
+            1,
+            self->fptr
+        );
+        if (nwrote < 1) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Error writing row %" NPY_INTP_FMT
+                         " to file", row);
+            Py_DECREF(it);
+            return NULL;
+        }
+        PyArray_ITER_NEXT(it);
+    }
+    // NPY_END_THREADS;
+    Py_DECREF(it);
 
     Py_RETURN_NONE;
 }
@@ -384,6 +444,13 @@ static PyMethodDef PyColumn_methods[] = {
      "write_at()\n"
      "\n"
      "Write data from the specified row.\n"},
+
+    {"_write_rows",
+     (PyCFunction)PyColumn_write_rows,
+     METH_VARARGS, 
+     "write_rows()\n"
+     "\n"
+     "Write data at the specified row.\n"},
 
     {"_read_slice",
      (PyCFunction)PyColumn_read_slice,

@@ -190,6 +190,14 @@ schema = pyc.TableSchema.from_schema(sch)
 # overwrite dict column
 >>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})
 
+# Update column data
+c['x'][10:20] = 3
+c['name'][[5, 6]] = ['alpha', 'beta']
+c['y'][50] = 1.25
+
+# update dict
+c['meta'].update({'extra': 5})
+
 # get all names, including dictionary and sub Columns
 # same as list(c.keys())
 >>> c.names

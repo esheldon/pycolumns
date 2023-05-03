@@ -142,7 +142,8 @@ class Chunks(object):
         will be filled before appending in a new chunk
         """
 
-        self._check_dtype(data)
+        data = util.get_data_with_conversion(data, self.dtype)
+        # self._check_dtype(data)
 
         cd = self.chunk_data
         if not cd.has_data():
@@ -532,6 +533,15 @@ class Chunks(object):
 
         return data
 
+    def __setitem__(self, arg, values):
+        """
+        Item lookup method, e.g. col[..] meaning slices or
+        sequences, etc.
+        """
+        raise NotImplementedError(
+            'updating compressed columns not yet supported'
+        )
+
     def _extract_slice_start_stop(self, s):
         nrows = self.nrows
 
@@ -545,12 +555,12 @@ class Chunks(object):
             stop = nrows
         return start, stop
 
-    def _check_dtype(self, data):
-        dtype = data.dtype
-        if dtype != self.dtype:
-            raise ValueError(
-                f'input dtype {dtype} != file dtype {self.dtype}'
-            )
+    # def _check_dtype(self, data):
+    #     dtype = data.dtype
+    #     if dtype != self.dtype:
+    #         raise ValueError(
+    #             f'input dtype {dtype} != file dtype {self.dtype}'
+    #         )
 
     def _set_nrows(self):
         cd = self.chunk_data

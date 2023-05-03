@@ -3,7 +3,7 @@ import numpy as np
 from . import defaults
 
 
-def extract_rows(rows, nrows, sort=True):
+def extract_rows(rows, nrows, sort=True, check_slice_stop=False):
     """
     extract rows for reading
 
@@ -21,7 +21,7 @@ def extract_rows(rows, nrows, sort=True):
     from .indices import Indices
 
     if isinstance(rows, slice):
-        s = extract_slice(rows, nrows)
+        s = extract_slice(rows, nrows, check_slice_stop=check_slice_stop)
         if s.step is not None:
             ind = np.arange(s.start, s.stop, s.step)
             output = Indices(ind, is_sorted=True)
@@ -40,9 +40,12 @@ def extract_rows(rows, nrows, sort=True):
     return output
 
 
-def extract_slice(s, nrows):
+def extract_slice(s, nrows, check_slice_stop=False):
     start = s.start
     stop = s.stop
+    if stop is not None and check_slice_stop:
+        if stop > nrows:
+            raise ValueError(f'slice stop {stop} > nrows {nrows}')
 
     if start is None:
         start = 0
@@ -313,3 +316,11 @@ def byteswap_inplace(data):
     """
     data.byteswap(inplace=True)
     data.dtype = data.dtype.newbyteorder()
+
+
+def get_data_with_conversion(data, dtype, ndmin=1):
+    """
+    returns the data, possibly converted to the specified type,
+    otherwise just a new ref
+    """
+    return np.array(data, ndmin=ndmin, dtype=dtype, copy=False)

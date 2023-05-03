@@ -1,9 +1,13 @@
 """
 TODO
 
+    - Add update of entries (won't work easily for compressed!)
+        - works if data/ind both already sorted
+        - need to add the sort indices to Indices and optionally
+        - send with read/write
+    - in _column.py allow negative indices/slices
     - add examples with compression
     - Add deletion of columns/entries
-    - Add update of entries (won't work easily for compressed!)
     - look into optimizing slice reads for chunks
     - ability to add a column
     - Maybe don't have dicts and subcols in self as a name

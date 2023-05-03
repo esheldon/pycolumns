@@ -269,7 +269,9 @@ class Column(object):
         """
 
         self._check_data(data)
-        self._check_data_dtype(data)
+
+        # we use data conversion in self._col
+        # self._check_data_dtype(data)
         self._col.append(data)
 
         if self.has_index:
@@ -285,12 +287,12 @@ class Column(object):
         if data.ndim > 1:
             raise ValueError('data must be one dimensional array')
 
-    def _check_data_dtype(self, data):
-        dt = data.dtype
-        mydt = self.dtype
-
-        if dt != mydt:
-            raise ValueError(f"data dtype '{dt}' != '{mydt}'")
+    # def _check_data_dtype(self, data):
+    #     dt = data.dtype
+    #     mydt = self.dtype
+    #
+    #     if dt != mydt:
+    #         raise ValueError(f"data dtype '{dt}' != '{mydt}'")
 
     def _get_rec_view(self, data):
         view_dtype = [('data', data.dtype.descr[0][1])]
@@ -308,7 +310,7 @@ class Column(object):
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        raise RuntimeError('fix writing')
+        self._col[arg] = values
 
     def read(self, rows=None):
         """

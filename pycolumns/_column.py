@@ -62,7 +62,7 @@ class Column(_column_pywrap.Column):
         """
         append data to the file
         """
-        self._check_dtype(data)
+        data = util.get_data_with_conversion(data, self.dtype)
 
         super()._append(data)
 
@@ -72,24 +72,27 @@ class Column(_column_pywrap.Column):
         """
         Update the specified row
         """
+        data = util.get_data_with_conversion(data, self.dtype)
+
         if data.size != 1:
             raise ValueError(
                 f'attemting to update row with data of size {data.size}'
             )
-        self._check_dtype(data)
-        self.write_at(row, data)
 
-    def write_at(self, row, data):
+        super()._write_at(data, row)
+
+    def write_at(self, data, row):
         """
         write data starting at the specified row
         """
+        data = util.get_data_with_conversion(data, self.dtype)
+
         if row > self.nrows - 1:
             raise ValueError(
                 f'attempt to write at row {row} > {self.nrows-1}'
             )
-        self._check_dtype(data)
 
-        super()._write_at(row, data)
+        super()._write_at(data, row)
 
         if row + data.size > self.nrows:
             self._nrows = row + data.size
@@ -257,6 +260,40 @@ class Column(_column_pywrap.Column):
                 self._read_rows(data, rows)
 
         return data
+
+    def __setitem__(self, arg, data):
+        # returns either Indices or slice
+        # converts slice with step to indices
+        rows = util.extract_rows(arg, self.nrows, check_slice_stop=True)
+
+        if isinstance(rows, slice):
+            nrows = rows.stop - rows.start
+            if nrows != data.size:
+                raise ValueError(
+                    f'mismatch slice size {nrows} and data size {data.size} '
+                    f'when writing'
+                )
+
+            self.write_at(data, rows.start)
+        else:
+            if rows.ndim == 0:
+                self.write_at(data, rows)
+            else:
+                data = util.get_data_with_conversion(data, self.dtype)
+
+                # rows are sorted, can check first and last
+                first = rows[0]
+                last = rows[-1]
+                self._check_row(first)
+                self._check_row(last)
+
+                self._write_rows(data, rows)
+
+    def _check_row(self, row):
+        if row < 0 or row > self.nrows - 1:
+            raise ValueError(
+                f'row {row} out of bounds [0, {self.nrows-1}]'
+            )
 
     def _extract_slice_start_stop(self, s):
         nrows = self.nrows

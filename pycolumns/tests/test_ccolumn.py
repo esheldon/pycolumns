@@ -92,6 +92,30 @@ def test_column(dtype):
 
             two = data[3:3+2]
             start = 15
-            col.write_at(start, two)
+            col.write_at(two, start)
             check = col[start:start+2]
             assert np.all(check == two)
+
+            col[5] = data[0]
+            assert np.all(col[5] == data[0])
+
+            col[:data.size] = data
+            assert np.all(col[:data.size] == data)
+
+            rows = [0, 2, 5]
+            wdata = np.array([99, 88, 77], dtype=dtype)
+            col[rows] = wdata
+            assert np.all(col[rows] == wdata)
+
+            rows = slice(0, 6, 2)
+            wdata = np.arange(0, 6, 2).astype(dtype)
+            col[rows] = wdata
+            assert np.all(col[rows] == wdata)
+
+            with pytest.raises(ValueError):
+                # bad slice size
+                col[0:5] = wdata
+
+            with pytest.raises(ValueError):
+                # out of bounds update
+                col[np.arange(100)] = np.arange(100)
