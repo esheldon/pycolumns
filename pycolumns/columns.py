@@ -1,10 +1,14 @@
 """
 TODO
 
-    - Add update of entries (won't work easily for compressed!)
-        - works if data/ind both already sorted
-        - need to add the sort indices to Indices and optionally
-        - send with read/write
+    - rebuild index after updating column data
+        - could make with context for updating so it only rebuilds
+          index at the end
+    - Add update of entries for compressed
+        - if chunk shrinks, could write in the chunk, if expands
+          would need to do something new
+            1. push data toward end of file
+            2. mark chunk bad and copy to end?  Can vacuum later
     - in _column.py allow negative indices/slices
     - add examples with compression
     - Add deletion of columns/entries
@@ -198,6 +202,13 @@ class Columns(dict):
         number of rows in table
         """
         return self._nrows
+
+    @property
+    def size(self):
+        """
+        number of rows in table
+        """
+        return self.nrows
 
     @property
     def names(self):
@@ -713,10 +724,11 @@ class Columns(dict):
             if ncols > 0 and hasattr(self, '_nrows'):
                 s += ['nrows: %s' % self.nrows]
 
+        acols = []
         dicts = []
         subcols = []
         if len(self) > 0:
-            acols = ['Table Columns:']
+            acols += ['Table Columns:']
             cnames = 'name', 'dtype', 'comp', 'index'
             acols += ['  %-15s %6s %7s %-6s' % cnames]
             acols += ['  '+'-'*(35)]

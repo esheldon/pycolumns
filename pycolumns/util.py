@@ -27,15 +27,18 @@ def extract_rows(rows, nrows, sort=True, check_slice_stop=False):
             output = Indices(ind, is_sorted=True)
         else:
             output = s
+
     elif rows is None:
         output = slice(0, nrows)
+
     elif isinstance(rows, Indices):
         output = rows
+
     else:
         output = Indices(rows)
 
-    if isinstance(output, Indices) and sort:
-        output.sort()
+    # if isinstance(output, Indices) and sort:
+    #     output.sort()
 
     return output
 

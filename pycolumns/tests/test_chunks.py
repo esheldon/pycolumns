@@ -22,6 +22,7 @@ def test_chunks(compression, dtype):
     else:
         data = rng.uniform(size=num).astype(dtype)
 
+    # small chunksize to guarantee we cross chunks
     row_chunksize = 10
     chunksize = f'{row_chunksize}r'
 
@@ -66,6 +67,12 @@ def test_chunks(compression, dtype):
             assert np.all(indata == data[2:18:2])
 
             ind = [3, 5, 7]
+            indata = col[ind]
+            assert np.all(indata == data[ind])
+
+            # out of order
+            ind = np.arange(num)
+            rng.shuffle(ind)
             indata = col[ind]
             assert np.all(indata == data[ind])
 

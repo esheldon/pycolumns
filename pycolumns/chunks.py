@@ -480,6 +480,11 @@ class Chunks(object):
     def _read_rows(self, data, rows):
         cd = self.chunk_data
 
+        sortind = rows.sort_index
+        if sortind is not None:
+            rows_orig = rows
+            rows = rows[sortind]
+
         chunk_indices = util.get_chunks(
             chunkrows_sorted=cd['rowstart'],
             rows=rows,
@@ -490,6 +495,7 @@ class Chunks(object):
         w, = np.where(h > 0)
         start = 0
 
+        rowmin, _ = rows.get_minmax()
         for ci in w:
             num = h[ci]
             chunk_data = self._read_chunk(ci)
@@ -500,12 +506,18 @@ class Chunks(object):
             # this gives us rows within the chunk
             trows = rows[start:end] - rowstart
 
-            data[start:end] = chunk_data[trows]
+            if sortind is not None:
+                srows = sortind[start:end]
+                data[srows] = chunk_data[trows]
+            else:
+                data[start:end] = chunk_data[trows]
 
             start += num
+
         return data
 
     def __getitem__(self, arg):
+        from .indices import Indices
 
         # returns either Indices or slice
         # converts slice with step to indices
@@ -514,7 +526,7 @@ class Chunks(object):
         # TODO, make an optimized slice reader
         # for now, convert
         if isinstance(rows, slice):
-            rows = np.arange(rows.start, rows.stop, rows.step)
+            rows = Indices(np.arange(rows.start, rows.stop, rows.step))
 
         if isinstance(rows, slice):
             raise NotImplementedError('implement fast slice')
@@ -525,7 +537,7 @@ class Chunks(object):
             data = np.empty(rows.size, dtype=self.dtype)
 
             if rows.ndim == 0:
-                send_rows = np.array(rows, ndmin=1)
+                send_rows = Indices([rows])
                 self._read_rows(data, send_rows)
                 data = data[0]
             else:

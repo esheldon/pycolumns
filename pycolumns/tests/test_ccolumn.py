@@ -47,6 +47,11 @@ def test_column(dtype):
             indata = col[ind]
             assert np.all(indata == data[ind])
 
+            # out of order
+            ind = [7, 3, 5]
+            indata = col[ind]
+            assert np.all(indata == data[ind])
+
             ind = 5
             indata = col[ind]
             assert np.all(indata == data[ind])
@@ -84,6 +89,10 @@ def test_column(dtype):
             col.append(data)
             assert col.nrows == data.size * 2
 
+            #
+            # updating column data
+            #
+
             one = data[:1]
             row2update = 3
             col.update_row(row2update, one)
@@ -102,8 +111,15 @@ def test_column(dtype):
             col[:data.size] = data
             assert np.all(col[:data.size] == data)
 
+            # sorted rows
             rows = [0, 2, 5]
             wdata = np.array([99, 88, 77], dtype=dtype)
+            col[rows] = wdata
+            assert np.all(col[rows] == wdata)
+
+            # out of order rows
+            rows = [8, 3, 7]
+            wdata = np.array([100, 102, 103], dtype=dtype)
             col[rows] = wdata
             assert np.all(col[rows] == wdata)
 

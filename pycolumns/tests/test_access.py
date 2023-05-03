@@ -2,7 +2,7 @@ import pytest
 
 
 @pytest.mark.parametrize('compression', [False, True])
-def test_create(compression):
+def test_access(compression):
     """
     cache_mem of 0.01 will force use of mergesort
     """
@@ -57,6 +57,7 @@ def test_create(compression):
             tdata = cols[name][:]
             assert np.all(data[name] == tdata)
 
+        # sorted rows
         rows = np.arange(0, data.size, 2)
         indata = cols.read(rows=rows)
         for name in data.dtype.names:
@@ -89,7 +90,17 @@ def test_create(compression):
                 )
                 cols[name][10:15] = data[name][10:15]
                 assert np.all(data[name][:] == cols[name][:])
+
+            # sorted rows
             rows = [5, 15, 17]
+            vals = np.arange(len(rows))
+            for name in data.dtype.names:
+                data[name][rows] = vals.astype(data[name].dtype)
+                cols[name][rows] = data[name][rows]
+                assert np.all(data[name][:] == cols[name][:])
+
+            # unsorted rows
+            rows = [17, 5, 15]
             vals = np.arange(len(rows))
             for name in data.dtype.names:
                 data[name][rows] = vals.astype(data[name].dtype)

@@ -257,7 +257,11 @@ class Column(_column_pywrap.Column):
                 self._read_row(data, rows)
                 data = data[0]
             else:
-                self._read_rows(data, rows)
+                sortind = rows.sort_index
+                if sortind is None:
+                    self._read_rows(data, rows)
+                else:
+                    self._read_rows_sortind(data, rows, sortind)
 
         return data
 
@@ -281,13 +285,23 @@ class Column(_column_pywrap.Column):
             else:
                 data = util.get_data_with_conversion(data, self.dtype)
 
+                sortind = rows.sort_index
+
                 # rows are sorted, can check first and last
-                first = rows[0]
-                last = rows[-1]
+                if sortind is None:
+                    first = rows[0]
+                    last = rows[-1]
+                else:
+                    first = rows[sortind[0]]
+                    last = rows[sortind[-1]]
+
                 self._check_row(first)
                 self._check_row(last)
 
-                self._write_rows(data, rows)
+                if sortind is None:
+                    self._write_rows(data, rows)
+                else:
+                    self._write_rows_sortind(data, rows, sortind)
 
     def _check_row(self, row):
         if row < 0 or row > self.nrows - 1:

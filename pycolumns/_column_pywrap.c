@@ -130,7 +130,7 @@ PyColumn_write_at(
 }
 
 /*
-   Write rows into array
+   Write rows into file
    No error checking is done on the data type of the input array
    The rows should be sorted for efficiency, but this is not checked
    rows should be native npy_int64 but this is not checked
@@ -188,6 +188,69 @@ PyColumn_write_rows(
 
     Py_RETURN_NONE;
 }
+
+/*
+   Write rows into file with a sort index
+   No error checking is done on the data type of the input array
+   The rows should be sorted for efficiency, but this is not checked
+   rows should be native npy_int64 but this is not checked
+*/
+
+static PyObject*
+PyColumn_write_rows_sortind(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL, *rows = NULL, *sortind = NULL;
+    npy_int64 row = 0, s = 0, elsize = 0, index = 0, size = 0;
+    npy_intp nwrote = 0;
+    void *ptr = NULL;
+    // NPY_BEGIN_THREADS_DEF;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", &array, &rows, &sortind)) {
+        return NULL;
+    }
+
+    if (!ensure_arrays_same_size(rows, "rows", array, "array")) {
+        return NULL;
+    }
+    if (!ensure_arrays_same_size(rows, "rows", sortind, "sortind")) {
+        return NULL;
+    }
+
+    size = PyArray_SIZE(array);
+    elsize = PyArray_ITEMSIZE(array);
+
+    // NPY_BEGIN_THREADS;
+
+    for (index = 0; index < size; index ++) {
+        s = *(npy_int64 *) PyArray_GETPTR1(sortind, index);
+        ptr = PyArray_GETPTR1(array, s);
+        row = *(npy_int64 *) PyArray_GETPTR1(rows, s);
+
+        pyc_seek_row(self, row, elsize);
+
+        nwrote = fwrite(
+            ptr,
+            elsize,
+            1,
+            self->fptr
+        );
+        if (nwrote < 1) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Error writing row %" NPY_INTP_FMT
+                         " to file", row);
+            return NULL;
+        }
+    }
+    // NPY_END_THREADS;
+
+    Py_RETURN_NONE;
+}
+
 
 /*
    Read slice into array
@@ -327,6 +390,68 @@ PyColumn_read_rows(
     Py_RETURN_NONE;
 }
 
+/*
+   Read rows into array with sort indices
+   No error checking is done on the data type of the input array
+   The rows should be sorted for efficiency, but this is not checked
+   rows should be native npy_int64 but this is not checked
+*/
+
+static PyObject*
+PyColumn_read_rows_sortind(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL, *rows = NULL, *sortind = NULL;
+    npy_int64 row = 0, s = 0, elsize = 0, index = 0, size = 0;
+    npy_intp nread = 0;
+    // NPY_BEGIN_THREADS_DEF;
+    void *ptr = NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", &array, &rows, &sortind)) {
+        return NULL;
+    }
+
+    if (!ensure_arrays_same_size(rows, "rows", array, "array")) {
+        return NULL;
+    }
+    if (!ensure_arrays_same_size(rows, "rows", sortind, "sortind")) {
+        return NULL;
+    }
+
+    size = PyArray_SIZE(array);
+    elsize = PyArray_ITEMSIZE(array);
+
+    // NPY_BEGIN_THREADS;
+
+    for (index = 0; index < size; index ++) {
+        s = *(npy_int64 *) PyArray_GETPTR1(sortind, index);
+        ptr = PyArray_GETPTR1(array, s);
+        row = *(npy_int64 *) PyArray_GETPTR1(rows, s);
+
+        pyc_seek_row(self, row, elsize);
+
+        nread = fread(
+            ptr,
+            elsize,
+            1,
+            self->fptr 
+        );
+        if (nread < 1) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Error reading row %" NPY_INTP_FMT
+                         " from file", row);
+            return NULL;
+        }
+    }
+    // NPY_END_THREADS;
+
+    Py_RETURN_NONE;
+}
+
 
 static PyObject*
 PyColumn_read_row(
@@ -434,21 +559,28 @@ static PyMethodDef PyColumn_methods[] = {
     {"_append",
      (PyCFunction)PyColumn_append,
      METH_VARARGS, 
-     "append()\n"
+     "_append()\n"
      "\n"
      "Append data.\n"},
 
     {"_write_at",
      (PyCFunction)PyColumn_write_at,
      METH_VARARGS, 
-     "write_at()\n"
+     "_write_at()\n"
      "\n"
      "Write data from the specified row.\n"},
 
     {"_write_rows",
      (PyCFunction)PyColumn_write_rows,
      METH_VARARGS, 
-     "write_rows()\n"
+     "_write_rows()\n"
+     "\n"
+     "Write data at the specified row.\n"},
+
+    {"_write_rows_sortind",
+     (PyCFunction)PyColumn_write_rows_sortind,
+     METH_VARARGS, 
+     "_write_rows_sortind()\n"
      "\n"
      "Write data at the specified row.\n"},
 
@@ -465,6 +597,13 @@ static PyMethodDef PyColumn_methods[] = {
      "_read_rows()\n"
      "\n"
      "Read rows into input array.\n"},
+
+    {"_read_rows_sortind",
+     (PyCFunction)PyColumn_read_rows_sortind,
+     METH_VARARGS, 
+     "_read_rows_sortind()\n"
+     "\n"
+     "Read rows into input array using sort indices.\n"},
 
     /*
     {"_read_rows_pages",

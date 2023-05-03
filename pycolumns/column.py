@@ -311,6 +311,10 @@ class Column(object):
         sequences, etc.
         """
         self._col[arg] = values
+        # todo, context manager for this so only updates index after leaving
+        # context
+        if self.has_index:
+            self.update_index()
 
     def read(self, rows=None):
         """
@@ -556,8 +560,7 @@ class Column(object):
         Parameters
         ----------
         values: scalar or array
-            Value or values to match.  These entries should be
-            unique to avoid unexpected results.
+            Value or values to match.
 
         Returns
         -------
@@ -566,7 +569,8 @@ class Column(object):
         import numpy as np
         from .indices import Indices
 
-        values = np.array(values, ndmin=1, copy=False)
+        # this makes an array
+        values = np.unique(values)
 
         # query each separately
         ind_list = []

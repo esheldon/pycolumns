@@ -26,16 +26,34 @@ class Indices(np.ndarray):
 
     """
     def __new__(self, init_data, copy=False, is_sorted=False):
-        self._is_sorted = is_sorted
 
-        # always force native byte order since we send this to C code
-        # when using fitsio
+        # always force i8 and native byte order since we send this to C code
         arr = np.array(init_data, dtype='i8', copy=copy)
         shape = arr.shape
 
         ret = np.ndarray.__new__(self, shape, arr.dtype,
                                  buffer=arr)
+
+        self._is_sorted = is_sorted
+        if arr.ndim == 0:
+            self._is_sorted = True
+
         return ret
+
+    def get_minmax(self):
+        if self.ndim == 0:
+            mm = int(self), int(self)
+        else:
+
+            if self.is_sorted:
+                imin, imax = 0, self.size - 1
+            else:
+                s = self.sort_index
+                imin, imax = s[0], s[-1]
+
+            mm = self[imin], self[imax]
+
+        return mm
 
     @property
     def sort_index(self):
@@ -63,6 +81,7 @@ class Indices(np.ndarray):
         if not self.is_sorted:
             if self.ndim > 0:
                 super(Indices, self).sort()
+            self._sort_index = None
             self._is_sorted = True
 
     def array(self):
@@ -74,7 +93,8 @@ class Indices(np.ndarray):
             w = np.intersect1d(self, ind)
         else:
             raise ValueError("comparison index must be an Indices object")
-        return Indices(w)
+
+        return Indices(w, is_sorted=True)
 
     def __or__(self, ind):
         # take the unique union
@@ -83,9 +103,16 @@ class Indices(np.ndarray):
         else:
             raise ValueError("comparison index must be an Indices object")
 
-        return Indices(w)
+        return Indices(w, is_sorted=True)
 
     def __repr__(self):
-        rep = np.ndarray.__repr__(self)
-        rep = rep.replace('array', 'Indices')
-        return rep
+        arep = np.ndarray.__repr__(self)
+        arep = arep.replace('array', 'Indices')
+
+        rep = [
+            'Indices:',
+            f'    size: {self.size}',
+            f'    sorted: {self.is_sorted}',
+            arep,
+        ]
+        return '\n'.join(rep)
