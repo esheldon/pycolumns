@@ -323,4 +323,15 @@ def get_data_with_conversion(data, dtype, ndmin=1):
     returns the data, possibly converted to the specified type,
     otherwise just a new ref
     """
-    return np.array(data, ndmin=ndmin, dtype=dtype, copy=False)
+    try:
+        ndata = np.array(data, ndmin=ndmin, dtype=dtype, copy=False)
+    except ValueError as err:
+        if isinstance(data, np.ndarray):
+            raise ValueError(
+                f'Could not convert data of type {data.dtype} to {dtype}: '
+                f'{err}'
+            )
+        else:
+            raise
+
+    return ndata
