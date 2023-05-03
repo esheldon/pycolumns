@@ -482,7 +482,7 @@ class Chunks(object):
 
         sortind = rows.sort_index
         if sortind is not None:
-            rows_orig = rows
+            # note original rows is not destroyed
             rows = rows[sortind]
 
         chunk_indices = util.get_chunks(

@@ -120,7 +120,9 @@ def test_access(compression):
 
             # automatic conversion works num -> string
             cols['scol'][:] = np.arange(cols.nrows)
-            assert np.all(cols['scol'][:] == np.arange(cols.nrows).astype('U5'))
+            assert np.all(
+                cols['scol'][:] == np.arange(cols.nrows).astype('U5')
+            )
 
             cols['rand'][:] = cols['id'][:]
             assert np.all(
