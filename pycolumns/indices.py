@@ -38,7 +38,9 @@ class Indices(np.ndarray):
         Indices([3, 4, 5, 6])
 
     """
-    def __new__(self, init_data, copy=False, is_sorted=False, is_checked=False):
+    def __new__(
+        self, init_data, copy=False, is_sorted=False, is_checked=False
+    ):
 
         # always force i8 and native byte order since we send this to C code
         arr = np.array(init_data, dtype='i8', copy=copy)
