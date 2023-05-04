@@ -100,7 +100,6 @@ def test_updating():
     import os
     import tempfile
     import numpy as np
-    from .. import _column
     from ..columns import Columns
 
     num = 20
