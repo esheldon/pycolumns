@@ -6,7 +6,6 @@ TODO
           would need to do something new
             1. push data toward end of file
             2. mark chunk bad and copy to end?  Can vacuum later
-    - ability to add a column
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
         - get_subcols()
