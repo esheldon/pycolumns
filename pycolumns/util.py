@@ -3,7 +3,7 @@ import numpy as np
 from . import defaults
 
 
-def extract_rows(rows, nrows, sort=True, check_slice_stop=False):
+def extract_rows(rows, nrows, check_slice_stop=False):
     """
     extract rows for reading
 
@@ -11,14 +11,20 @@ def extract_rows(rows, nrows, sort=True, check_slice_stop=False):
     ----------
     rows: sequence, Indices, slice or None
         Possible rows to extract
-    sort: bool, optional
-        Whether to sort when converted to Indices
+    nrows: int
+        Total number of rows
+    check_slice_stop: bool, optional
+        this is for doing row updates and when we need
+        the slice to be exact, not go beyond nrows
 
     Returns
     -------
-    Indices, possibly sorted.  Note this does not make a copy of the data
+    Indices, or slice.  possibly sorted.
     """
     from .indices import Indices
+
+    if isinstance(rows, Indices) and rows.is_checked:
+        return rows
 
     if isinstance(rows, slice):
         s = extract_slice(rows, nrows, check_slice_stop=check_slice_stop)
@@ -30,15 +36,23 @@ def extract_rows(rows, nrows, sort=True, check_slice_stop=False):
 
     elif rows is None:
         output = slice(0, nrows)
-
     elif isinstance(rows, Indices):
         output = rows
-
     else:
         output = Indices(rows)
 
-    # if isinstance(output, Indices) and sort:
-    #     output.sort()
+    if isinstance(output, Indices):
+        if output.ndim == 0 and output < 0:
+            output = Indices(nrows + output, is_checked=True)
+        else:
+            w, = np.where(output < 0)
+            if w.size > 0:
+                # make a copy since we don't want to modify underlying
+                # input data
+                output = output.copy()
+                output[w] += nrows
+                output.is_checked = True
+                assert output.is_checked
 
     return output
 
@@ -46,12 +60,29 @@ def extract_rows(rows, nrows, sort=True, check_slice_stop=False):
 def extract_slice(s, nrows, check_slice_stop=False):
     start = s.start
     stop = s.stop
+
     if stop is not None and check_slice_stop:
+        # this is for doing row updates and when we need
+        # the slice to be exact, not go beyond nrows
         if stop > nrows:
-            raise ValueError(f'slice stop {stop} > nrows {nrows}')
+            raise IndexError(f'slice stop {stop} > nrows {nrows}')
 
     if start is None:
         start = 0
+    if stop is None:
+        stop = nrows
+
+    if start < 0:
+        start = nrows + start
+        if start < 0:
+            raise IndexError("Index out of bounds")
+
+    if stop < 0:
+        stop = nrows + start + 1
+
+    if stop < start:
+        # will return an empty struct
+        stop = start
 
     if stop is None or stop > nrows:
         stop = nrows

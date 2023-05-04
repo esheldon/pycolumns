@@ -8,8 +8,6 @@ TODO
           would need to do something new
             1. push data toward end of file
             2. mark chunk bad and copy to end?  Can vacuum later
-    - in _column.py allow negative indices/slices
-    - add examples with compression
     - Add deletion of columns/entries
     - look into optimizing slice reads for chunks
     - ability to add a column
@@ -623,7 +621,7 @@ class Columns(dict):
 
         # converts to slice or Indices and converts stepped slices to
         # arange
-        rows = util.extract_rows(rows=rows, nrows=self.nrows, sort=True)
+        rows = util.extract_rows(rows=rows, nrows=self.nrows)
 
         if asdict:
             # Just putting the arrays into a dictionary.

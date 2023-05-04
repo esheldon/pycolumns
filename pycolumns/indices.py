@@ -11,6 +11,19 @@ class Indices(np.ndarray):
     and "|" operators.  These return the intersection or union of values in two
     Indices objects.
 
+    Parameters
+    ----------
+    init_data: array or Indices
+        The initial data
+    copy: bool, optional
+        If set to True, ensure a copy of the input data is made
+    is_sorted: bool, optional
+        If set to True, the input data are sorted
+    is_checked: bool, optional
+        If set to True, the input rows have been checked to be in bounds,
+        and negatives are converted to positives.  This can be set later
+        with the .is_checked setter
+
     Methods:
         The "&" and "|" operators are defined.
 
@@ -25,7 +38,7 @@ class Indices(np.ndarray):
         Indices([3, 4, 5, 6])
 
     """
-    def __new__(self, init_data, copy=False, is_sorted=False):
+    def __new__(self, init_data, copy=False, is_sorted=False, is_checked=False):
 
         # always force i8 and native byte order since we send this to C code
         arr = np.array(init_data, dtype='i8', copy=copy)
@@ -37,6 +50,8 @@ class Indices(np.ndarray):
         self._is_sorted = is_sorted
         if arr.ndim == 0:
             self._is_sorted = True
+
+        self._is_checked = is_checked
 
         return ret
 
@@ -73,6 +88,22 @@ class Indices(np.ndarray):
         returns True if sort has been run
         """
         return self._is_sorted
+
+    @property
+    def is_checked(self):
+        """
+        returns True if the rows have been checked for negatives and
+        fixed
+        """
+        return self._is_checked
+
+    @is_checked.setter
+    def is_checked(self, val):
+        """
+        returns True if the rows have been checked for negatives and
+        fixed
+        """
+        self._is_checked = val
 
     def sort(self):
         """

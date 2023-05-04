@@ -114,6 +114,11 @@ def test_access(compression):
                 cols[name][row] = val
                 assert np.all(data[name][:] == cols[name][:])
 
+            # check negative indices
+            assert cols[name][-2] == cols[name][num-2]
+            assert np.all(cols[name][[-3, -1]] == cols[name][[num-3, num-1]])
+            assert np.all(cols[name][-3:] == cols[name][[num-3, num-2, num-1]])
+
             with pytest.raises(ValueError):
                 # tring to set number from string not representing numbers
                 cols['rand'][:] = cols['scol'][:]
