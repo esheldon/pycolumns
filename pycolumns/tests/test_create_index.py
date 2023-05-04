@@ -124,3 +124,16 @@ def test_updating():
             assert cols['ind']._index.size == data.size
 
         assert cols['ind']._index.size == cols['ind'].size
+
+        cols['ind'][:] = np.arange(cols.nrows)
+        with cols['ind'].updating():
+            cols['ind'][5:10] = 88
+            assert np.all(cols['ind'][5:10] == 88)
+
+            # should not return any
+            w = cols['ind'] == 88
+            assert w.size == 0
+
+        # should not return any
+        w = cols['ind'] == 88
+        assert w.size == 5

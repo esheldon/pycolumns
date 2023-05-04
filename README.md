@@ -216,6 +216,18 @@ c['x'][10:20] = 3
 c['name'][[5, 6]] = ['alpha', 'beta']
 c['y'][50] = 1.25
 
+# if you have indices it can be better not to rebuild them
+# until all your updates are finished. Use an updating context
+# for this: the index is not updated until exiting the context
+
+with cols.updating():
+    cols.append(newdata1)
+    cols.append(newdata2)
+
+with cols['id'].updating():
+    cols['id'][5:10] = 33
+    cols['id'][99:200] = 66
+
 # update dictionary.  Only the fields in the input dictionary are updated or
 # added
 c['meta'].update({'extra': 5})

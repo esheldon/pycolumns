@@ -1,9 +1,6 @@
 """
 TODO
 
-    - can't set rows/slices with constant
-        - would be useful for fill
-    - Context only works for appending
     - Add update of entries for compressed
         - if chunk shrinks, could write in the chunk, if expands
           would need to do something new

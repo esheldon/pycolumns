@@ -79,6 +79,7 @@ class Column(object):
         self._cache_mem = cache_mem
         self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
         self._verbose = verbose
+        self._is_updating = False
         self.reload()
 
     def reload(self):
@@ -108,10 +109,6 @@ class Column(object):
         self._init_index()
 
     @property
-    def verbose(self):
-        return self._verbose
-
-    @property
     def name(self):
         """
         get the name type of the column
@@ -124,6 +121,14 @@ class Column(object):
         get the directory holding the file
         """
         return self._dir
+
+    @property
+    def verbose(self):
+        return self._verbose
+
+    @property
+    def is_updating(self):
+        return self._is_updating
 
     @property
     def type(self):
@@ -309,8 +314,20 @@ class Column(object):
         # self._check_data_dtype(data)
         self._col.append(data)
 
-        if update_index:
+        if update_index and not self.is_updating:
             self.update_index()
+
+    def updating(self):
+        """
+        This enteres the updating context, which delays index
+        updates until after exiting the context
+
+        with col.updating():
+            col[5:10] = 25
+            col[35:88] = 99
+        """
+        self._is_updating = True
+        return self
 
     def _check_data(self, data):
         if data.dtype.names is not None:
@@ -349,7 +366,8 @@ class Column(object):
 
         # todo, context manager for this so only updates index after leaving
         # context
-        self.update_index()
+        if not self.is_updating:
+            self.update_index()
 
     def read(self, rows=None):
         """
@@ -816,6 +834,14 @@ class Column(object):
         indices = self._index[ilow:ihigh]
 
         return Indices(indices)
+
+    def __enter__(self):
+        self._is_updating = True
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self._is_updating = False
+        self.update_index()
 
     def __repr__(self):
         indent = '  '
