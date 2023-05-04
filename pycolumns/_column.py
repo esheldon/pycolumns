@@ -58,6 +58,20 @@ class Column(_column_pywrap.Column):
         """
         return self._verbose
 
+    def resize(self, nrows):
+        """
+        Expand or truncate the file to num rows, filling with zeros if needed.
+
+        Parameters
+        ----------
+        nrows: int
+            New number of rows
+        """
+
+        if nrows != self.nrows:
+            nbytes = nrows * self.dtype.itemsize
+            self._resize_bytes(nbytes)
+
     def append(self, data):
         """
         append data to the file
@@ -96,6 +110,17 @@ class Column(_column_pywrap.Column):
 
         if row + data.size > self.nrows:
             self._nrows = row + data.size
+
+    def _fill_slice(self, value, s):
+        """
+        Fill the slice with the indicated value
+        """
+        data = util.get_data_with_conversion(value, self.dtype)
+        if data.size != 1:
+            raise ValueError(
+                f'can only fill with a scalar, got length {data.size}'
+            )
+        super()._fill_slice(data, s.start, s.stop)
 
     # def read(self):
     #     """
@@ -272,13 +297,16 @@ class Column(_column_pywrap.Column):
 
         if isinstance(rows, slice):
             nrows = rows.stop - rows.start
-            if nrows != data.size:
-                raise ValueError(
-                    f'mismatch slice size {nrows} and data size {data.size} '
-                    f'when writing'
-                )
+            if np.isscalar(data) or (len(data) == 1 and nrows > 1):
+                self._fill_slice(data, rows)
+            else:
+                if nrows != len(data):
+                    raise ValueError(
+                        f'mismatch slice size {nrows} and data '
+                        f'size {len(data)} when writing'
+                    )
 
-            self.write_at(data, rows.start)
+                self.write_at(data, rows.start)
         else:
             if rows.ndim == 0:
                 self.write_at(data, rows)

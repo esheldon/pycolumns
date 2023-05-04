@@ -194,9 +194,18 @@ sch = {
 
 schema = pyc.TableSchema.from_schema(sch)
 
+# add an uncompressed column, filling with zeros
+# currently only uncompressed columns can be added after
+# the columns have data
+
+>>> cschema = pyc.ColumnSchema('newcol', dtype='f4')
+>>> c.create_column(cschema)
+>>> assert np.all(c['newcol'][:] == 0)
+
 # add a dictionary column.
 >>> c.create_dict('weather')
 >>> c['weather'].write({'temp': 30.1, 'humid': 0.5})
+
 
 # overwrite dict column
 >>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})

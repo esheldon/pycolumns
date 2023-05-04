@@ -73,6 +73,71 @@ pyc_seek_row(struct PyColumn* self, npy_intp row, npy_intp elsize) {
     fseek(self->fptr, offset, SEEK_SET);
 }
 
+// Resize the file to nbytes, expanding with zeros if necessary
+static PyObject*
+PyColumn_resize_bytes(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    long long nbytes = 0;
+
+    if (!PyArg_ParseTuple(args, (char*)"L", &nbytes)) {
+        return NULL;
+    }
+
+    rewind(self->fptr);
+    if (0 != ftruncate(fileno(self->fptr), nbytes)) {
+        PyErr_Format(PyExc_IOError,
+                     "Could not truncate file to %lld bytes: %s",
+                     nbytes, strerror(errno));
+        return NULL;
+    }
+    fflush(self->fptr);
+
+    Py_RETURN_NONE;
+}
+
+// Append data to file
+static PyObject*
+PyColumn_fill_slice(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    long long start = 0, stop = 0;
+    npy_intp elsize = 0, index = 0;
+    PyArrayObject* array = NULL;
+
+    if (!PyArg_ParseTuple(args, (char*)"OLL", &array, &start, &stop)) {
+        return NULL;
+    }
+
+    if (!check_array_size(array, 1)) {
+        return NULL;
+    }
+
+    elsize = PyArray_ITEMSIZE(array);
+
+    for (index=start; index < stop; index ++) {
+        pyc_seek_row(self, index, elsize);
+
+        if (PyArray_ToFile(array, self->fptr, "", "") != 0) {
+            PyErr_Format(PyExc_IOError,
+                         "Error writing data to %s with mode %s",
+                         self->fname, self->mode);
+            return NULL;
+        }
+    }
+
+    fflush(self->fptr);
+
+    Py_RETURN_NONE;
+}
+
+
 // Append data to file
 static PyObject*
 PyColumn_append(
@@ -556,6 +621,20 @@ PyColumn_repr(struct PyColumn* self) {
 }
 
 static PyMethodDef PyColumn_methods[] = {
+    {"_resize_bytes",
+     (PyCFunction)PyColumn_resize_bytes,
+     METH_VARARGS, 
+     "_resize_bytes()\n"
+     "\n"
+     "Resize the file to nbytes, expanding and filling with zeros if needed"},
+
+    {"_fill_slice",
+     (PyCFunction)PyColumn_fill_slice,
+     METH_VARARGS, 
+     "_fill_slice()\n"
+     "\n"
+     "Fill the slice with the give value."},
+
     {"_append",
      (PyCFunction)PyColumn_append,
      METH_VARARGS, 

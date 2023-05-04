@@ -278,6 +278,18 @@ class Column(object):
                 # verbose=self.verbose,
             )
 
+    def resize(self, nrows):
+        """
+        Expand or truncate the file to num rows, filling with zeros if needed.
+        """
+        if isinstance(self._col, CColumn):
+            self._col.resize(nrows)
+        else:
+            raise ValueError('cannot resize compressed data')
+
+        if self.has_index:
+            self.update_index()
+
     def _append(self, data, update_index=True):
         """
         Append data to the column.  Data are appended.  If the file has not

@@ -1,6 +1,8 @@
 """
 TODO
 
+    - can't set rows/slices with constant
+        - would be useful for fill
     - Context only works for appending
     - Add update of entries for compressed
         - if chunk shrinks, could write in the chunk, if expands
@@ -49,7 +51,7 @@ class Columns(dict):
 
         if not os.path.exists(dir):
             raise RuntimeError(
-                f'dir {dir} does not exist.  Use create_columns to initialize'
+                f'dir {dir} does not exist.  Use Columns.create to initialize'
             )
 
         self._dir = dir
@@ -272,7 +274,7 @@ class Columns(dict):
         name = '.'.join(bname.split('.')[0:-1])
         return name
 
-    def _load(self):
+    def _load(self, verify=True):
         """
         Load all entries
         """
@@ -305,7 +307,8 @@ class Columns(dict):
                     fname, cache_mem=self.cache_mem, verbose=self.verbose,
                 )
 
-        self.verify()
+        if verify:
+            self.verify()
 
     def verify(self):
         """
@@ -328,6 +331,22 @@ class Columns(dict):
                             'column size mismatch for %s '
                             'got %d vs %d' % (c, this_nrows, self.nrows)
                         )
+
+    def create_column(self, schema):
+        """
+        Create a new column, filling with zeros to the right number
+        of rows
+
+        Parameters
+        ----------
+        schema: ColumnSchema
+            A ColumnSchema object
+
+            schema = ColumnSchema(name='x', dtype='f4')
+            cols.create_column(schema)
+        """
+        table_schema = TableSchema([schema])
+        self._add_columns(table_schema, fill=True)
 
     def create_dict(self, name, data={}):
         """
@@ -456,7 +475,7 @@ class Columns(dict):
         """
         super().clear()
 
-    def _add_columns(self, schema):
+    def _add_columns(self, schema, fill=False):
         """
         Initialize new columns.  Currently this must be done while all other
         columns are zero size to have consistency
@@ -465,6 +484,9 @@ class Columns(dict):
         ----------
         schema: TableSchema or dict
             Schema holding information for each column.
+        fill: bool, optional
+            If set to True, the new columns are filled to zeros out to
+            the current nrows
         """
 
         # Try to convert to schema
@@ -491,6 +513,11 @@ class Columns(dict):
                 with open(cfile, 'w') as fobj:  # noqa
                     # just to create the empty file
                     pass
+
+        if fill and self.nrows > 0:
+            self._load(verify=False)
+            for name in schema:
+                self[name].resize(self.nrows)
 
         self._load()
 

@@ -13,7 +13,7 @@ def test_create(cache_mem, compression, verbose, fromdict):
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..schema import TableSchema
+    from ..schema import TableSchema, ColumnSchema
 
     seed = 333
     num = 20
@@ -97,11 +97,7 @@ def test_create(cache_mem, compression, verbose, fromdict):
             )
             cols.append(bad_data)
 
-        # can currently update column at a time
-        # cols['rand'][5] = 35
-        # assert cols['rand'][5] == 35
-
-        # idx = [8, 12]
-        # vals = [1.0, 2.0]
-        # cols['rand'][idx] = vals
-        # assert np.all(cols['rand'][idx] == vals)
+        newschema = ColumnSchema('newcol', dtype='i4')
+        cols.create_column(newschema)
+        assert cols['newcol'][:].size == cols.size
+        assert np.all(cols['newcol'][:] == 0)

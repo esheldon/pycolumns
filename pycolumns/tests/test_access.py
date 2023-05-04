@@ -133,3 +133,10 @@ def test_access(compression):
             assert np.all(
                 cols['rand'][:] == cols['id'][:].astype(cols['rand'].dtype)
             )
+
+            # filling slice with scalar
+            cols['id'][5:10] = 3
+            assert np.all(cols['id'][5:10] == 3)
+
+            cols['scol'][5:10] = 'test'
+            assert np.all(cols['scol'][5:10] == 'test')
