@@ -231,6 +231,18 @@ c['meta'].update({'extra': 5})
 # reload all columns or specified column/column list
 >>> c.reload()
 
+# delete a column or other entry.  This will prompt the user
+# to confirm the deletion
+>>> c.delete_entry('id')
+# no prompt
+>>> c.delete_entry('id', yes=True)
+
+# delete all data in the columns store
+# with prompt
+>>> c.delete()
+# no prompt
+>>> c.delete(yes=True)
+
 # to configure the amount of memory used during index creation, specify
 # cache_mem is 0.5 gigabytes
 >>> cols = pyc.Columns(fname, cache_mem='0.5g')
