@@ -3,7 +3,6 @@ import pytest
 
 @pytest.mark.parametrize('cache_mem', [1.0, 0.01])
 @pytest.mark.parametrize('compression', [False, True])
-# @pytest.mark.parametrize('cache_mem', [1.0])
 def test_create_index(cache_mem, compression):
     """
     cache_mem of 0.01 will force use of mergesort
@@ -92,3 +91,37 @@ def test_create_index_str(compression):
         ind = (data['scol'] == data['scol'][5])
         rd = data['scol'][ind]
         assert rd.size == 1
+
+
+def test_updating():
+    """
+    cache_mem of 0.01 will force use of mergesort
+    """
+    import os
+    import tempfile
+    import numpy as np
+    from .. import _column
+    from ..columns import Columns
+
+    num = 20
+    data = np.zeros(num, dtype=[('ind', 'i8')])
+    data['ind'] = np.arange(num)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        cdir = os.path.join(tmpdir, 'test.cols')
+        cols = Columns.from_array(cdir, data, verbose=True)
+
+        cols['ind'].create_index()
+        assert cols['ind'].has_index
+        assert cols['ind']._index.size == cols['ind'].size
+
+        # in context, indexes are not updated during an append
+        with cols.updating():
+            cols.append(data)
+
+            assert cols['ind']._index.size != cols['ind'].size
+            assert cols['ind'].size == 2 * data.size
+            assert cols['ind']._index.size == data.size
+
+        assert cols['ind']._index.size == cols['ind'].size

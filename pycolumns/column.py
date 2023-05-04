@@ -255,7 +255,7 @@ class Column(object):
                 # verbose=self.verbose,
             )
 
-    def _append(self, data):
+    def _append(self, data, update_index=True):
         """
         Append data to the column.  Data are appended.  If the file has not
         been initialized, the data type is initialized to that of the input
@@ -274,8 +274,8 @@ class Column(object):
         # self._check_data_dtype(data)
         self._col.append(data)
 
-        if self.has_index:
-            self._update_index()
+        if update_index:
+            self.update_index()
 
     def _check_data(self, data):
         if data.dtype.names is not None:
@@ -311,10 +311,10 @@ class Column(object):
         sequences, etc.
         """
         self._col[arg] = values
+
         # todo, context manager for this so only updates index after leaving
         # context
-        if self.has_index:
-            self.update_index()
+        self.update_index()
 
     def read(self, rows=None):
         """
@@ -492,7 +492,8 @@ class Column(object):
         """
         Recreate the index for this column.
         """
-        self.create_index(overwrite=True)
+        if self.has_index:
+            self.create_index(overwrite=True)
 
     def delete_index(self):
         """

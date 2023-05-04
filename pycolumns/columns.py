@@ -1,8 +1,7 @@
 """
 TODO
 
-    - could make with context for updating so it only rebuilds
-      index at the end
+    - Context only works for appending
     - Add update of entries for compressed
         - if chunk shrinks, could write in the chunk, if expands
           would need to do something new
@@ -58,6 +57,7 @@ class Columns(dict):
         self._dir = dir
         self._type = 'cols'
         self._verbose = verbose
+        self._is_updating = False
         self._cache_mem = cache_mem
         self._cache_mem_bytes = util.convert_to_bytes(cache_mem)
         self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
@@ -249,6 +249,10 @@ class Columns(dict):
     @property
     def verbose(self):
         return self._verbose
+
+    @property
+    def is_updating(self):
+        return self._is_updating
 
     @property
     def cache_mem(self):
@@ -553,7 +557,19 @@ class Columns(dict):
         if name not in self:
             raise RuntimeError(f'column {name} does not exist')
 
-        self[name]._append(data)
+        self[name]._append(data, update_index=not self.is_updating)
+
+    def updating(self):
+        """
+        This enteres the updating context, which delays index
+        updates until after exiting the context
+
+        with cols.updating():
+            cols.append(data1)
+            cols.append(data2)
+        """
+        self._is_updating = True
+        return self
 
     def delete_entry(self, name, yes=False):
         """
@@ -705,6 +721,16 @@ class Columns(dict):
                         )
 
         return columns
+
+    def __enter__(self):
+        self._is_updating = True
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self._is_updating = False
+
+        for name in self.column_names:
+            self[name].update_index()
 
     def __repr__(self):
         """
