@@ -134,14 +134,27 @@ class Column(object):
 
     @property
     def filenames(self):
-        return [
+        """
+        get a list of paths to all files associated with
+        this column
+        """
+        fnames = [
             self.meta_filename,
             self.array_filename,
-            self.index_filename,
-            self.index1_filename,
-            self.sorted_filename,
-            self.chunks_filename,
         ]
+
+        meta = self.meta
+        if 'compression' in meta and meta['compression']:
+            fnames += [self.chunks_filename]
+
+        if self.has_index:
+            fnames += [
+                self.index_filename,
+                self.index1_filename,
+                self.sorted_filename,
+            ]
+        return fnames
+
     @property
     def meta_filename(self):
         """
