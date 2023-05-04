@@ -1,9 +1,8 @@
 """
 TODO
 
-    - rebuild index after updating column data
-        - could make with context for updating so it only rebuilds
-          index at the end
+    - could make with context for updating so it only rebuilds
+      index at the end
     - Add update of entries for compressed
         - if chunk shrinks, could write in the chunk, if expands
           would need to do something new
