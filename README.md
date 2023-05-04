@@ -1,9 +1,9 @@
 A simple, efficient column-oriented, pythonic data store.
 
 The focus is currently on efficiency of reading and writing.  Each table column
-can optionally be compressed, and be indexed for fast searches.  Basic
-consistency is ensured for the columns in the table, but the database is not
-fully ACID.
+can optionally be compressed using blosc, and can be indexed for fast searches.
+Basic consistency is ensured for the columns in the table, but the database is
+not fully ACID.
 
 The storage is a simple directory with files on disk.  The data for each column
 in a table are stored in separate files for simplicity and efficiency.
@@ -129,7 +129,7 @@ Columns:
 >>> v = cols['telemetry']['voltage'][:]
 
 #
-# Creating a columns data store
+# Creating a columns data store and adding or updating data
 #
 
 # the easiest way is to create from an existing array or dict of arrays
@@ -147,27 +147,43 @@ data['x'] = rng.uniform(size=num)
 data['y'] = rng.uniform(size=num)
 data['name'] = data['id'].astype('U10')
 
-# use default compression for id and name
+cols = pyc.Columns.from_array(coldir, data)
+
+# This version uses default compression for id and name
 cols = pyc.Columns.from_array(coldir, data, compression=['id', 'name'])
+
+# Append more data to the columns. The input data is a structured
+# array or a dict of arrays.
+
+>>> c.append(data1)
+>>> c.append(data2)
 
 # add indexes for id and name
 cols['id'].create_index()
 cols['name'].create_index()
 
 # you can also create directly from a schema.  The schema itself
-# can be created from an array or from a dict
+# can be created from an array, individual Column schemas, or from a dict
 # here we set the chunksize for compressed columns to 10 megabytes
 
 schema = pyc.TableSchema.from_array(array, compression=['id'], chunksize='10m')
 cols = pyc.Columns.create(coldir, schema=schema)
 
-# or you can build the schema from columns
-cid = pyc.ColumnSchema('id', dtype='i8', compression=True)
+# or you can build the schema from column schema
 cx = pyc.ColumnSchema('x', dtype='f4')
 
-schema = pyc.TableSchema([cid, cx])
+# compression can be set to True to get the defaults, or a dict
+# specifying blosc options
+cid = pyc.ColumnSchema('id', dtype='i8', compression=True)
+cname = pyc.ColumnSchema(
+    'name',
+    dtype='U5',
+    compression={'cname': 'zstd', 'zlevel': 5, 'shuffle': 'bitshuffle'}
+)
 
-# or from a dict
+schema = pyc.TableSchema([cid, cx, cname])
+
+# You can also use a dict
 sch = {
     'id': {
         'dtype': 'i8',
@@ -178,11 +194,6 @@ sch = {
 
 schema = pyc.TableSchema.from_schema(sch)
 
-# Append data
-
->>> c.append(recdata)
->>> c.append(new_data)
-
 # add a dictionary column.
 >>> c.create_dict('weather')
 >>> c['weather'].write({'temp': 30.1, 'humid': 0.5})
@@ -190,12 +201,14 @@ schema = pyc.TableSchema.from_schema(sch)
 # overwrite dict column
 >>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})
 
-# Update column data
+# Update column data in place.  Currently only uncompressed columns can be
+# updated
 c['x'][10:20] = 3
 c['name'][[5, 6]] = ['alpha', 'beta']
 c['y'][50] = 1.25
 
-# update dict
+# update dictionary.  Only the fields in the input dictionary are updated or
+# added
 c['meta'].update({'extra': 5})
 
 # get all names, including dictionary and sub Columns
