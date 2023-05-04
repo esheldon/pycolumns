@@ -7,7 +7,6 @@ TODO
           would need to do something new
             1. push data toward end of file
             2. mark chunk bad and copy to end?  Can vacuum later
-    - Add deletion of columns/entries
     - look into optimizing slice reads for chunks
     - ability to add a column
     - Maybe don't have dicts and subcols in self as a name
@@ -265,26 +264,6 @@ class Columns(dict):
     @property
     def cache_mem_gb(self):
         return self._cache_mem_gb
-
-    def delete(self, yes=False):
-        """
-        delete the entire Columns database
-
-        Parameters
-        ----------
-        yes: bool
-            If True, don't prompt for confirmation
-        """
-        if not yes:
-            answer = input('really delete all data? (y/n) ')
-            if answer.lower() == 'y':
-                yes = True
-
-        if not yes:
-            return
-
-        for name in self:
-            self.delete_entry(name, yes=True)
 
     def _dirbase(self):
         """
@@ -571,6 +550,27 @@ class Columns(dict):
         self._is_updating = True
         return self
 
+    def delete(self, yes=False):
+        """
+        delete the entire Columns database
+
+        Parameters
+        ----------
+        yes: bool
+            If True, don't prompt for confirmation
+        """
+        if not yes:
+            answer = input('really delete all data? (y/n) ')
+            if answer.lower() == 'y':
+                yes = True
+
+        if not yes:
+            return
+
+        original_names = list(self.keys())
+        for name in original_names:
+            self.delete_entry(name, yes=True)
+
     def delete_entry(self, name, yes=False):
         """
         delete the specified entry and reload
@@ -595,19 +595,25 @@ class Columns(dict):
 
         entry = self[name]
         if entry.type == 'cols':
-            print("Removing data for sub columns: %s" % name)
+            print(f'Removing data for sub columns: {name}')
 
             entry.delete(yes=True)
             fname = entry.filename
             if os.path.exists(fname):
                 os.removedirs(fname)
-        else:
+        elif entry.type == 'dict':
+            print(f'Removing data for dict: {name}')
             fname = entry.filename
             if os.path.exists(fname):
-                print("Removing data for entry: %s" % name)
                 os.remove(fname)
+        else:
+            print(f'Removing data for entry: {name}')
+            for fname in entry.filenames:
+                if os.path.exists(fname):
+                    print(f'    Removing: {fname}')
+                    os.remove(fname)
 
-        self.reload()
+        del self[name]
 
     def read(
         self,

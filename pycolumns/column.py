@@ -133,6 +133,16 @@ class Column(object):
         return self._type
 
     @property
+    def filenames(self):
+        return [
+            self.meta_filename,
+            self.array_filename,
+            self.index_filename,
+            self.index1_filename,
+            self.sorted_filename,
+            self.chunks_filename,
+        ]
+    @property
     def meta_filename(self):
         """
         get the filename for the array of this column
