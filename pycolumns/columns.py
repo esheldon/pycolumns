@@ -7,7 +7,6 @@ TODO
           would need to do something new
             1. push data toward end of file
             2. mark chunk bad and copy to end?  Can vacuum later
-    - look into optimizing slice reads for chunks
     - ability to add a column
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
@@ -125,7 +124,7 @@ class Columns(dict):
         os.makedirs(dir)
 
         cols = Columns(dir, cache_mem=cache_mem, verbose=verbose)
-        cols.add_columns(schema)
+        cols._add_columns(schema)
         return cols
 
     @classmethod
@@ -457,7 +456,7 @@ class Columns(dict):
         """
         super().clear()
 
-    def add_columns(self, schema):
+    def _add_columns(self, schema):
         """
         Initialize new columns.  Currently this must be done while all other
         columns are zero size to have consistency
