@@ -118,9 +118,19 @@ class Column(_column_pywrap.Column):
         data = util.get_data_with_conversion(value, self.dtype)
         if data.size != 1:
             raise ValueError(
-                f'can only fill with a scalar, got length {data.size}'
+                f'cannot fill with length {data.size}'
             )
         super()._fill_slice(data, s.start, s.stop)
+
+    def _fill_rows(self, data, rows, sortind=None):
+        if data.size != 1:
+            raise ValueError(
+                f'cannot fill with length {data.size}'
+            )
+        if sortind is not None:
+            super()._fill_rows_sortind(data, rows, sortind)
+        else:
+            super()._fill_rows(data, rows)
 
     # def read(self):
     #     """
@@ -326,10 +336,13 @@ class Column(_column_pywrap.Column):
                 self._check_row(first)
                 self._check_row(last)
 
-                if sortind is None:
-                    self._write_rows(data, rows)
+                if data.size == 1 and rows.size > 1:
+                    self._fill_rows(data, rows, sortind=sortind)
                 else:
-                    self._write_rows_sortind(data, rows, sortind)
+                    if sortind is None:
+                        self._write_rows(data, rows)
+                    else:
+                        self._write_rows_sortind(data, rows, sortind)
 
     def _check_row(self, row):
         if row < 0 or row > self.nrows - 1:

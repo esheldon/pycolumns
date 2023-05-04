@@ -11,6 +11,7 @@ def test_access(compression):
     import numpy as np
     from ..columns import Columns
     from ..schema import TableSchema
+    from ..indices import Indices
 
     seed = 333
     num = 20
@@ -140,3 +141,19 @@ def test_access(compression):
 
             cols['scol'][5:10] = 'test'
             assert np.all(cols['scol'][5:10] == 'test')
+
+            # filling rows with a scalar
+            ind = Indices([3, 5, 8], is_sorted=True)
+            cols['id'][ind] = 9999
+            assert np.all(cols['id'][ind] == 9999)
+
+            cols['scol'][ind] = 'test'
+            assert np.all(cols['scol'][ind] == 'test')
+
+            # filling rows unsorted
+            ind = [8, 1, 3]
+            cols['id'][ind] = -8888
+            assert np.all(cols['id'][ind] == -8888)
+
+            cols['scol'][ind] = '333'
+            assert np.all(cols['scol'][ind] == '333')

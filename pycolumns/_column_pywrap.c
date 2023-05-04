@@ -99,7 +99,7 @@ PyColumn_resize_bytes(
     Py_RETURN_NONE;
 }
 
-// Append data to file
+// Fill a slice with a value
 static PyObject*
 PyColumn_fill_slice(
     struct PyColumn* self,
@@ -108,8 +108,9 @@ PyColumn_fill_slice(
 )
 {
     long long start = 0, stop = 0;
-    npy_intp elsize = 0, index = 0;
+    npy_intp elsize = 0, row = 0, nwrote = 0;
     PyArrayObject* array = NULL;
+    void *ptr = NULL;
 
     if (!PyArg_ParseTuple(args, (char*)"OLL", &array, &start, &stop)) {
         return NULL;
@@ -120,16 +121,31 @@ PyColumn_fill_slice(
     }
 
     elsize = PyArray_ITEMSIZE(array);
+    ptr = PyArray_GETPTR1(array, 0);
 
-    for (index=start; index < stop; index ++) {
-        pyc_seek_row(self, index, elsize);
+    for (row=start; row < stop; row++) {
+        pyc_seek_row(self, row, elsize);
 
-        if (PyArray_ToFile(array, self->fptr, "", "") != 0) {
+        nwrote = fwrite(
+            ptr,
+            elsize,
+            1,
+            self->fptr
+        );
+        if (nwrote < 1) {
+            // NPY_END_THREADS;
             PyErr_Format(PyExc_IOError,
-                         "Error writing data to %s with mode %s",
-                         self->fname, self->mode);
+                         "Error writing row %" NPY_INTP_FMT
+                         " to file", row);
             return NULL;
         }
+
+        /* if (PyArray_ToFile(array, self->fptr, "", "") != 0) { */
+        /*     PyErr_Format(PyExc_IOError, */
+        /*                  "Error writing data to %s with mode %s", */
+        /*                  self->fname, self->mode); */
+        /*     return NULL; */
+        /* } */
     }
 
     fflush(self->fptr);
@@ -293,6 +309,126 @@ PyColumn_write_rows_sortind(
     for (index = 0; index < size; index ++) {
         s = *(npy_int64 *) PyArray_GETPTR1(sortind, index);
         ptr = PyArray_GETPTR1(array, s);
+        row = *(npy_int64 *) PyArray_GETPTR1(rows, s);
+
+        pyc_seek_row(self, row, elsize);
+
+        nwrote = fwrite(
+            ptr,
+            elsize,
+            1,
+            self->fptr
+        );
+        if (nwrote < 1) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Error writing row %" NPY_INTP_FMT
+                         " to file", row);
+            return NULL;
+        }
+    }
+    // NPY_END_THREADS;
+
+    Py_RETURN_NONE;
+}
+
+/*
+   Fill rows with the input value
+*/
+
+static PyObject*
+PyColumn_fill_rows(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL, *rows = NULL;
+    npy_int64 row = 0, elsize = 0;
+    npy_intp nwrote = 0;
+    PyArrayIterObject *it = NULL;
+    void *ptr = NULL;
+
+    // NPY_BEGIN_THREADS_DEF;
+
+    if (!PyArg_ParseTuple(args, (char*)"OO", &array, &rows)) {
+        return NULL;
+    }
+
+    if (!check_array_size(array, 1)) {
+        return NULL;
+    }
+
+    elsize = PyArray_ITEMSIZE(array);
+    ptr = PyArray_GETPTR1(array, 0);
+
+    it = (PyArrayIterObject *) PyArray_IterNew((PyObject *)rows);
+
+    // NPY_BEGIN_THREADS;
+
+    while (it->index < it->size) {
+        row = *(npy_int64 *) it->dataptr;
+
+        pyc_seek_row(self, row, elsize);
+
+        nwrote = fwrite(
+            ptr,
+            elsize,
+            1,
+            self->fptr
+        );
+        if (nwrote < 1) {
+            // NPY_END_THREADS;
+            PyErr_Format(PyExc_IOError,
+                         "Error writing row %" NPY_INTP_FMT
+                         " to file", row);
+            Py_DECREF(it);
+            return NULL;
+        }
+        PyArray_ITER_NEXT(it);
+    }
+    // NPY_END_THREADS;
+    Py_DECREF(it);
+
+    Py_RETURN_NONE;
+}
+
+/*
+   Fill rows with the input value, using a sort index
+*/
+
+static PyObject*
+PyColumn_fill_rows_sortind(
+    struct PyColumn* self,
+    PyObject *args,
+    PyObject *kwds
+)
+{
+    PyArrayObject* array = NULL, *rows = NULL, *sortind = NULL;
+    npy_int64 row = 0, s = 0, elsize = 0, index = 0, size = 0;
+    npy_intp nwrote = 0;
+    void *ptr = NULL;
+    // NPY_BEGIN_THREADS_DEF;
+
+    if (!PyArg_ParseTuple(args, (char*)"OOO", &array, &rows, &sortind)) {
+        return NULL;
+    }
+
+    if (!check_array_size(array, 1)) {
+        return NULL;
+    }
+    if (!ensure_arrays_same_size(rows, "rows", sortind, "sortind")) {
+        return NULL;
+    }
+
+    size = PyArray_SIZE(rows);
+    elsize = PyArray_ITEMSIZE(array);
+    ptr = PyArray_GETPTR1(array, 0);
+
+    // NPY_BEGIN_THREADS;
+
+    for (index = 0; index < size; index ++) {
+        s = *(npy_int64 *) PyArray_GETPTR1(sortind, index);
         row = *(npy_int64 *) PyArray_GETPTR1(rows, s);
 
         pyc_seek_row(self, row, elsize);
@@ -662,6 +798,20 @@ static PyMethodDef PyColumn_methods[] = {
      "_write_rows_sortind()\n"
      "\n"
      "Write data at the specified row.\n"},
+
+    {"_fill_rows",
+     (PyCFunction)PyColumn_fill_rows,
+     METH_VARARGS, 
+     "_fill_rows()\n"
+     "\n"
+     "Fill rows with the input value.\n"},
+
+    {"_fill_rows_sortind",
+     (PyCFunction)PyColumn_fill_rows_sortind,
+     METH_VARARGS, 
+     "_fill_rows_sortind()\n"
+     "\n"
+     "Fill rows with the input value using a sort index.\n"},
 
     {"_read_slice",
      (PyCFunction)PyColumn_read_slice,
