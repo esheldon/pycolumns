@@ -77,7 +77,8 @@ class TableSchema(dict):
 
     @classmethod
     def from_array(
-        cls, array, compression=None, chunksize=DEFAULT_CHUNKSIZE, fill_value=None,
+        cls, array, compression=None, chunksize=DEFAULT_CHUNKSIZE,
+        fill_value=None,
     ):
         """
         Convert an array with fields to a TableSchema
@@ -95,13 +96,13 @@ class TableSchema(dict):
                  - if value is True, use default compression
                  - if value is a dict, return the dict with defaults set for
                    non specified parameters
-        fill_value: dict, optional
-            Optional dict specifying fill values for columns.
         chunksize: dict, str or number
             A dict or str or number
 
             - if str or number, it is applied to all compressed columns.
             - a dict,  keyed by name, it gives chunksize for certain columns.
+        fill_value: dict, optional
+            Optional dict specifying fill values for columns.
 
         Returns
         -------
