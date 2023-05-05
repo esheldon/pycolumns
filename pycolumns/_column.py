@@ -392,9 +392,14 @@ class Column(_column_pywrap.Column):
     def __repr__(self):
         indent = '    '
 
+        if self.dtype.names is not None:
+            dt = self.dtype.descr
+        else:
+            dt = self.dtype.str
+
         rep = [f'filename: {self.filename}']
         rep += [f'mode: {self.mode}']
-        rep += [f'dtype: {self.dtype.str}']
+        rep += [f'dtype: {dt}']
         rep += [f'nrows: {self.nrows}']
 
         rep = [indent + r for r in rep]
