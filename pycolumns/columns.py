@@ -295,14 +295,10 @@ class Columns(dict):
 
             c = None
             if type == 'meta':
-                # self[name] = Column(
-                #     fname, cache_mem=self.cache_mem, verbose=self.verbose,
-                # )
                 c = Column(
                     fname, cache_mem=self.cache_mem, verbose=self.verbose,
                 )
             elif type == 'dict':
-                # self[name] = Dict(fname, verbose=self.verbose)
                 c = Dict(fname, verbose=self.verbose)
             elif type == 'cols':
                 c = Columns(
@@ -408,13 +404,14 @@ class Columns(dict):
             raise ValueError("sub Columns '%s' already exists" % name)
 
         dirname = util.get_filename(dir=self.dir, name=name, type='cols')
-        self[name] = Columns.create(
+        c = Columns.create(
             dirname,
             schema=schema,
             cache_mem=cache_mem,
             verbose=self.verbose,
             overwrite=overwrite,
         )
+        super().__setitem__(name, c)
 
     def create_sub_from_array(
         self,
@@ -795,7 +792,7 @@ class Columns(dict):
         if item.type == 'dict':
             item.write(data)
         elif item.type == 'col':
-            # let the handling occur in Column
+            # let the error handling occur in Column
             self[name][:] = data
         elif item.type == 'cols':
             raise TypeError(
