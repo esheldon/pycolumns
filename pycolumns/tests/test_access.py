@@ -84,6 +84,10 @@ def test_access(compression):
         rmeta = cols['meta'].read()
         assert rmeta == meta
 
+        dnew = {'replaced': 3}
+        cols['meta'] = dnew
+        assert cols['meta'].read() == dnew
+
         if not compression:
             for name in data.dtype.names:
                 data[name][10:15] = (
@@ -157,3 +161,7 @@ def test_access(compression):
 
             cols['scol'][ind] = '333'
             assert np.all(cols['scol'][ind] == '333')
+
+            with pytest.raises(TypeError):
+                # this is trying to replace a Column with somethin, not allowed
+                cols['rand'] = 8

@@ -5,7 +5,7 @@ TODO
         - if chunk shrinks, could write in the chunk, if expands
           would need to do something new
             1. push data toward end of file
-            2. mark chunk bad and copy to end?  Can vacuum later
+            2. other ideas?
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
         - get_subcols()
@@ -162,7 +162,8 @@ class Columns(dict):
                 '1g' = 1 gigabytes
                 '100m' = 100 metabytes
                 '1000k' = 1000 kilobytes
-        Units can be g, m or k, case insenitive
+                '200000b' = 200000 bytes
+        Units can be g, m, k or b case insenitive
 
         verbose: bool, optional
             If set to True, display information
@@ -292,16 +293,25 @@ class Columns(dict):
                 elif type in ['cols', 'dict']:
                     print(f'    loading {type}: {name}')
 
+            c = None
             if type == 'meta':
-                self[name] = Column(
+                # self[name] = Column(
+                #     fname, cache_mem=self.cache_mem, verbose=self.verbose,
+                # )
+                c = Column(
                     fname, cache_mem=self.cache_mem, verbose=self.verbose,
                 )
             elif type == 'dict':
-                self[name] = Dict(fname, verbose=self.verbose)
+                # self[name] = Dict(fname, verbose=self.verbose)
+                c = Dict(fname, verbose=self.verbose)
             elif type == 'cols':
-                self[name] = Columns(
+                c = Columns(
                     fname, cache_mem=self.cache_mem, verbose=self.verbose,
                 )
+
+            if c is not None:
+                # call super setitem to set new entries
+                super().__setitem__(name, c)
 
         if verify:
             self.verify()
@@ -360,7 +370,9 @@ class Columns(dict):
             raise ValueError("column '%s' already exists" % name)
 
         filename = util.get_filename(dir=self.dir, name=name, type='dict')
-        self[name] = Dict(filename, verbose=self.verbose)
+        c = Dict(filename, verbose=self.verbose)
+        # call super setitem directly for new entry
+        super().__setitem__(name, c)
         self[name].write(data)
 
     def create_sub(
@@ -368,7 +380,7 @@ class Columns(dict):
         overwrite=False,
     ):
         """
-        Create a new sub-columns directory
+        Create a new sub Columns directory
 
         parameters
         ----------
@@ -383,7 +395,8 @@ class Columns(dict):
                 '1g' = 1 gigabytes
                 '100m' = 100 metabytes
                 '1000k' = 1000 kilobytes
-            Units can be g, m or k, case insenitive
+                '200000b' = 200000 bytes
+            Units can be g, m, k or b case insenitive
 
         verbose: bool, optional
             If set to True, display information
@@ -415,12 +428,35 @@ class Columns(dict):
         overwrite=False,
     ):
         """
-        Create a new sub-columns directory
+        Create a new sub Columns directory
 
         Parameters
         ----------
         name: str
-            Name for sub-columns
+            Name for sub Columns
+        array: numpy array with fields or dict of arrays
+            An array with fields defined
+        compression: dict, list, bool, or None, optional
+            See TableSchema.from_array for a full explanation
+        chunksize: dict, str or number
+            See TableSchema.from_array for a full explanation
+        append: bool, optional
+            If set to True, the data are also written to the new
+            Default True
+        cache_mem: str or number
+            Cache memory for index creation, default '1g' or one gigabyte.
+            Can be a number in gigabytes or a string
+            Strings should be like '{amount}{unit}'
+                '1g' = 1 gigabytes
+                '100m' = 100 metabytes
+                '1000k' = 1000 kilobytes
+                '200000b' = 200000 bytes
+        Units can be g, m, k or b case insenitive
+
+        verbose: bool, optional
+            If set to True, display information
+        overwrite: bool, optional
+            If the directory exists, remove existing data
         """
 
         if name in self.dict_names:
@@ -748,6 +784,22 @@ class Columns(dict):
                         )
 
         return columns
+
+    def __setitem__(self, name, data):
+        item = self[name]
+        if item.type == 'dict':
+            item.write(data)
+        elif item.type == 'col':
+            raise TypeError(
+                f'Cannot replace an entire Column {name}; did you '
+                f'forget the index or slice?'
+            )
+        elif item.type == 'cols':
+            raise TypeError(
+                f'Cannot replace an entire sub Columns {name}'
+            )
+        else:
+            raise TypeError('Columns object does not support item assignment')
 
     def __enter__(self):
         self._is_updating = True

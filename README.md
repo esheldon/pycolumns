@@ -236,6 +236,13 @@ with cols['id'].updating():
 # added
 c['meta'].update({'extra': 5})
 
+# These replace dict entirely
+c['meta'] = {'x': 5}
+c['meta'].write({'n': 'test'})
+
+# Trying to replace an entire Column or sub Columns raises TypeError
+# c['x'] = 5
+
 # get all names, including dictionary and sub Columns
 # same as list(c.keys())
 >>> c.names
