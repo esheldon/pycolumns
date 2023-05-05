@@ -71,16 +71,19 @@ def test_column(dtype):
             col.read_row_into(indata, ind)
             assert np.all(indata[0] == data[ind])
 
+            # cannot read into array scalar
             with pytest.raises(ValueError):
                 ind = 6
                 indata = np.zeros(1, dtype=data.dtype)
                 col.read_row_into(indata[0], ind)
 
+            # mismatch in ind size and data size
             with pytest.raises(ValueError):
                 ind = [3, 5, 7]
                 indata = np.zeros(5, dtype=data.dtype)
                 col.read_rows_into(indata, ind)
 
+            # mismatch in ind size and data size
             with pytest.raises(ValueError):
                 ind = 3
                 indata = np.zeros(5, dtype=data.dtype)
@@ -128,10 +131,10 @@ def test_column(dtype):
             col[rows] = wdata
             assert np.all(col[rows] == wdata)
 
-            with pytest.raises(ValueError):
-                # bad slice size
+            # bad slice size
+            with pytest.raises(IndexError):
                 col[0:5] = wdata
 
-            with pytest.raises(ValueError):
-                # out of bounds update
+            # out of bounds update
+            with pytest.raises(IndexError):
                 col[np.arange(100)] = np.arange(100)

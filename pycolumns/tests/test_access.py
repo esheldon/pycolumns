@@ -184,5 +184,6 @@ def test_access(compression):
                 cols['rand'] = [3, 4]
 
             ra = cols['sub']['ra'][:]
+            assert np.all(ra == sub_data['ra'])
             with pytest.raises(TypeError):
                 cols['sub'] = 5
