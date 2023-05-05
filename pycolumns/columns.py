@@ -1,6 +1,8 @@
 """
 TODO
 
+    - close files when doing new _load, reload
+    - replace _column.Column _extract_slice_start_stop to allow negatives
     - Add update of entries for compressed
         - if chunk shrinks, could write in the chunk, if expands
           would need to do something new

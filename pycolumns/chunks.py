@@ -143,7 +143,6 @@ class Chunks(object):
         """
 
         data = util.get_data_with_conversion(data, self.dtype)
-        # self._check_dtype(data)
 
         cd = self.chunk_data
         if not cd.has_data():
@@ -265,7 +264,21 @@ class Chunks(object):
         nbytes = data.nbytes
         return nbytes
 
-    def _write_compressed_data(self, data):
+    def _write_compressed_data(self, data, is_compressed=False):
+        if is_compressed:
+            compressed_bytes = data
+        else:
+            compressed_bytes = self._get_compressed_data(data)
+
+        self._fobj.write(compressed_bytes)
+        self._fobj.flush()
+        nbytes = len(compressed_bytes)
+        return nbytes
+
+    def _write_external_compressed_data(self, compressed_bytes, chunk_index):
+        raise NotImplementedError('implement _write_external_compressed_data')
+
+    def _get_compressed_data(self, data):
         import blosc
 
         if data.flags['C_CONTIGUOUS'] or data.flags['F_CONTIGUOUS']:
@@ -283,10 +296,7 @@ class Chunks(object):
                 data.dtype.itemsize,
                 **self.compression
             )
-
-        self._fobj.write(compressed_bytes)
-        nbytes = len(compressed_bytes)
-        return nbytes
+        return compressed_bytes
 
     def _update_chunks_after_write(
         self, nrows, nbytes, overwrite_last=False,
@@ -310,7 +320,7 @@ class Chunks(object):
             nrows_added = nrows
 
         self.chunk_data.update_after_write(
-            nrows=nrows, nbytes=nbytes, overwrite_last=overwrite_last,
+            nrows=nrows, nbytes=nbytes, overwrite=overwrite_last,
         )
 
         self._check_file_position_after_append()
@@ -353,7 +363,7 @@ class Chunks(object):
         # make a writeable copy
         return self._read_chunk(chunk_index).copy()
 
-    def _read_chunk(self, chunk_index):
+    def _read_chunk(self, chunk_index, writeable=False):
         """
         Read a chunk of data from the file
 
@@ -361,9 +371,15 @@ class Chunks(object):
         """
         self._cache_chunk(chunk_index)
 
-        view = self._cached_chunk.view()
-        view.flags['WRITEABLE'] = False
-        return view
+        if writeable:
+            # we need to clear the cache since its going to get updated
+            chunk = self._cached_chunk
+            self._clear_chunk_cache()
+            return chunk
+        else:
+            view = self._cached_chunk.view()
+            view.flags['WRITEABLE'] = False
+            return view
 
     def _cache_chunk(self, chunk_index):
         self._check_chunk(chunk_index)
@@ -406,23 +422,36 @@ class Chunks(object):
     def _read_compressed_chunk(self, chunk_index):
         import blosc
 
+        compressed_bytes = self._read_compressed_bytes(chunk_index)
+
+        cd = self.chunk_data
+        chunk = cd[chunk_index]
+
+        output = np.empty(chunk['nrows'], dtype=self.dtype)
+        blosc.decompress_ptr(
+            compressed_bytes, output.__array_interface__['data'][0]
+        )
+        return output
+
+    def _read_compressed_bytes(self, chunk_index):
         cd = self.chunk_data
 
         chunk = cd[chunk_index]
 
-        self._fobj.seek(chunk['offset'], 0)
+        if chunk['is_external']:
+            fobj, nbytes = self._open_external_file(chunk_index, mode='r')
+        else:
+            fobj = self._fobj
+            fobj.seek(chunk['offset'], 0)
+            nbytes = chunk['nbytes']
 
-        buff = bytearray(chunk['nbytes'])
+        buff = bytearray(nbytes)
 
-        output = np.empty(chunk['nrows'], dtype=self.dtype)
-
-        nread = self._fobj.readinto(buff)
+        nread = fobj.readinto(buff)
         if nread != len(buff):
             raise RuntimeError('Expected to read {len(buff)} but read {nread}')
 
-        blosc.decompress_ptr(buff, output.__array_interface__['data'][0])
-
-        return output
+        return buff
 
     def _check_chunk(self, chunk_index):
         if self.nrows == 0:
@@ -495,10 +524,9 @@ class Chunks(object):
         w, = np.where(h > 0)
         start = 0
 
-        rowmin, _ = rows.get_minmax()
         for ci in w:
             num = h[ci]
-            chunk_data = self._read_chunk(ci)
+            chunk = self._read_chunk(ci)
 
             end = start + num
             rowstart = cd['rowstart'][ci]
@@ -508,13 +536,118 @@ class Chunks(object):
 
             if sortind is not None:
                 srows = sortind[start:end]
-                data[srows] = chunk_data[trows]
+                data[srows] = chunk[trows]
             else:
-                data[start:end] = chunk_data[trows]
+                data[start:end] = chunk[trows]
 
             start += num
 
         return data
+
+    def _set_rows(self, data, rows):
+        cd = self.chunk_data
+
+        if data.size == 1 and rows.size != 1:
+            fill_scalar = True
+        else:
+            fill_scalar = False
+
+        sortind = rows.sort_index
+        if sortind is not None:
+            # note original rows is not destroyed
+            rows = rows[sortind]
+
+        chunk_indices = util.get_chunks(
+            chunkrows_sorted=cd['rowstart'],
+            rows=rows,
+        )
+        # for this we assume rows are sorted
+        h, _ = np.histogram(chunk_indices, np.arange(self.nchunks+1))
+
+        w, = np.where(h > 0)
+        start = 0
+
+        for ci in w:
+            num = h[ci]
+
+            # settin writeable clears the cache
+            chunk = self._read_chunk(ci, writeable=True)
+
+            end = start + num
+            rowstart = cd['rowstart'][ci]
+
+            # this gives us rows within the chunk
+            trows = rows[start:end] - rowstart
+
+            if fill_scalar:
+                chunk[trows] = data
+            else:
+                if sortind is not None:
+                    srows = sortind[start:end]
+                    # data[srows] = chunk[trows]
+                    chunk[trows] = data[srows]
+                else:
+                    # data[start:end] = chunk[trows]
+                    chunk[trows] = data[start:end]
+
+            self._update_chunk(ci, chunk)
+
+            start += num
+
+    def _update_chunk(self, chunk_index, data):
+
+        print('updating chunk with', data)
+        cd = self.chunk_data
+
+        tnrows = cd['nrows'][chunk_index]
+        tnbytes = cd['nbytes'][chunk_index]
+
+        if data.size != tnrows:
+            raise ValueError(f'data size {data.size} != chunk nrows {tnrows}')
+
+        if not self.compression:
+            if data.nbytes != tnbytes:
+                raise ValueError(
+                    f'data nbytes {data.nbytes} != chunk nbytes {tnbytes}'
+                )
+
+            self._fobj.seek(cd['offset'][chunk_index])
+            nbytes = self._write_uncompressed_data(data)
+
+        else:
+            compressed_bytes = self._get_compressed_data(data)
+            nbytes = len(compressed_bytes)
+
+            is_ext = cd['is_external'][chunk_index]
+            print(f'nbytes {nbytes} orig nbytes {tnbytes}')
+            needs_extending = chunk_index != cd.size-1 and nbytes > tnbytes
+
+            if is_ext or needs_extending:
+                self._write_external_compressed_data(
+                    compressed_bytes, chunk_index
+                )
+                cd.update_after_write(
+                    nrows=cd['nrows'][chunk_index],
+                    nbytes=None,  # not used due to is_external=True
+                    overwrite=True,
+                    chunk_index=chunk_index,
+                    is_external=True,
+                )
+            else:
+                # we can write directly into the chunk, just changing the
+                # nbytes entry
+                print('chunk index:', chunk_index)
+                print('seeking to:', cd['offset'][chunk_index])
+                self._fobj.seek(cd['offset'][chunk_index])
+                self._write_compressed_data(
+                    compressed_bytes, is_compressed=True,
+                )
+                cd.update_after_write(
+                    nrows=tnrows,
+                    nbytes=nbytes,
+                    overwrite=True,
+                    chunk_index=chunk_index,
+                )
 
     def __getitem__(self, arg):
         from .indices import Indices
@@ -528,51 +661,47 @@ class Chunks(object):
         if isinstance(rows, slice):
             rows = Indices(np.arange(rows.start, rows.stop, rows.step))
 
-        if isinstance(rows, slice):
-            raise NotImplementedError('implement fast slice')
-            nrows = rows.stop - rows.start
-            data = np.empty(nrows, dtype=self.dtype)
-            super()._read_slice(data, rows.start)
-        else:
-            data = np.empty(rows.size, dtype=self.dtype)
+        data = np.empty(rows.size, dtype=self.dtype)
 
-            if rows.ndim == 0:
-                send_rows = Indices([rows])
-                self._read_rows(data, send_rows)
-                data = data[0]
-            else:
-                self._read_rows(data, rows)
+        if rows.ndim == 0:
+            send_rows = Indices([rows])
+            self._read_rows(data, send_rows)
+            data = data[0]
+        else:
+            self._read_rows(data, rows)
 
         return data
 
-    def __setitem__(self, arg, values):
+    def __setitem__(self, arg, data):
         """
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
-        raise NotImplementedError(
-            'updating compressed columns not yet supported'
-        )
+        from .indices import Indices
 
-    def _extract_slice_start_stop(self, s):
-        nrows = self.nrows
+        data = util.get_data_with_conversion(data, self.dtype)
 
-        start = s.start
-        if start is None:
-            start = 0
-        stop = s.stop
-        if stop is None:
-            stop = nrows
-        elif stop > nrows:
-            stop = nrows
-        return start, stop
+        # raise NotImplementedError(
+        #     'updating compressed columns not yet supported'
+        # )
 
-    # def _check_dtype(self, data):
-    #     dtype = data.dtype
-    #     if dtype != self.dtype:
-    #         raise ValueError(
-    #             f'input dtype {dtype} != file dtype {self.dtype}'
-    #         )
+        # returns either Indices or slice
+        # converts slice with step to indices
+        rows = util.extract_rows(arg, self.nrows)
+
+        # TODO, make an optimized slice reader
+        # for now, convert
+        if isinstance(rows, slice):
+            rows = Indices(np.arange(rows.start, rows.stop, rows.step))
+
+        if rows.ndim == 0:
+            send_rows = Indices([rows])
+            self._set_rows(data, send_rows)
+            data = data[0]
+        else:
+            self._set_rows(data, rows)
+
+        return data
 
     def _set_nrows(self):
         cd = self.chunk_data
@@ -627,7 +756,12 @@ class ChunkData(object):
             self._data = self._fobj[:]
 
     def update_after_write(
-        self, nrows, nbytes, overwrite_last=False,
+        self,
+        nrows,
+        nbytes,
+        overwrite=False,
+        chunk_index=None,
+        is_external=False,
     ):
         """
         Parameters
@@ -636,20 +770,35 @@ class ChunkData(object):
             Number of rows now in most recent written chunk
         nbytes: int
             Number of bytes now in most recent written chunk
-        overwrite_last: bool
-            If set to True, we overwrote the last chunk so
-            also overwrite the chunk information
+        overwrite: bool
+            If set to True, we overwrote the chunk indicated
+            by chunk_index so also overwrite the chunk information
+        chunk_index: int, optional
+            Defaults to last
+        is_external: bool, optional
+            If set to True, indicates this chunk is stored externally
+            from the main file, happens when updates cause the chunk
+            to grow in compressed size.
         """
 
-        if overwrite_last:
+        if overwrite:
             assert self._data is not None, (
                 'cannot overwrite last when starting first chunk'
             )
 
-            self['nrows'][-1] = nrows
-            self['nbytes'][-1] = nbytes
-            self._fobj.update_row(self.size-1, self[-1:])
+            if chunk_index is None:
+                chunk_index = self.size - 1
 
+            self['nrows'][chunk_index] = nrows
+
+            if is_external:
+                # we don't update nbytes, since it is now in its own file
+                # and we don't need to keep track of it
+                self['is_external'][chunk_index] = is_external
+            else:
+                self['nbytes'][chunk_index] = nbytes
+
+            self._fobj.update_row(chunk_index, self[chunk_index])
         else:
             chunk = np.zeros(1, dtype=self.dtype)
 

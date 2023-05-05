@@ -187,3 +187,56 @@ def test_access(compression):
             assert np.all(ra == sub_data['ra'])
             with pytest.raises(TypeError):
                 cols['sub'] = 5
+
+
+def test_set_compressed():
+    """
+    cache_mem of 0.01 will force use of mergesort
+    """
+    import os
+    import tempfile
+    import numpy as np
+    from ..columns import Columns
+    from ..schema import TableSchema
+
+    seed = 333
+    # num = 20
+    # chunksize = '10r'
+    num = 100_000
+    chunksize = '10000r'
+
+    rng = np.random.RandomState(seed)
+
+    dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+    data = np.zeros(num, dtype=dtype)
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num)
+    data['scol'] = [
+        's' + str(data['id'][i]) for i in range(num)
+    ]
+
+    ccols = ['id', 'scol']
+
+    schema = TableSchema.from_array(
+        data, compression=ccols, chunksize=chunksize,
+    )
+
+    print(schema)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        cdir = os.path.join(tmpdir, 'test.cols')
+        cols = Columns.create(cdir, schema, verbose=True)
+
+        cols.append(data)
+        assert np.all(cols['id'][:] == data['id'])
+
+        # ndata = rng.randint(0, 2**16, size=cols.size)
+        # cols['id'][:] = ndata
+        # assert np.all(cols['id'][:] == ndata)
+        #
+        # cols['id'][:] = 999
+        # assert np.all(cols['id'][:] == 999)
+
+        # print(cols['id']._col.chunk_data._data)
+        # stop
