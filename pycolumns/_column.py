@@ -105,7 +105,7 @@ class Column(_column_pywrap.Column):
         data = util.get_data_with_conversion(data, self.dtype)
 
         if row > self.nrows - 1:
-            raise ValueError(
+            raise IndexError(
                 f'attempt to write at row {row} > {self.nrows-1}'
             )
 
@@ -120,14 +120,14 @@ class Column(_column_pywrap.Column):
         """
         data = util.get_data_with_conversion(value, self.dtype)
         if data.size != 1:
-            raise ValueError(
+            raise IndexError(
                 f'cannot fill with length {data.size}'
             )
         super()._fill_slice(data, s.start, s.stop)
 
     def _fill_rows(self, data, rows, sortind=None):
         if data.size != 1:
-            raise ValueError(
+            raise IndexError(
                 f'cannot fill with length {data.size}'
             )
         if sortind is not None:
@@ -314,7 +314,7 @@ class Column(_column_pywrap.Column):
                 self._fill_slice(data, rows)
             else:
                 if nrows != len(data):
-                    raise ValueError(
+                    raise IndexError(
                         f'mismatch slice size {nrows} and data '
                         f'size {len(data)} when writing'
                     )
@@ -349,7 +349,7 @@ class Column(_column_pywrap.Column):
 
     def _check_row(self, row):
         if row < 0 or row > self.nrows - 1:
-            raise ValueError(
+            raise IndexError(
                 f'row {row} out of bounds [0, {self.nrows-1}]'
             )
 

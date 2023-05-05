@@ -33,6 +33,10 @@ def test_access(compression):
 
     schema = TableSchema.from_array(data, compression=ccols)
 
+    sub_data = np.zeros(num, dtype=[('ra', 'f8'), ('dec', 'f8')])
+    sub_data['ra'] = rng.uniform(size=sub_data.size)
+    sub_data['dec'] = rng.uniform(size=sub_data.size)
+
     print(schema)
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -43,6 +47,10 @@ def test_access(compression):
         cols.append(data)
 
         assert len(cols.names) == len(data.dtype.names)
+
+        cols.create_sub_from_array(name='sub', array=sub_data)
+        assert len(cols.names) == len(data.dtype.names) + 1
+
         meta = {'version': '0.1', 'seeing': 0.9}
         cols.create_dict('meta')
         cols['meta'].write(meta)
@@ -162,6 +170,19 @@ def test_access(compression):
             cols['scol'][ind] = '333'
             assert np.all(cols['scol'][ind] == '333')
 
+            # This only works filling gall items or if data
+            # has the right length
+            cols['rand'] = 8
+            assert np.all(cols['rand'][:] == 8)
+
+            d = rng.uniform(size=cols.nrows).astype('f4')
+            cols['rand'] = d
+            assert np.all(cols['rand'][:] == d)
+
+            with pytest.raises(IndexError):
+                # not long enough
+                cols['rand'] = [3, 4]
+
+            ra = cols['sub']['ra'][:]
             with pytest.raises(TypeError):
-                # this is trying to replace a Column with somethin, not allowed
-                cols['rand'] = 8
+                cols['sub'] = 5

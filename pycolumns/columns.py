@@ -463,7 +463,7 @@ class Columns(dict):
             raise ValueError("sub Columns '%s' already exists" % name)
 
         dirname = util.get_filename(dir=self.dir, name=name, type='cols')
-        self[name] = Columns.from_array(
+        c = Columns.from_array(
             dirname,
             array=array,
             compression=compression,
@@ -473,6 +473,7 @@ class Columns(dict):
             verbose=self.verbose,
             overwrite=overwrite,
         )
+        super().__setitem__(name, c)
 
     def reload(self, columns=None):
         """
@@ -786,17 +787,21 @@ class Columns(dict):
         return columns
 
     def __setitem__(self, name, data):
+        """
+        Only supported for dict.  For Column you need to do
+        cols[name][ind] = 3 etc.
+        """
         item = self[name]
         if item.type == 'dict':
             item.write(data)
         elif item.type == 'col':
-            raise TypeError(
-                f'Cannot replace an entire Column {name}; did you '
-                f'forget the index or slice?'
-            )
+            # let the handling occur in Column
+            self[name][:] = data
         elif item.type == 'cols':
             raise TypeError(
-                f'Cannot replace an entire sub Columns {name}'
+                f'Attempt to replace entire sub Columns "{name}". '
+                f'If you are trying to set items for a Column inside '
+                f'{name}, use cols[{name}][indices] = data etc.'
             )
         else:
             raise TypeError('Columns object does not support item assignment')
