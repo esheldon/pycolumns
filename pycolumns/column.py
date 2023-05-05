@@ -285,7 +285,16 @@ class Column(object):
 
     def resize(self, nrows):
         """
-        Expand or truncate the file to num rows, filling expanded.
+        Expand or truncate the file to num rows.  If expanded, the
+        new rows are filled with the default value for this column.
+
+        The fill value is by default zero (0 for numbers, '' for strings)
+        but can be set in the schema as 'fill_value'
+
+        Parameters
+        ----------
+        nrows: int
+            The new number of rows.
         """
         if isinstance(self._col, CColumn):
             nrows_old = self.nrows
