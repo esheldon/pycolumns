@@ -101,3 +101,25 @@ def test_create(cache_mem, compression, verbose, fromdict):
         cols.create_column(newschema)
         assert cols['newcol'][:].size == cols.size
         assert np.all(cols['newcol'][:] == 0)
+
+        newschema = ColumnSchema('news', dtype='U2')
+        cols.create_column(newschema)
+        assert cols['news'][:].size == cols.size
+        assert np.all(cols['news'][:] == '')
+
+        newschema = ColumnSchema('fcol', dtype='U2', fill_value='-')
+        cols.create_column(newschema)
+        assert np.all(cols['fcol'][:] == '-')
+
+        newschema = ColumnSchema('x9', dtype='f4', fill_value=9.5)
+        cols.create_column(newschema)
+        assert np.all(cols['x9'][:] == 9.5)
+
+        newschema = ColumnSchema('ss', dtype='S3', fill_value='yes')
+        cols.create_column(newschema)
+        assert np.all(cols['ss'][:] == b'yes')
+
+        with pytest.raises(RuntimeError):
+            # can't resize compressed cols
+            newschema = ColumnSchema('bad', dtype='U2', compression=True)
+            cols.create_column(newschema)

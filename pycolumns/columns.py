@@ -330,8 +330,8 @@ class Columns(dict):
 
     def create_column(self, schema):
         """
-        Create a new column, filling with zeros to the right number
-        of rows
+        Create a new column, filling with zeros or the fill value to the right
+        number of rows
 
         Parameters
         ----------
@@ -481,8 +481,7 @@ class Columns(dict):
         schema: TableSchema or dict
             Schema holding information for each column.
         fill: bool, optional
-            If set to True, the new columns are filled to zeros out to
-            the current nrows
+            If set to True, the new columns are filled out to the current nrows
         """
 
         # Try to convert to schema

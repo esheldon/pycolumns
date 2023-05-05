@@ -76,7 +76,9 @@ class TableSchema(dict):
         self[schema.name] = schema.copy()
 
     @classmethod
-    def from_array(cls, array, compression=None, chunksize=DEFAULT_CHUNKSIZE):
+    def from_array(
+        cls, array, compression=None, chunksize=DEFAULT_CHUNKSIZE, fill_value=None,
+    ):
         """
         Convert an array with fields to a TableSchema
 
@@ -93,6 +95,8 @@ class TableSchema(dict):
                  - if value is True, use default compression
                  - if value is a dict, return the dict with defaults set for
                    non specified parameters
+        fill_value: dict, optional
+            Optional dict specifying fill values for columns.
         chunksize: dict, str or number
             A dict or str or number
 
@@ -114,6 +118,9 @@ class TableSchema(dict):
                 # non specified compression entries in ColumnSchema
                 keys['compression'] = comp
                 keys['chunksize'] = _get_column_chunksize(chunksize, name)
+
+            if fill_value is not None and name in fill_value:
+                keys['fill_value'] = fill_value[name]
 
             schema = ColumnSchema(
                 name=name,
@@ -139,6 +146,10 @@ class TableSchema(dict):
                 'compression': True,
               },
               'ra': {'dtype': 'f8'},
+              'nn': {
+                  'dtype': 'U3',
+                  'fill_value': '-',
+              },
             }
 
         Returns
@@ -187,7 +198,7 @@ class ColumnSchema(dict):
             'clevel': 5,
             'shuffle': 'bitshuffle',
         }
-    chunksize: str or number
+    chunksize: str or number, optional
         The chunksize for compressed columns.  Default is
         pycolumns.DEFAULT_CHUNKSIZE.
 
@@ -199,6 +210,9 @@ class ColumnSchema(dict):
             '0.5g': 0.5 gigabytes
             '200b': 200 bytes
             '1000r': 1000 rows
+    fill_value: value, optional
+        If sent and not None, resized columns get this fill value.  Default
+        is zero/empty string (bit zeros)
     """
     def __init__(
         self,
@@ -206,12 +220,14 @@ class ColumnSchema(dict):
         dtype,
         compression=None,
         chunksize=DEFAULT_CHUNKSIZE,
+        fill_value=None,
     ):
         self._name = name
         schema = _make_array_schema_dict(
             dtype=dtype,
             compression=compression,
             chunksize=chunksize,
+            fill_value=fill_value,
         )
         self.update(schema)
 
@@ -227,10 +243,14 @@ def _make_array_schema_dict(
     dtype,
     compression=None,
     chunksize=DEFAULT_CHUNKSIZE,
+    fill_value=None,
 ):
     schema = {
         'dtype': np.dtype(dtype).str,
     }
+    if fill_value is not None:
+        schema['fill_value'] = fill_value
+
     if compression:
         schema['chunksize'] = chunksize
         schema['compression'] = DEFAULT_COMPRESSION.copy()

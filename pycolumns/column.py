@@ -285,12 +285,19 @@ class Column(object):
 
     def resize(self, nrows):
         """
-        Expand or truncate the file to num rows, filling with zeros if needed.
+        Expand or truncate the file to num rows, filling expanded.
         """
         if isinstance(self._col, CColumn):
+            nrows_old = self.nrows
+
+            # if extended, fills with zeros
             self._col.resize(nrows)
+
+            # can fill with user defined value
+            if nrows > nrows_old and 'fill_value' in self._meta:
+                self[nrows_old:] = self._meta['fill_value']
         else:
-            raise ValueError('cannot resize compressed data')
+            raise RuntimeError('cannot resize compressed data')
 
         if self.has_index:
             self.update_index()

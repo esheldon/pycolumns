@@ -67,10 +67,13 @@ class Column(_column_pywrap.Column):
         nrows: int
             New number of rows
         """
+        if nrows < 0:
+            raise ValueError(f'cannot reduce rows to {nrows}')
 
         if nrows != self.nrows:
             nbytes = nrows * self.dtype.itemsize
             self._resize_bytes(nbytes)
+            self._nrows = nrows
 
     def append(self, data):
         """

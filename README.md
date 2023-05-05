@@ -172,6 +172,10 @@ cols = pyc.Columns.create(coldir, schema=schema)
 # or you can build the schema from column schema
 cx = pyc.ColumnSchema('x', dtype='f4')
 
+# use a fill value, used when adding new columns to existing table
+# defaults to 0 for numbers, '' for string types
+c9 = pyc.ColumnSchema('x9', dtype='f4', fill_value=9)
+
 # compression can be set to True to get the defaults, or a dict
 # specifying blosc options
 cid = pyc.ColumnSchema('id', dtype='i8', compression=True)
