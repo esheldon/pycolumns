@@ -11,12 +11,8 @@ class Column(object):
 
     Parameters
     ----------
-    filename: str, optional
-        Path to the file
-    name: str, optional
-        Name of the column
-    dir: str, optional
-        Directory of column
+    coldir: str
+        Path to the directory holding data
     cache_mem: str or number
         Cache memory for index creation, default '1g' or one gigabyte.
         Can be a number in gigabytes or a string
@@ -33,10 +29,7 @@ class Column(object):
     # there are alternative construction methods
     # this method determines all info from the full path
 
-    col = Column(filename='/full/path')
-
-    # this one uses directory, column name
-    col = Column(name='something', dir='/path2o/dbname.cols')
+    col = Column('/full/path')
 
     Slice and item lookup
     ---------------------
@@ -67,7 +60,7 @@ class Column(object):
     """
     def __init__(
         self,
-        metafile,
+        coldir,
         cache_mem=DEFAULT_CACHE_MEM,
         verbose=False,
     ):
@@ -75,7 +68,7 @@ class Column(object):
         initialize the meta data, and possibly load the mmap
         """
 
-        self._meta_filename = metafile
+        self._dir = coldir
         self._cache_mem = cache_mem
         self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
         self._verbose = verbose
@@ -86,16 +79,23 @@ class Column(object):
         """
         load, or reload all meta data and reopen/open files
         """
-        self._meta = util.read_json(self.meta_filename)
 
-        path_info = util.meta_to_colfiles(self.meta_filename)
+        path_info = util.get_colfiles(self.dir)
+
+        self._meta_filename = path_info['meta']
         self._array_filename = path_info['array']
         self._index_filename = path_info['index']
         self._index1_filename = path_info['index1']
         self._sorted_filename = path_info['sorted']
         self._chunks_filename = path_info['chunks']
         self._name = path_info['name']
-        self._dir = path_info['dir']
+
+        if self.dir != path_info['dir']:
+            raise ValueError(
+                f'mismatch dir {dir} and path_info {path_info["dir"]}'
+            )
+
+        self._meta = util.read_json(self.meta_filename)
 
         self._type = 'col'
         self._ext = 1

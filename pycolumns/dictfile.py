@@ -10,7 +10,7 @@ class Dict(object):
         self._type = 'dict'
         self._verbose = verbose
         self._filename = filename
-        self._name = util.extract_colname(filename)
+        self._name = util.extract_name(filename)
         self._dir = os.path.dirname(filename)
 
     @property

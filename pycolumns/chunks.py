@@ -915,6 +915,7 @@ def test_set_compressed():
         cdir = os.path.join(tmpdir, 'test.cols')
         cols = Columns.create(cdir, schema, verbose=True)
 
+        # import IPython; IPython.embed()
         cols.append(data)
         assert np.all(cols['id'][:] == data['id'])
 
@@ -932,7 +933,7 @@ def test_set_compressed():
 
         ndata = rng.randint(0, 2**16, size=cols.size)
         cols['id'][data.size:] = ndata
-        # import IPython; IPython.embed()
+        import IPython; IPython.embed()
 
         # print(cols['id']._col.chunk_data._data)
         # stop

@@ -90,7 +90,7 @@ def extract_slice(s, nrows, check_slice_stop=False):
     return slice(start, stop, s.step)
 
 
-def extract_colname(filename):
+def extract_name(filename):
     """
     Extract the column name from the file name
     """
@@ -100,11 +100,45 @@ def extract_colname(filename):
     return name
 
 
-def extract_coltype(filename):
+def extract_type(filename):
     """
     Extract the type from the file name
     """
     return filename.split('.')[-1]
+
+
+def extract_extension(filename):
+    """
+    Extract the extension
+    """
+    return filename.split('.')[-1]
+
+
+def get_meta_filename(path):
+    """
+    Get a path to a .meta file assuming path is a column directory
+    """
+    bname = os.path.basename(path)
+    return f'{path}/{bname}.meta'
+
+
+def is_column(path):
+    """
+    Returns True if path is a directory (or link) containing
+    a file named basename(path).meta
+    """
+    metapath = get_meta_filename(path)
+    if os.path.exists(metapath):
+        return True
+    else:
+        return False
+
+
+def get_column_dir(dir, name):
+    """
+    get path to column directory
+    """
+    return os.path.join(dir, name)
 
 
 def get_filename(dir, name, type):
@@ -114,20 +148,25 @@ def get_filename(dir, name, type):
     if type not in defaults.ALLOWED_COL_TYPES:
         raise ValueError(f'unknown file type {type}')
 
+    if type == 'col':
+        sdir = get_column_dir(dir, name)
+    else:
+        sdir = dir
+
     return os.path.join(dir, f'{name}.{type}')
 
 
-def meta_to_colfiles(metafile):
-    dir, bname = os.path.split(metafile)
-    name = extract_colname(metafile)
+def get_colfiles(coldir):
+    name = os.path.basename(coldir)
     return {
-        'dir': dir,
+        'dir': coldir,
         'name': name,
-        'array': get_filename(dir, name, 'array'),
-        'index': get_filename(dir, name, 'index'),
-        'index1': get_filename(dir, name, 'index1'),
-        'sorted': get_filename(dir, name, 'sorted'),
-        'chunks': get_filename(dir, name, 'chunks'),
+        'meta': get_filename(coldir, name, 'meta'),
+        'array': get_filename(coldir, name, 'array'),
+        'index': get_filename(coldir, name, 'index'),
+        'index1': get_filename(coldir, name, 'index1'),
+        'sorted': get_filename(coldir, name, 'sorted'),
+        'chunks': get_filename(coldir, name, 'chunks'),
     }
 
 

@@ -274,35 +274,39 @@ class Columns(dict):
         """
         Load all entries
         """
-        from glob import glob
-
         # clear out the existing columns and start from scratch
         self._clear_all()
 
+        paths = os.listdir(self.dir)
+
         # load the table columns
-        pattern = os.path.join(self.dir, '*')
-        fnames = glob(pattern)
-        for fname in fnames:
-            name = util.extract_colname(fname)
-            type = util.extract_coltype(fname)
-
-            if self.verbose:
-                if type in ['meta', 'dict']:
-                    print(f'    loading column: {name}')
-                elif type in ['cols', 'dict']:
-                    print(f'    loading {type}: {name}')
-
+        for path in paths:
+            path = os.path.join(self.dir, path)
             c = None
-            if type == 'meta':
+            if util.is_column(path):
+                name = os.path.basename(path)
+                print(f'    loading: {name}')
                 c = Column(
-                    fname, cache_mem=self.cache_mem, verbose=self.verbose,
+                    path, cache_mem=self.cache_mem, verbose=self.verbose,
                 )
-            elif type == 'dict':
-                c = Dict(fname, verbose=self.verbose)
-            elif type == 'cols':
-                c = Columns(
-                    fname, cache_mem=self.cache_mem, verbose=self.verbose,
-                )
+            else:
+
+                name = util.extract_name(path)
+                type = util.extract_type(path)
+
+                if self.verbose:
+                    if type in ['cols', 'dict']:
+                        print(f'    loading : {name}')
+
+                # only load .dict or .cols, ignore other stuff
+                if type == 'dict':
+                    c = Dict(path, verbose=self.verbose)
+                elif type == 'cols':
+                    c = Columns(
+                        path, cache_mem=self.cache_mem, verbose=self.verbose,
+                    )
+                else:
+                    pass
 
             if c is not None:
                 # call super setitem to set new entries
@@ -525,19 +529,23 @@ class Columns(dict):
             if self.verbose:
                 print('    creating:', name)
 
-            metafile = util.get_filename(self.dir, name, 'meta')
+            coldir = util.get_column_dir(self.dir, name)
+            if not os.path.exists(coldir):
+                os.makedirs(coldir)
+
+            metafile = util.get_filename(coldir, name, 'meta')
             if os.path.exists(metafile):
                 raise RuntimeError(f'column {name} already exists')
 
             util.write_json(metafile, this)
 
-            dfile = util.get_filename(self.dir, name, 'array')
+            dfile = util.get_filename(coldir, name, 'array')
             with open(dfile, 'w') as fobj:  # noqa
                 # just to create the empty file
                 pass
 
             if 'compression' in this:
-                cfile = util.get_filename(self.dir, name, 'chunks')
+                cfile = util.get_filename(coldir, name, 'chunks')
                 with open(cfile, 'w') as fobj:  # noqa
                     # just to create the empty file
                     pass
@@ -636,6 +644,8 @@ class Columns(dict):
         yes: bool
             If True, don't prompt for confirmation
         """
+        import shutil
+
         if name not in self.names:
             print("cannot delete entry '%s', it does not exist" % name)
 
@@ -651,6 +661,8 @@ class Columns(dict):
         if entry.type == 'cols':
             print(f'Removing data for sub columns: {name}')
 
+            # have the sub cols remove data in case the subcols dir is a sym
+            # link
             entry.delete(yes=True)
             fname = entry.filename
             if os.path.exists(fname):
@@ -661,11 +673,15 @@ class Columns(dict):
             if os.path.exists(fname):
                 os.remove(fname)
         else:
+            # remove individual files in case it the directory is a sym link
             print(f'Removing data for entry: {name}')
             for fname in entry.filenames:
                 if os.path.exists(fname):
                     print(f'    Removing: {fname}')
                     os.remove(fname)
+
+            print(f'Removing: {entry.dir}')
+            shutil.rmtree(entry.dir)
 
         del self[name]
 
