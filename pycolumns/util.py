@@ -148,11 +148,6 @@ def get_filename(dir, name, type):
     if type not in defaults.ALLOWED_COL_TYPES:
         raise ValueError(f'unknown file type {type}')
 
-    if type == 'col':
-        sdir = get_column_dir(dir, name)
-    else:
-        sdir = dir
-
     return os.path.join(dir, f'{name}.{type}')
 
 
