@@ -90,28 +90,58 @@ def extract_slice(s, nrows, check_slice_stop=False):
     return slice(start, stop, s.step)
 
 
+def get_subname(name):
+    """
+    sub-cols get a leading slash
+    """
+    return f'/{name}'
+
+
 def extract_name(filename):
     """
     Extract the column name from the file name
     """
 
-    bname = os.path.basename(filename)
-    name = '.'.join(bname.split('.')[0:-1])
+    name, _ = split_ext(filename)
     return name
+    # n, ext = split_ext(filename)
+    # if ext == 'cols':
+    #     return f'/{n}'
+    # else:
+    #     return n
+    # bname = os.path.basename(filename)
+    # name = '.'.join(bname.split('.')[0:-1])
+    # return name
 
 
 def extract_type(filename):
     """
     Extract the type from the file name
     """
-    return filename.split('.')[-1]
+    return extract_extension(filename)
 
 
 def extract_extension(filename):
     """
     Extract the extension
     """
-    return filename.split('.')[-1]
+    _, ext = split_ext(filename)
+    return ext
+
+
+def split_ext(filename):
+    """
+    For /path/to/blah.txt returns ('blah', 'txt')
+    """
+    bname = os.path.basename(filename)
+    s = bname.split('.')
+    if len(s) == 1:
+        name = s[0]
+        ext = ''
+    else:
+        name = '.'.join(s[0:-1])
+        ext = s[-1]
+    return name, ext
 
 
 def get_meta_filename(path):

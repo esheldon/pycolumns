@@ -1,6 +1,9 @@
 """
 TODO
 
+    - proper .dicts for protections and support setting (running .write) with
+      = set
+    - support multiple levels '/sub1/sub2/sub3'
     - add vacuum to merge data with external chunk files
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
@@ -47,6 +50,7 @@ class Columns(dict):
             )
 
         self._dir = dir
+        self._dicts = {}
         self._type = 'cols'
         self._verbose = verbose
         self._is_updating = False
@@ -259,6 +263,13 @@ class Columns(dict):
     def cache_mem_gb(self):
         return self._cache_mem_gb
 
+    @property
+    def dicts(self):
+        """
+        Do this properly to add protections and controls
+        """
+        return self._dicts
+
     def _dirbase(self):
         """
         Return the dir basename minus any extension
@@ -277,17 +288,19 @@ class Columns(dict):
         paths = os.listdir(self.dir)
 
         # load the table columns
-        for path in paths:
+        for i, path in enumerate(paths):
             path = os.path.join(self.dir, path)
             c = None
             if util.is_column(path):
                 name = os.path.basename(path)
-                print(f'    loading: {name}')
                 c = Column(
                     path, cache_mem=self.cache_mem, verbose=self.verbose,
                 )
+                super().__setitem__(name, c)
             else:
 
+                # will be /name for name.cols
+                # else will be name
                 name = util.extract_name(path)
                 type = util.extract_type(path)
 
@@ -298,16 +311,15 @@ class Columns(dict):
                 # only load .dict or .cols, ignore other stuff
                 if type == 'dict':
                     c = Dict(path, verbose=self.verbose)
+                    self.dicts[name] = c
                 elif type == 'cols':
                     c = Columns(
                         path, cache_mem=self.cache_mem, verbose=self.verbose,
                     )
+                    cname = util.get_subname(name)
+                    super().__setitem__(cname, c)
                 else:
                     pass
-
-            if c is not None:
-                # call super setitem to set new entries
-                super().__setitem__(name, c)
 
         if verify:
             self.verify()
@@ -368,8 +380,10 @@ class Columns(dict):
         filename = util.get_filename(dir=self.dir, name=name, type='dict')
         c = Dict(filename, verbose=self.verbose)
         # call super setitem directly for new entry
-        super().__setitem__(name, c)
-        self[name].write(data)
+        # super().__setitem__(name, c)
+        # self[name].write(data)
+        self.dicts[name] = c
+        self.dicts[name].write(data)
 
     def create_sub(
         self, name, schema={}, cache_mem=DEFAULT_CACHE_MEM, verbose=False,
@@ -400,10 +414,16 @@ class Columns(dict):
             If the directory exists, remove existing data
         """
 
+        if name[0] != '/':
+            raise ValueError(
+                'sub-Columns names must have a leading /, got {name}'
+            )
+
         if name in self.dict_names:
             raise ValueError("sub Columns '%s' already exists" % name)
 
-        dirname = util.get_filename(dir=self.dir, name=name, type='cols')
+        dname = name[1:]
+        dirname = util.get_filename(dir=self.dir, name=dname, type='cols')
         c = Columns.create(
             dirname,
             schema=schema,
@@ -456,10 +476,16 @@ class Columns(dict):
             If the directory exists, remove existing data
         """
 
+        if name[0] != '/':
+            raise ValueError(
+                'sub-Columns names must have a leading /, got {name}'
+            )
+
         if name in self.dict_names:
             raise ValueError("sub Columns '%s' already exists" % name)
 
-        dirname = util.get_filename(dir=self.dir, name=name, type='cols')
+        dname = name[1:]
+        dirname = util.get_filename(dir=self.dir, name=dname, type='cols')
         c = Columns.from_array(
             dirname,
             array=array,
@@ -635,8 +661,39 @@ class Columns(dict):
         for name in original_names:
             self.delete_entry(name, yes=True)
 
+        for name in self.dicts:
+            self.delete_dict(name, yes=True)
+
         print('removing:', self.dir)
         shutil.rmtree(self.dir)
+
+    def delete_dict(self, name, yes=False):
+        """
+        delete the specified dict
+
+        parameters
+        ----------
+        name: string
+            Name of entry to delete
+        yes: bool
+            If True, don't prompt for confirmation
+        """
+
+        if name not in self.dicts:
+            print("cannot delete dict '%s', it does not exist" % name)
+
+        if not yes:
+            answer = input("really delete dict '%s'? (y/n) " % name)
+            if answer.lower() == 'y':
+                yes = True
+
+        if yes:
+            print(f'Removing data for dict: {name}')
+            fname = self.dicts[name].filename
+            if os.path.exists(fname):
+                os.remove(fname)
+
+            del self.dicts[name]
 
     def delete_entry(self, name, yes=False):
         """
@@ -674,11 +731,6 @@ class Columns(dict):
             if os.path.exists(dname):
                 shutil.rmtree(dname)
 
-        elif entry.type == 'dict':
-            print(f'Removing data for dict: {name}')
-            fname = entry.filename
-            if os.path.exists(fname):
-                os.remove(fname)
         else:
             # remove individual files in case it the directory is a sym link
             print(f'Removing data for entry: {name}')

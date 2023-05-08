@@ -48,14 +48,14 @@ def test_access(compression):
 
         assert len(cols.names) == len(data.dtype.names)
 
-        cols.create_sub_from_array(name='sub', array=sub_data)
+        cols.create_sub_from_array(name='/sub', array=sub_data)
         assert len(cols.names) == len(data.dtype.names) + 1
 
         meta = {'version': '0.1', 'seeing': 0.9}
         cols.create_dict('meta')
-        cols['meta'].write(meta)
+        cols.dicts['meta'].write(meta)
 
-        rmeta = cols['meta'].read()
+        rmeta = cols.dicts['meta'].read()
         assert rmeta == meta
 
         indata = cols.read()
@@ -87,15 +87,16 @@ def test_access(compression):
         #
 
         dadd = {'new': 'hello'}
-        cols['meta'].update(dadd)
+        cols.dicts['meta'].update(dadd)
         meta.update(dadd)
 
-        rmeta = cols['meta'].read()
+        rmeta = cols.dicts['meta'].read()
         assert rmeta == meta
 
         dnew = {'replaced': 3}
-        cols['meta'] = dnew
-        assert cols['meta'].read() == dnew
+        # cols.dicts['meta'] = dnew
+        cols.dicts['meta'].write(dnew)
+        assert cols.dicts['meta'].read() == dnew
 
         if not compression:
             for name in data.dtype.names:
@@ -188,10 +189,10 @@ def test_access(compression):
                 # not long enough
                 cols['rand'] = [3, 4]
 
-            ra = cols['sub']['ra'][:]
+            ra = cols['/sub']['ra'][:]
             assert np.all(ra == sub_data['ra'])
             with pytest.raises(TypeError):
-                cols['sub'] = 5
+                cols['/sub'] = 5
 
 
 def test_set_compressed():
