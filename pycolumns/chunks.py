@@ -275,8 +275,23 @@ class Chunks(object):
         nbytes = len(compressed_bytes)
         return nbytes
 
-    def _write_external_compressed_data(self, compressed_bytes, chunk_index):
-        raise NotImplementedError('implement _write_external_compressed_data')
+    def _write_external_compressed_bytes(self, compressed_bytes, chunk_index):
+        fname = self._get_external_filename(chunk_index)
+
+        if True and self.verbose:
+            print(f'     writing external: {fname}')
+
+        with open(fname, 'wb') as fobj:
+            fobj.write(compressed_bytes)
+
+    def _read_external_compressed_bytes(self, chunk_index):
+        fname = self._get_external_filename(chunk_index)
+        with open(fname, 'rb') as fobj:
+            compressed_bytes = fobj.read()
+        return compressed_bytes
+
+    def _get_external_filename(self, chunk_index):
+        return f'{self.filename}.{chunk_index}'
 
     def _get_compressed_data(self, data):
         import blosc
@@ -439,17 +454,19 @@ class Chunks(object):
         chunk = cd[chunk_index]
 
         if chunk['is_external']:
-            fobj, nbytes = self._open_external_file(chunk_index, mode='r')
+            buff = self._read_external_compressed_bytes(chunk_index)
         else:
             fobj = self._fobj
             fobj.seek(chunk['offset'], 0)
             nbytes = chunk['nbytes']
 
-        buff = bytearray(nbytes)
+            buff = bytearray(nbytes)
 
-        nread = fobj.readinto(buff)
-        if nread != len(buff):
-            raise RuntimeError('Expected to read {len(buff)} but read {nread}')
+            nread = fobj.readinto(buff)
+            if nread != len(buff):
+                raise RuntimeError(
+                    f'Expected to read {len(buff)} but read {nread}'
+                )
 
         return buff
 
@@ -596,7 +613,6 @@ class Chunks(object):
 
     def _update_chunk(self, chunk_index, data):
 
-        print('updating chunk with', data)
         cd = self.chunk_data
 
         tnrows = cd['nrows'][chunk_index]
@@ -619,11 +635,10 @@ class Chunks(object):
             nbytes = len(compressed_bytes)
 
             is_ext = cd['is_external'][chunk_index]
-            print(f'nbytes {nbytes} orig nbytes {tnbytes}')
             needs_extending = chunk_index != cd.size-1 and nbytes > tnbytes
 
             if is_ext or needs_extending:
-                self._write_external_compressed_data(
+                self._write_external_compressed_bytes(
                     compressed_bytes, chunk_index
                 )
                 cd.update_after_write(
@@ -636,8 +651,6 @@ class Chunks(object):
             else:
                 # we can write directly into the chunk, just changing the
                 # nbytes entry
-                print('chunk index:', chunk_index)
-                print('seeking to:', cd['offset'][chunk_index])
                 self._fobj.seek(cd['offset'][chunk_index])
                 self._write_compressed_data(
                     compressed_bytes, is_compressed=True,

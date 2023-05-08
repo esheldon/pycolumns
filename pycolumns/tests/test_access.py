@@ -231,12 +231,20 @@ def test_set_compressed():
         cols.append(data)
         assert np.all(cols['id'][:] == data['id'])
 
-        # ndata = rng.randint(0, 2**16, size=cols.size)
-        # cols['id'][:] = ndata
-        # assert np.all(cols['id'][:] == ndata)
-        #
-        # cols['id'][:] = 999
-        # assert np.all(cols['id'][:] == 999)
+        ndata = rng.randint(0, 2**16, size=cols.size)
+        cols['id'][:] = ndata
+        assert np.all(cols['id'][:] == ndata)
+
+        cols['id'][:] = 999
+        assert np.all(cols['id'][:] == 999)
+
+        print(f"nchunks: {cols['id']._col.nchunks}")
+        cols.append(data)
+        print(f"nchunks: {cols['id']._col.nchunks}")
+        assert np.all(cols['id'][data.size:] == data['id'])
+
+        ndata = rng.randint(0, 2**16, size=cols.size)
+        cols['id'][data.size:] = ndata
 
         # print(cols['id']._col.chunk_data._data)
         # stop
