@@ -876,91 +876,63 @@ class ChunkData(object):
         return self._data[arg]
 
 
-def test():
-    import tempfile
+def test_set_compressed():
+    """
+    cache_mem of 0.01 will force use of mergesort
+    """
     import os
-    import pytest
+    import tempfile
+    import numpy as np
+    from .columns import Columns
+    from .schema import TableSchema
 
-    for compression in [False, True]:
-        print('=' * 70)
-        print('with compression:', compression)
+    seed = 333
+    # num = 20
+    # chunksize = '10r'
+    num = 100_000
+    chunksize = '10000r'
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            data = np.arange(60)
-            fname = os.path.join(tmpdir, 'test.array')
-            chunks_fname = os.path.join(tmpdir, 'test.chunks')
-            with Chunks(
-                filename=fname,
-                chunks_filename=chunks_fname,
-                dtype=data.dtype,
-                mode='w+',
-                compression=compression,
-                verbose=True,
-            ) as chunks:
+    rng = np.random.RandomState(seed)
 
-                print('-' * 70)
-                print('before append')
-                print(chunks)
+    dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+    data = np.zeros(num, dtype=dtype)
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num)
+    data['scol'] = [
+        's' + str(data['id'][i]) for i in range(num)
+    ]
 
-                sub1 = data[0:0 + 20]
-                chunks.append(sub1)
+    ccols = ['id', 'scol']
 
-                print('-' * 70)
-                print('after append')
-                print(chunks)
-                assert chunks.nrows == sub1.size
+    schema = TableSchema.from_array(
+        data, compression=ccols, chunksize=chunksize,
+    )
 
-                sub2 = data[20:20 + 20]
-                chunks.append(sub2)
+    print(schema)
 
-                print('-' * 70)
-                print('after another append')
-                print(chunks)
-                assert chunks.nrows == sub1.size + sub2.size
+    with tempfile.TemporaryDirectory() as tmpdir:
 
-                rsub1 = chunks.read_chunk(0)
-                assert np.all(rsub1 == sub1)
+        cdir = os.path.join(tmpdir, 'test.cols')
+        cols = Columns.create(cdir, schema, verbose=True)
 
-                rsub2 = chunks.read_chunk(1)
-                assert np.all(rsub2 == sub2)
+        cols.append(data)
+        assert np.all(cols['id'][:] == data['id'])
 
-                rsub1allslice = chunks[:]
-                assert np.all(rsub1allslice == data[0:chunks.nrows])
+        ndata = rng.randint(0, 2**16, size=cols.size)
+        cols['id'][:] = ndata
+        assert np.all(cols['id'][:] == ndata)
 
-                rslice1 = chunks[:20]
-                assert np.all(rslice1 == data[:20])
+        cols['id'][:] = 999
+        assert np.all(cols['id'][:] == 999)
 
-                rslice2 = chunks[20:40]
-                assert np.all(rslice2 == data[20:40])
+        print(f"nchunks: {cols['id']._col.nchunks}")
+        cols.append(data)
+        print(f"nchunks: {cols['id']._col.nchunks}")
+        assert np.all(cols['id'][data.size:] == data['id'])
 
-                rows = np.array([3, 8, 17, 25])
-                rr = chunks[rows]
-                assert np.all(rr == data[rows])
+        ndata = rng.randint(0, 2**16, size=cols.size)
+        cols['id'][data.size:] = ndata
+        # import IPython; IPython.embed()
 
-                with pytest.raises(ValueError):
-                    chunks.read_chunk(3)
-
-                #
-                # indata = col[2:8]
-                # assert np.all(indata == data[2:8])
-                #
-                # indata = col[2:18:2]
-                # assert np.all(indata == data[2:18:2])
-                #
-                # ind = [3, 5, 7]
-                # indata = col[ind]
-                # assert np.all(indata == data[ind])
-                #
-                # ind = 5
-                # indata = col[ind]
-                # assert np.all(indata == data[ind])
-                #
-                # s = slice(2, 8)
-                # indata = np.zeros(s.stop - s.start, dtype=data.dtype)
-                # col.read_slice_into(indata, s)
-                # assert np.all(indata == data[s])
-                #
-                # ind = [3, 5, 7]
-                # indata = np.zeros(len(ind), dtype=data.dtype)
-                # col.read_rows_into(indata, ind)
-                # assert np.all(indata == data[ind])
+        # print(cols['id']._col.chunk_data._data)
+        # stop

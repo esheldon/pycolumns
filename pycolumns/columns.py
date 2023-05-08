@@ -1,13 +1,10 @@
 """
 TODO
 
+    - move columns into sub directories
+    - add vacuum to merge data with external chunk files
     - close files when doing new _load, reload
     - replace _column.Column _extract_slice_start_stop to allow negatives
-    - Add update of entries for compressed
-        - if chunk shrinks, could write in the chunk, if expands
-          would need to do something new
-            1. push data toward end of file
-            2. other ideas?
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
         - get_subcols()
