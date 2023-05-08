@@ -1,7 +1,6 @@
 """
 TODO
 
-    - move columns into sub directories
     - add vacuum to merge data with external chunk files
     - close files when doing new _load, reload
     - replace _column.Column _extract_slice_start_stop to allow negatives
@@ -621,6 +620,8 @@ class Columns(dict):
         yes: bool
             If True, don't prompt for confirmation
         """
+        import shutil
+
         if not yes:
             answer = input('really delete all data? (y/n) ')
             if answer.lower() == 'y':
@@ -632,6 +633,9 @@ class Columns(dict):
         original_names = list(self.keys())
         for name in original_names:
             self.delete_entry(name, yes=True)
+
+        print('removing:', self.dir)
+        shutil.rmtree(self.dir)
 
     def delete_entry(self, name, yes=False):
         """
@@ -663,10 +667,12 @@ class Columns(dict):
 
             # have the sub cols remove data in case the subcols dir is a sym
             # link
+            dname = entry.dir
+
             entry.delete(yes=True)
-            fname = entry.filename
-            if os.path.exists(fname):
-                os.removedirs(fname)
+            if os.path.exists(dname):
+                shutil.rmtree(dname)
+
         elif entry.type == 'dict':
             print(f'Removing data for dict: {name}')
             fname = entry.filename
