@@ -2,8 +2,6 @@
 TODO
 
     - add vacuum to merge data with external chunk files
-    - close files when doing new _load, reload
-    - replace _column.Column _extract_slice_start_stop to allow negatives
     - Maybe don't have dicts and subcols in self as a name
         - get_dict()
         - get_subcols()
@@ -505,6 +503,9 @@ class Columns(dict):
         """
         Clear out the dictionary of column info
         """
+        for col in self.column_names:
+            self[col]._close()
+
         super().clear()
 
     def _add_columns(self, schema, fill=False):

@@ -135,19 +135,6 @@ class Column(_column_pywrap.Column):
         else:
             super()._fill_rows(data, rows)
 
-    # def read(self):
-    #     """
-    #     read all rows, creating the output
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #     data = np.empty(self.nrows, dtype=self.dtype)
-    #     super()._read_slice(data, 0)
-    #     return data
-
     def read_into(self, data):
         """
         read rows from the start of the file, storing in the input array
@@ -167,26 +154,6 @@ class Column(_column_pywrap.Column):
             )
         super()._read_slice(data, 0)
 
-    # def read_slice(self, s):
-    #     """
-    #     read slice, creating the output
-    #
-    #     Parameters
-    #     ----------
-    #     s: slice
-    #         The slice.  Must have a stop and start and no step
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #     start, stop = self._extract_slice_start_stop(s)
-    #     nrows = stop - start
-    #     data = np.empty(nrows, dtype=self.dtype)
-    #     super()._read_slice(data, start)
-    #     return data
-
     def read_slice_into(self, data, s):
         """
         read rows into the input data
@@ -205,30 +172,11 @@ class Column(_column_pywrap.Column):
 
         self._check_dtype(data)
 
-        start, stop = self._extract_slice_start_stop(s)
-        nrows = stop - start
+        s = util.extract_slice(s, self.nrows)
+        nrows = s.stop - s.start
         if data.size != nrows:
             raise ValueError(f'data size {data.size} != slice nrows {nrows}')
-        super()._read_slice(data, start)
-
-    # def read_rows(self, rows):
-    #     """
-    #     read rows, creating the output
-    #
-    #     Parameters
-    #     ----------
-    #     rows: array
-    #         The rows array
-    #
-    #     Returns
-    #     -------
-    #     data: array
-    #         The output data
-    #     """
-    #     data = np.empty(rows.size, dtype=self.dtype)
-    #     super()._read_rows(data, rows)
-    #     # super()._read_rows_pages(data, rows)
-    #     return data
+        super()._read_slice(data, s.start)
 
     def read_rows_into(self, data, rows):
         """
@@ -352,19 +300,6 @@ class Column(_column_pywrap.Column):
             raise IndexError(
                 f'row {row} out of bounds [0, {self.nrows-1}]'
             )
-
-    def _extract_slice_start_stop(self, s):
-        nrows = self.nrows
-
-        start = s.start
-        if start is None:
-            start = 0
-        stop = s.stop
-        if stop is None:
-            stop = nrows
-        elif stop > nrows:
-            stop = nrows
-        return start, stop
 
     def _check_dtype(self, data):
         dtype = data.dtype

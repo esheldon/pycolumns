@@ -75,10 +75,17 @@ class Column(object):
         self._is_updating = False
         self.reload()
 
+    def _close(self):
+        if hasattr(self, '_col'):
+            self._col.close()
+            self._col = None
+
     def reload(self):
         """
         load, or reload all meta data and reopen/open files
         """
+
+        self._close()
 
         path_info = util.get_colfiles(self.dir)
 

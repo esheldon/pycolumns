@@ -61,6 +61,11 @@ def test_column(dtype):
             col.read_slice_into(indata, s)
             assert np.all(indata == data[s])
 
+            s = slice(-3, -1)
+            indata = np.zeros(2, dtype=data.dtype)
+            col.read_slice_into(indata, s)
+            assert np.all(indata == data[s])
+
             ind = [3, 5, 7]
             indata = np.zeros(len(ind), dtype=data.dtype)
             col.read_rows_into(indata, ind)

@@ -78,7 +78,7 @@ def extract_slice(s, nrows, check_slice_stop=False):
             raise IndexError("Index out of bounds")
 
     if stop < 0:
-        stop = nrows + start + 1
+        stop = nrows + stop
 
     if stop < start:
         # will return an empty struct

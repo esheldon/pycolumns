@@ -77,6 +77,7 @@ def test_access(compression):
 
         for name in data.dtype.names:
             assert np.all(data[name][10:15] == cols[name][10:15])
+            assert np.all(data[name][-5:-2] == cols[name][-5:-2])
 
         for name in data.dtype.names:
             assert np.all(data[name][5] == cols[name][5])
@@ -150,6 +151,10 @@ def test_access(compression):
             # filling slice with scalar
             cols['id'][5:10] = 3
             assert np.all(cols['id'][5:10] == 3)
+
+            # filling slice with scalar
+            cols['id'][-5:-2] = 9
+            assert np.all(cols['id'][-5:-2] == 9)
 
             cols['scol'][5:10] = 'test'
             assert np.all(cols['scol'][5:10] == 'test')
