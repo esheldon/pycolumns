@@ -21,7 +21,7 @@ from . import util
 from . import column
 from .column import Column
 
-from . import dictfile
+from . import metafile
 
 from . import indices
 from .indices import Indices

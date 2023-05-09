@@ -12,7 +12,7 @@ TODO
 import os
 import numpy as np
 from .column import Column
-from .dictfile import Meta
+from .metafile import Meta
 from . import util
 from .schema import TableSchema
 from .defaults import DEFAULT_CACHE_MEM, DEFAULT_CHUNKSIZE
