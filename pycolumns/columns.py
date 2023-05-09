@@ -5,11 +5,17 @@ TODO
     - add vacuum to merge data with external chunk files
         - maybe have vacuum optionally run after exiting
         and updating context
-    - Maybe don't have meta and subcols in self as a name
-        - get_dict()
-        - get_subcols()
     - setters for some things like cache_mem, verbose etc.
-    - partitioning of data
+    - auto partitioning of data
+        - specify on creation that values in a column will
+          be used to automatically partition rows of the data.
+          e.g. could specify mdet_step and will automatically
+          generate subdirectories and put rows in there.
+
+          The idea is that if one does cols['mdet_step'] == 'noshear'
+          then it would automatically limit you to that partition
+
+          Issue is that the current query stuff won't understand that
 """
 import os
 import numpy as np
