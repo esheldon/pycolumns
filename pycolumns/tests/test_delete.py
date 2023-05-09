@@ -6,7 +6,6 @@ def test_delete():
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..schema import TableSchema
 
     seed = 812
     num = 20
@@ -25,21 +24,18 @@ def test_delete():
 
     ccols = ['id', 'scol']
 
-    schema = TableSchema.from_array(data, compression=ccols)
-
-    print(schema)
-
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, schema, verbose=True)
 
-        cols.append(data)
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data=data, compression=ccols)
+
         cols.create_meta('metadata')
         cols.meta['metadata'].write({'x': 3})
         # cols['metadata'] = {'x': 3}
 
-        cols.create_sub_from_array(name='sub/', array=sub_data)
+        cols.from_array(name='sub/', data=sub_data)
 
         iddir = cols['id'].dir
         assert os.path.exists(iddir)

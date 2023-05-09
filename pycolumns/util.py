@@ -428,11 +428,21 @@ def get_data_with_conversion(data, dtype, ndmin=1):
     return ndata
 
 
+def get_sub_dir(root, name):
+    if name is None:
+        return None
+
+    check_sub_name(name)
+
+    nsub = '.cols/'.join(name.split('/'))
+    return os.path.join(root, nsub)
+
+
 def check_sub_name(name):
-    if len(name) < 2 or name[-1] != '/':
+    if len(name) < 2 or name[-1] != '/' or name[0] == '/':
         raise ValueError(
-            f'sub-Columns names must be a string with a '
-            f'trailing /, got {name}'
+            f'sub-Columns names must be a string with the form '
+            f'path/, got {name}'
         )
 
 

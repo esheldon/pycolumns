@@ -144,10 +144,19 @@ data['x'] = rng.uniform(size=num)
 data['y'] = rng.uniform(size=num)
 data['name'] = data['id'].astype('U10')
 
-cols = pyc.Columns.from_array(coldir, data)
+cols = pyc.Columns.create(coldir)
+cols.from_array(data)
 
 # This version uses default compression for id and name
-cols = pyc.Columns.from_array(coldir, data, compression=['id', 'name'])
+cols.from_array(data, compression=['id', 'name'])
+
+# A table not in the root. Name must end in /
+cols.from_array(data, name='sub1/sub2/', compression=['id', 'name'])
+
+# two ways to access
+cols['sub1/sub2/']
+cols['sub1/sub2/id']
+cols['sub1']['sub2/']['id']
 
 # Append more data to the columns. The input data is a structured
 # array or a dict of arrays.
@@ -164,7 +173,7 @@ cols['name'].create_index()
 # here we set the chunksize for compressed columns to 10 megabytes
 
 schema = pyc.TableSchema.from_array(array, compression=['id'], chunksize='10m')
-cols = pyc.Columns.create(coldir, schema=schema)
+cols.create_table(schema=schema)
 
 # or you can build the schema from column schema
 cx = pyc.ColumnSchema('x', dtype='f4')
@@ -194,6 +203,10 @@ sch = {
 }
 
 schema = pyc.TableSchema.from_schema(sch)
+
+#
+# create a table not in the root
+#
 
 # add an uncompressed column, filling with zeros
 # currently only uncompressed columns can be added after

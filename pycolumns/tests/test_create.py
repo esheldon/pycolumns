@@ -5,7 +5,8 @@ import pytest
 @pytest.mark.parametrize('compression', [False, True])
 @pytest.mark.parametrize('verbose', [True, False])
 @pytest.mark.parametrize('fromdict', [False, True])
-def test_create(cache_mem, compression, verbose, fromdict):
+@pytest.mark.parametrize('from_array', [False, True])
+def test_create(cache_mem, compression, verbose, fromdict, from_array):
     """
     cache_mem of 0.01 will force use of mergesort
     """
@@ -44,18 +45,23 @@ def test_create(cache_mem, compression, verbose, fromdict):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(
-            cdir, schema, cache_mem=cache_mem, verbose=verbose,
-        )
+        cols = Columns.create(cdir, cache_mem=cache_mem, verbose=verbose)
 
         assert cols.dir == cdir
         assert cols.verbose == verbose
         assert cols.cache_mem == cache_mem
 
         if fromdict:
-            cols.append(ddict)
+            append_data = ddict
         else:
-            cols.append(data)
+            append_data = data
+
+        # created in root
+        if from_array:
+            cols.from_array(data=append_data, compression=ccols)
+        else:
+            cols.create_table(schema=schema)
+            cols.append(append_data)
 
         assert len(cols.names) == len(data.dtype.names)
         meta = {'version': '0.1', 'seeing': 0.9}

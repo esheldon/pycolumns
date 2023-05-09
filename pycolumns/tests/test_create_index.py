@@ -27,9 +27,8 @@ def test_create_index(cache_mem, compression):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.from_array(
-            cdir, data, cache_mem=cache_mem, compression=ccols, verbose=True,
-        )
+        cols = Columns.create(cdir, cache_mem=cache_mem, verbose=True)
+        cols.from_array(data=data, compression=ccols)
 
         cols['rand'].create_index()
         assert cols['rand'].has_index
@@ -72,9 +71,8 @@ def test_create_index_str(compression):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.from_array(
-            cdir, array=data, compression=ccols, overwrite=True, verbose=True,
-        )
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data=data, compression=ccols)
 
         cols['scol'].create_index()
         assert cols['scol'].has_index
@@ -109,7 +107,9 @@ def test_updating():
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.from_array(cdir, data, verbose=True)
+
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data=data)
 
         cols['ind'].create_index()
         assert cols['ind'].has_index

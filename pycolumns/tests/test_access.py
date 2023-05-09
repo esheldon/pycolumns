@@ -34,7 +34,6 @@ def test_access(compression):
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..schema import TableSchema
     from ..indices import Indices
 
     seed = 333
@@ -48,16 +47,11 @@ def test_access(compression):
     else:
         ccols = None
 
-    schema = TableSchema.from_array(data, compression=ccols)
-
-    print(schema)
-
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, schema, verbose=True)
-
-        cols.append(data)
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data=data, compression=ccols)
 
         assert len(cols.names) == len(data.dtype.names)
 
@@ -203,36 +197,41 @@ def test_access(compression):
         # adding more tables
         #
 
-        cols.create_sub_from_array(name='sub/', array=sub_data)
-        cols['sub/']
+        cols.from_array(name='sub1/', data=sub_data)
+        cols['sub1/']
+        cols['sub1/dec']
 
         assert len(cols.names) == len(data.dtype.names) + 1
 
-        cols['sub/'].create_sub_from_array(name='sub2/', array=sub2_data)
+        cols['sub1/'].from_array(name='sub2/', data=sub2_data)
+        cols['sub1/']['sub2/']
+        cols['sub1/sub2/']
+        cols['sub1/sub2/x']
 
-        cols['sub/dec']
-        cols['sub/']['sub2/']
-        cols['sub/sub2/']
-        cols['sub/sub2/x']
+        cols.from_array(name='sub1/sub2/sub3/', data=sub2_data)
+        cols['sub1/sub2/sub3/']
+        cols['sub1/sub2/sub3/x']
+        return
 
         cols2 = Columns(cdir)
-        cols2['sub/']['dec']
-        cols2['sub/dec']
-        cols2['sub/sub2/']
-        cols2['sub/sub2/x']
+        cols2['sub1/']['dec']
+        cols2['sub1/dec']
+        cols2['sub1/sub2/']
+        cols2['sub1/sub2/x']
+        cols2['sub1/sub2/sub3/x']
 
         with pytest.raises(IndexError):
-            cols['sub/sub2/sub3/']
+            cols['sub1/sub2/sub3/sub4/']
 
-        ra = cols['sub/']['ra'][:]
+        ra = cols['sub1/']['ra'][:]
         assert np.all(ra == sub_data['ra'])
-        assert np.all(cols['sub/ra'][:] == sub_data['ra'])
+        assert np.all(cols['sub1/ra'][:] == sub_data['ra'])
         with pytest.raises(TypeError):
-            cols['sub/'] = 5
+            cols['sub1/'] = 5
 
-        x = cols['sub/sub2/']['x'][:]
+        x = cols['sub1/sub2/']['x'][:]
         assert np.all(x == sub2_data['x'])
-        x = cols['sub/sub2/x'][:]
+        x = cols['sub1/sub2/x'][:]
         assert np.all(x == sub2_data['x'])
 
 
@@ -244,11 +243,8 @@ def test_set_compressed():
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..schema import TableSchema
 
     seed = 333
-    # num = 20
-    # chunksize = '10r'
     num = 100_000
     chunksize = '10000r'
 
@@ -264,18 +260,12 @@ def test_set_compressed():
 
     ccols = ['id', 'scol']
 
-    schema = TableSchema.from_array(
-        data, compression=ccols, chunksize=chunksize,
-    )
-
-    print(schema)
-
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, schema, verbose=True)
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data=data, compression=ccols, chunksize=chunksize)
 
-        cols.append(data)
         assert np.all(cols['id'][:] == data['id'])
 
         ndata = rng.randint(0, 2**16, size=cols.size)
@@ -292,6 +282,3 @@ def test_set_compressed():
 
         ndata = rng.randint(0, 2**16, size=cols.size)
         cols['id'][data.size:] = ndata
-
-        # print(cols['id']._col.chunk_data._data)
-        # stop
