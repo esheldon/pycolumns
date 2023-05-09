@@ -110,7 +110,7 @@ Column:
 
 # enries can actually be another pycolumns directory
 # these have a leading / in the name
->>> cols['/telemetry']
+>>> cols['telemetry/']
 Columns:
   dir: test.cols/telemetry.cols
   nrows: 10
