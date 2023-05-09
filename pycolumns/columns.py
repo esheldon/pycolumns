@@ -11,7 +11,7 @@ TODO
         cols.from_array('/sub1/sub2', array)
        - would want to refactor this sub pathing stuff for use outside
        of __getitem__
-    - maybe move over to 
+    - maybe move over to
         - Columns.create(dir)
         - cols.create_table()  # puts it in root
         - cols.create_table(path)  # puts it in path/
