@@ -205,8 +205,7 @@ schema = pyc.TableSchema.from_schema(sch)
 >>> weather = {'temperature': 30, 'humidity': 50}
 >>> c.create_meta('weather', weather)
 
-# Update column data in place.  Currently only uncompressed columns can be
-# updated
+# Update column data
 c['x'][10:20] = 3
 c['name'][[5, 6]] = ['alpha', 'beta']
 c['y'][50] = 1.25
@@ -222,6 +221,15 @@ with cols.updating():
 with cols['id'].updating():
     cols['id'][5:10] = 33
     cols['id'][99:200] = 66
+
+# if you have updated compressed columns, you will at some point want to run
+# vaccum which defragments the files
+
+# vacuum all compressed columns
+cols.vacuum()
+
+# a specific column
+cols['id'].vacuum()
 
 # You can use update to update dictionary metadata.
 # Only the fields in the input dictionary are updated or added
