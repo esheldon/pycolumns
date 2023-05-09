@@ -31,17 +31,18 @@ Columns:
     x                  <f4    None False
     y                  <f4    None False
 
-  Dictionaries:
+  Metadata:
     name
     ----------------------------
     meta
+    versions
 
   Sub-Columns Directories:
     name
     ----------------------------
-    telemetry
+    /telemetry
 
-# Above we see the main types supported:  A table of columns, dictionaries, and
+# Above we see the main types supported:  A table of columns, metadata entries, and
 # sub-Columns directories, which are themselves full Columns.  the id and name
 # columns have zstd compression and indexes for fast searching
 
@@ -64,21 +65,14 @@ Column:
 >>> c.nrows
 64348146
 
-# read all columns into a single rec array.  By default the dict
-# columns are not loaded
-
+# read all columns into a single rec array.
 >>> data = c.read()
 
-# using asdict=True puts the data into a dict.  The dict data
-# are also loaded in this case
+# using asdict=True puts the data into a dict.
 >>> data = c.read(asdict=True)
 
 # specify columns
 >>> data = c.read(columns=['id', 'x'])
-
-# dict columns can be specified if asdict is True.  Dicts can also
-# be read as single columns, see below
->>> data = c.read(columns=['id', 'x', 'meta'], asdict=True)
 
 # specifying a set of rows as sequence/array or slice
 >>> data = c.read(columns=['id', 'x'], rows=[3, 225, 1235])
@@ -111,11 +105,12 @@ Column:
 >>> ind = c['id'].between(15, 25) | (c['name'] == 'cxj2')
 >>> ind = c['id'].between(15, 250) & (c['id'] != 66) & (c['name'] != 'af23')
 
-# reading a dictionary column
->>> meta = c['meta'].read()
+# reading some metadata
+>>> versions = c.meta['versions'].read()
 
 # enries can actually be another pycolumns directory
->>> cols['telemetry']
+# these have a leading / in the name
+>>> cols['/telemetry']
 Columns:
   dir: test.cols/telemetry.cols
   nrows: 10
@@ -126,7 +121,7 @@ Columns:
     obsid              <i8    zstd True
     voltage            <f4    None False
 
->>> v = cols['telemetry']['voltage'][:]
+>>> v = cols['/telemetry']['voltage'][:]
 
 #
 # Creating a columns data store and adding or updating data
@@ -206,13 +201,9 @@ schema = pyc.TableSchema.from_schema(sch)
 >>> c.create_column(cschema)
 >>> assert np.all(c['newcol'][:] == 0)
 
-# add a dictionary column.
->>> c.create_dict('weather')
->>> c['weather'].write({'temp': 30.1, 'humid': 0.5})
-
-
-# overwrite dict column
->>> c['weather'].write({'temp': 33.2, 'humid': 0.3, 'windspeed': 60.5})
+# add a metadata entry
+>>> weather = {'temperature': 30, 'humidity': 50}
+>>> c.create_meta('weather', weather)
 
 # Update column data in place.  Currently only uncompressed columns can be
 # updated
@@ -232,13 +223,12 @@ with cols['id'].updating():
     cols['id'][5:10] = 33
     cols['id'][99:200] = 66
 
-# update dictionary.  Only the fields in the input dictionary are updated or
-# added
-c['meta'].update({'extra': 5})
+# You can use update to update dictionary metadata.
+# Only the fields in the input dictionary are updated or added
+>>> c.meta['weather'].update({'temperature': 30.1, 'extra': 5})
 
-# These replace dict entirely
-c['meta'] = {'x': 5}
-c['meta'].write({'n': 'test'})
+# completely overwrite
+>>> c['weather'].write([3, 4, 5])
 
 # Trying to replace an entire Column or sub Columns raises TypeError
 # c['x'] = 5
@@ -246,19 +236,19 @@ c['meta'].write({'n': 'test'})
 # get all names, including dictionary and sub Columns
 # same as list(c.keys())
 >>> c.names
-['telemetry', 'id', 'y', 'x', 'name', 'meta']
+['/telemetry', 'id', 'y', 'x', 'name', 'meta']
 
 # only array column names
 >>> c.column_names
 ['id', 'y', 'x', 'name']
 
 # only dict columns
->>> c.dict_names
-['meta', 'weather']
+>>> c.meta_names
+['versions', 'weather']
 
 # only sub Columns directories
 >>> c.subcols_names
-['telemetry']
+['/telemetry']
 
 # reload all columns or specified column/column list
 >>> c.reload()

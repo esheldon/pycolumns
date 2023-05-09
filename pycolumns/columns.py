@@ -408,7 +408,7 @@ class Columns(dict):
 
         if name[0] != '/':
             raise ValueError(
-                'sub-Columns names must have a leading /, got {name}'
+                f'sub-Columns names must have a leading /, got {name}'
             )
 
         if name in self.subcols_names:
@@ -470,7 +470,7 @@ class Columns(dict):
 
         if name[0] != '/':
             raise ValueError(
-                'sub-Columns names must have a leading /, got {name}'
+                f'sub-Columns names must have a leading /, got {name}'
             )
 
         if name in self.subcols_names:
@@ -750,15 +750,15 @@ class Columns(dict):
         ----------
         columns: sequence or string
             Can be a scalar string or a sequence of strings.  Defaults to all
-            array columns if asdict is False, but will include
-            dicts if asdict is True
+            array columns.
         rows: sequence, slice or scalar
             Sequence of row numbers.  Defaults to all.
         asdict: bool, optional
-            If set to True, read the requested columns into a dict.
+            If set to True, read the requested columns into a dict rather
+            than structured array
         """
 
-        columns = self._extract_columns(columns=columns, asdict=asdict)
+        columns = self._extract_columns(columns=columns)
 
         if len(columns) == 0:
             return None
@@ -817,36 +817,20 @@ class Columns(dict):
 
         return dtype
 
-    def _extract_columns(self, columns=None, asdict=False):
+    def _extract_columns(self, columns=None):
         """
-        extract the columns to read.  If no columns are sent then the behavior
-        depends on the asdict parameter
-            - if asdict is False, read all array columns
-            - if asdict is True, read all columns
+        extract the columns to read.  If no columns are sent then all
+        columns are read
         """
         if columns is None:
-
-            if asdict:
-                keys = sorted(self.keys())
-                columns = keys
-            else:
-                columns = self.column_names
-
+            return self.column_names
         else:
             if isinstance(columns, str):
                 columns = [columns]
 
             for c in columns:
-                if c not in self:
+                if c not in self.column_names:
                     raise ValueError("Column '%s' not found" % c)
-
-                if not asdict and self[c].type != 'col':
-                    if not asdict:
-                        raise ValueError(
-                            "requested non-array column '%s' "
-                            "Use asdict=True to read non-array "
-                            "columns with general read() method" % c
-                        )
 
         return columns
 
@@ -895,56 +879,51 @@ class Columns(dict):
             if ncols > 0 and hasattr(self, '_nrows'):
                 s += ['nrows: %s' % self.nrows]
 
-        acols = []
         metas = []
+        if len(self.meta_names) > 0:
+            metas += ['Metadata:']
+            metas += ['  %-15s' % ('name',)]
+            metas += ['  '+'-'*(28)]
+            metas += ['  '+n for n in self.meta_names]
+
         subcols = []
-        if len(self) > 0:
+        if len(self.subcols_names) > 0:
+            subcols += ['Sub-Columns Directories:']
+            subcols += ['  %-15s' % ('name',)]
+            subcols += ['  '+'-'*(28)]
+            subcols += ['  '+n for n in self.subcols_names]
+
+        acols = []
+
+        column_names = self.column_names
+        if len(column_names) > 0:
             acols += ['Table Columns:']
             cnames = 'name', 'dtype', 'comp', 'index'
             acols += ['  %-15s %6s %7s %-6s' % cnames]
             acols += ['  '+'-'*(35)]
 
-            metas += ['Metadata:']
-            metas += ['  %-15s' % ('name',)]
-            metas += ['  '+'-'*(28)]
-
-            subcols = ['Sub-Columns Directories:']
-            subcols += ['  %-15s' % ('name',)]
-            subcols += ['  '+'-'*(28)]
-
-            for name in sorted(self):
+            for name in sorted(column_names):
                 c = self[name]
 
-                if c.type == 'cols':
-                    cdir = os.path.basename(c.dir).replace('.cols', '')
-                    subcols += ['  %s' % cdir]
+                name = c.name
+
+                if len(name) > 15:
+                    # name_entry = ['  %s' % name]
+                    name_entry = [f'  {name}\n' + ' '*19]
+                    # s += ['%23s' % (c.type,)]
                 else:
+                    name_entry = ['  %-15s' % c.name]
 
-                    name = c.name
+                if 'compression' in c.meta:
+                    comp = c.meta['compression']['cname']
+                else:
+                    comp = 'None'
 
-                    if len(name) > 15:
-                        # name_entry = ['  %s' % name]
-                        name_entry = [f'  {name}\n' + ' '*19]
-                        # s += ['%23s' % (c.type,)]
-                    else:
-                        name_entry = ['  %-15s' % c.name]
-
-                    if c.type == 'col':
-
-                        if 'compression' in c.meta:
-                            comp = c.meta['compression']['cname']
-                        else:
-                            comp = 'None'
-
-                        acols += name_entry
-                        c_dtype = c.dtype.descr[0][1]
-                        acols[-1] += ' %6s' % c_dtype
-                        acols[-1] += ' %7s' % comp
-                        acols[-1] += ' %-6s' % self[name].has_index
-                    elif c.type == 'meta':
-                        metas += name_entry
-                    else:
-                        raise ValueError(f'bad type: {c.type}')
+                acols += name_entry
+                c_dtype = c.dtype.descr[0][1]
+                acols[-1] += ' %6s' % c_dtype
+                acols[-1] += ' %7s' % comp
+                acols[-1] += ' %-6s' % self[name].has_index
 
         s = [indent + tmp for tmp in s]
         s = ['Columns: '] + s
@@ -954,12 +933,12 @@ class Columns(dict):
             acols = [indent + tmp for tmp in acols]
             s += acols
 
-        if len(metas) > 3:
+        if len(metas) > 0:
             s += [indent]
             metas = [indent + tmp for tmp in metas]
             s += metas
 
-        if len(subcols) > 3:
+        if len(subcols) > 0:
             s += [indent]
             subcols = [indent + tmp for tmp in subcols]
             s += subcols
