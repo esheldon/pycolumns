@@ -3,6 +3,8 @@ TODO
 
     - support multiple levels '/sub1/sub2/sub3'
     - add vacuum to merge data with external chunk files
+        - maybe have vacuum optionally run after exiting
+        and updating context
     - Maybe don't have meta and subcols in self as a name
         - get_dict()
         - get_subcols()
@@ -630,6 +632,18 @@ class Columns(dict):
         """
         self._is_updating = True
         return self
+
+    def vacuum(self):
+        """
+        Degragment compressed columns
+
+        When updating data in compressed columns, the new compressed chunks can
+        expand beyond their allocated region in the file.  In this case the new
+        compressed data is stored temporarily in a separate file.  Running
+        vacuum combines all data back together in a single contiguous file.
+        """
+        for name in self.column_names:
+            self[name].vacuum()
 
     def delete(self, yes=False):
         """

@@ -318,6 +318,18 @@ class Column(object):
         if self.has_index:
             self.update_index()
 
+    def vacuum(self):
+        """
+        Defragment compressed data
+
+        When updating data in compressed columns, the new compressed chunks can
+        expand beyond their allocated region in the file.  In this case the new
+        compressed data is stored temporarily in a separate file.  Running
+        vacuum combines all data back together in a single contiguous file.
+        """
+        if isinstance(self._col, Chunks):
+            self._col.vacuum()
+
     def _append(self, data, update_index=True):
         """
         Append data to the column.  Data are appended.  If the file has not

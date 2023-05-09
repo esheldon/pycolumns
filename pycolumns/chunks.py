@@ -170,6 +170,17 @@ class Chunks(object):
 
         self._append_in_chunks(adata)
 
+    def vacuum(self):
+        """
+        Defragment the compressed data
+
+        When updating data in compressed columns, the new compressed chunks can
+        expand beyond their allocated region in the file.  In this case the new
+        compressed data is stored temporarily in a separate file.  Running
+        vacuum combines all data back together in a single contiguous file.
+        """
+        raise NotImplementedError('implement vacuum for Chunks')
+
     def _append_in_chunks(self, data):
         # Write data in chunks, the last one may be unfilled.
         nwrites = data.size // self.row_chunksize
