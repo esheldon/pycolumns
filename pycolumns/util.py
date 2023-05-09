@@ -433,3 +433,11 @@ def get_data_with_conversion(data, dtype, ndmin=1):
             raise
 
     return ndata
+
+
+def check_sub_name(name):
+    if len(name) < 2 or name[-1] != '/':
+        raise ValueError(
+            f'sub-Columns names must be a string with a '
+            f'trailing /, got {name}'
+        )

@@ -1,7 +1,22 @@
 """
 TODO
 
-    - support multiple levels '/sub1/sub2/sub3'
+    - can allow cols[rows] cols[2:3] now since not doing
+    - support multiple levels 'sub1/sub2/sub3/'
+        - done but maybe allow doing create on subcols with
+        that type of name, from the root
+        e.g. rather than specifying a real path, specify something
+        like
+
+        cols.from_array('/sub1/sub2', array)
+       - would want to refactor this sub pathing stuff for use outside
+       of __getitem__
+    - maybe move over to 
+        - Columns.create(dir)
+        - cols.create_table()  # puts it in root
+        - cols.create_table(path)  # puts it in path/
+
+    - think about renaming sub->table as in create_table, or maybe
     - setters for some things like cache_mem, verbose etc.
     - auto partitioning of data
         - specify on creation that values in a column will
@@ -411,10 +426,7 @@ class Columns(dict):
             If the directory exists, remove existing data
         """
 
-        if name[0] != '/':
-            raise ValueError(
-                f'sub-Columns names must have a leading /, got {name}'
-            )
+        util.check_sub_name(name)
 
         if name in self.subcols_names:
             raise ValueError("sub Columns '%s' already exists" % name)
@@ -473,10 +485,7 @@ class Columns(dict):
             If the directory exists, remove existing data
         """
 
-        if name[0] != '/':
-            raise ValueError(
-                f'sub-Columns names must have a leading /, got {name}'
-            )
+        util.check_sub_name(name)
 
         if name in self.subcols_names:
             raise ValueError("sub Columns '%s' already exists" % name)
@@ -850,6 +859,33 @@ class Columns(dict):
                     raise ValueError("Column '%s' not found" % c)
 
         return columns
+
+    def __getitem__(self, name):
+
+        notfound = False
+
+        if name not in self:
+            ns = name.split('/')
+            if len(ns) == 1:
+                # not a sub-columns, so not found
+                notfound = True
+            elif len(ns) == 2 and ns[1] == '':
+                # it was something like 'sub/'
+                notfound = True
+            else:
+                # It is multi-level
+                first = f'{ns[0]}/'
+                rest = '/'.join(ns[1:])
+
+                # let it pass on down the chain
+                try:
+                    return self[first][rest]
+                except IndexError:
+                    notfound = True
+        if notfound:
+            raise IndexError(f'entry {name} not found')
+
+        return super().__getitem__(name)
 
     def __setitem__(self, name, data):
         """

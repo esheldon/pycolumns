@@ -1,6 +1,30 @@
 import pytest
 
 
+def get_data(rng):
+    import numpy as np
+
+    num = 20
+    dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+    data = np.zeros(num, dtype=dtype)
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num)
+    data['scol'] = [
+        's' + str(data['id'][i]) for i in range(num)
+    ]
+
+    subnum = 25
+    sub_data = np.zeros(subnum, dtype=[('ra', 'f8'), ('dec', 'f8')])
+    sub_data['ra'] = rng.uniform(size=sub_data.size)
+    sub_data['dec'] = rng.uniform(size=sub_data.size)
+
+    sub2num = 15
+    sub2_data = np.zeros(sub2num, dtype=[('x', 'f4')])
+    sub2_data['x'] = rng.uniform(size=sub2_data.size)
+
+    return data, sub_data, sub2_data
+
+
 @pytest.mark.parametrize('compression', [False, True])
 def test_access(compression):
     """
@@ -14,17 +38,10 @@ def test_access(compression):
     from ..indices import Indices
 
     seed = 333
-    num = 20
 
     rng = np.random.RandomState(seed)
 
-    dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
-    data = np.zeros(num, dtype=dtype)
-    data['id'] = np.arange(num)
-    data['rand'] = rng.uniform(size=num)
-    data['scol'] = [
-        's' + str(data['id'][i]) for i in range(num)
-    ]
+    data, sub_data, sub2_data = get_data(rng)
 
     if compression:
         ccols = ['id', 'scol']
@@ -32,10 +49,6 @@ def test_access(compression):
         ccols = None
 
     schema = TableSchema.from_array(data, compression=ccols)
-
-    sub_data = np.zeros(num, dtype=[('ra', 'f8'), ('dec', 'f8')])
-    sub_data['ra'] = rng.uniform(size=sub_data.size)
-    sub_data['dec'] = rng.uniform(size=sub_data.size)
 
     print(schema)
 
@@ -48,8 +61,16 @@ def test_access(compression):
 
         assert len(cols.names) == len(data.dtype.names)
 
-        cols.create_sub_from_array(name='/sub', array=sub_data)
+        cols.create_sub_from_array(name='sub/', array=sub_data)
         assert len(cols.names) == len(data.dtype.names) + 1
+        cols['sub/'].create_sub_from_array(name='sub2/', array=sub2_data)
+
+        cols['sub/dec']
+        cols['sub/']['sub2/']
+        cols['sub/sub2/']
+        cols['sub/sub2/x']
+        with pytest.raises(IndexError):
+            cols['sub/sub2/sub3/']
 
         versions = {'numpy': '1.23.5'}
         cols.create_meta('versions', versions)
@@ -129,6 +150,7 @@ def test_access(compression):
             assert np.all(data[name][:] == cols[name][:])
 
         # check negative indices
+        num = cols.size
         assert cols[name][-2] == cols[name][num-2]
         assert np.all(cols[name][[-3, -1]] == cols[name][[num-3, num-1]])
         assert np.all(cols[name][-3:] == cols[name][[num-3, num-2, num-1]])
@@ -188,10 +210,14 @@ def test_access(compression):
             # not long enough
             cols['rand'] = [3, 4]
 
-        ra = cols['/sub']['ra'][:]
+        ra = cols['sub/']['ra'][:]
         assert np.all(ra == sub_data['ra'])
+        assert np.all(cols['sub/ra'][:] == sub_data['ra'])
         with pytest.raises(TypeError):
-            cols['/sub'] = 5
+            cols['sub/'] = 5
+
+        x = cols['sub/sub2/']['x'][:]
+        assert np.all(x == sub2_data['x'])
 
 
 def test_set_compressed():

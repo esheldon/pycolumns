@@ -40,7 +40,7 @@ Columns:
   Sub-Columns Directories:
     name
     ----------------------------
-    /telemetry
+    telemetry/
 
 # Above we see the main types supported:  A table of columns, metadata entries, and
 # sub-Columns directories, which are themselves full Columns.  the id and name
@@ -121,7 +121,9 @@ Columns:
     obsid              <i8    zstd True
     voltage            <f4    None False
 
->>> v = cols['/telemetry']['voltage'][:]
+>>> data = cols['telemetry/'].read()
+>>> v = cols['telemetry/']['voltage'][:]
+>>> v = cols['telemetry/voltage'][:]
 
 #
 # Creating a columns data store and adding or updating data
@@ -249,7 +251,7 @@ with cols['id'].updating(vacuum=True):
 # get all names, including dictionary and sub Columns
 # same as list(c.keys())
 >>> c.names
-['/telemetry', 'id', 'y', 'x', 'name', 'meta']
+['telemetry/', 'id', 'y', 'x', 'name', 'meta']
 
 # only array column names
 >>> c.column_names
@@ -261,7 +263,7 @@ with cols['id'].updating(vacuum=True):
 
 # only sub Columns directories
 >>> c.subcols_names
-['/telemetry']
+['telemetry/']
 
 # reload all columns or specified column/column list
 >>> c.reload()

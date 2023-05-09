@@ -39,7 +39,7 @@ def test_delete():
         cols.meta['metadata'].write({'x': 3})
         # cols['metadata'] = {'x': 3}
 
-        cols.create_sub_from_array(name='/sub', array=sub_data)
+        cols.create_sub_from_array(name='sub/', array=sub_data)
 
         iddir = cols['id'].dir
         assert os.path.exists(iddir)
