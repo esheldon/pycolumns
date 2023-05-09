@@ -332,7 +332,7 @@ class Columns(dict):
                     c = Columns(
                         path, cache_mem=self.cache_mem, verbose=self.verbose,
                     )
-                    cname = util.get_subname(name)
+                    cname = util.get_sub_name(name)
                     super().__setitem__(cname, c)
                 else:
                     pass

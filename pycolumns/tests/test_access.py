@@ -69,6 +69,10 @@ def test_access(compression):
         cols['sub/']['sub2/']
         cols['sub/sub2/']
         cols['sub/sub2/x']
+
+        cols2 = Columns(cdir)
+        cols['sub/dec']
+
         with pytest.raises(IndexError):
             cols['sub/sub2/sub3/']
 

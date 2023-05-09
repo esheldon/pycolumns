@@ -90,13 +90,6 @@ def extract_slice(s, nrows, check_slice_stop=False):
     return slice(start, stop, s.step)
 
 
-def get_subname(name):
-    """
-    sub-cols get a leading slash
-    """
-    return f'/{name}'
-
-
 def extract_name(filename):
     """
     Extract the column name from the file name
@@ -441,3 +434,10 @@ def check_sub_name(name):
             f'sub-Columns names must be a string with a '
             f'trailing /, got {name}'
         )
+
+
+def get_sub_name(name):
+    """
+    sub-cols get a leading slash
+    """
+    return f'{name}/'
