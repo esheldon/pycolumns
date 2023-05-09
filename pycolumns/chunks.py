@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from ._column import Column as CColumn
 from . import util
@@ -20,6 +21,7 @@ class Chunks(object):
     ):
         self._filename = filename
         self._chunks_filename = chunks_filename
+        self._dir = os.path.dirname(filename)
 
         self._dtype = np.dtype(dtype)
         self._chunks_dtype = np.dtype(CHUNKS_DTYPE)
@@ -32,6 +34,13 @@ class Chunks(object):
         self._set_row_chunksize(chunksize)
 
         self._clear_chunk_cache()
+
+    @property
+    def dir(self):
+        """
+        get the directory
+        """
+        return self._dir
 
     @property
     def filename(self):
@@ -179,7 +188,59 @@ class Chunks(object):
         compressed data is stored temporarily in a separate file.  Running
         vacuum combines all data back together in a single contiguous file.
         """
-        raise NotImplementedError('implement vacuum for Chunks')
+        from tempfile import TemporaryDirectory
+        import shutil
+
+        cd = self.chunk_data
+        w, = np.where(cd['is_external'])
+        if w.size == 0:
+            return
+
+        with TemporaryDirectory(dir=self.dir) as tmpdir:
+
+            array_file = os.path.join(
+                tmpdir,
+                os.path.basename(self.filename),
+            )
+            chunks_file = os.path.join(
+                tmpdir,
+                os.path.basename(self.chunks_filename),
+            )
+            with open(array_file, 'wb') as fobj:
+                with ChunkData(chunks_file, mode='w+') as chunks:
+
+                    for ichunk in range(cd.size):
+
+                        compressed_bytes = self._read_compressed_bytes(ichunk)
+
+                        fobj.write(compressed_bytes)
+
+                        chunks.update_after_write(
+                            nrows=cd['nrows'][ichunk],
+                            nbytes=len(compressed_bytes),
+                        )
+            # close old files
+            self.chunk_data.close()
+            self._fobj.close()
+
+            # remove old files
+            print(f'    rm {self.filename}')
+            os.remove(self.filename)
+            print(f'    rm {self.chunks_filename}')
+            os.remove(self.chunks_filename)
+
+            for ei in w:
+                ext_fname = self.get_external_filename(ei)
+                print(f'    rm {ext_fname}')
+                os.remove(ext_fname)
+
+            # move new files into place
+            print(f'    {array_file} -> {self.filename}')
+            shutil.move(array_file, self.filename)
+            print(f'    {chunks_file} -> {self.chunks_filename}')
+            shutil.move(chunks_file, self.chunks_filename)
+
+        self._open_files()
 
     def _append_in_chunks(self, data):
         # Write data in chunks, the last one may be unfilled.
@@ -287,7 +348,7 @@ class Chunks(object):
         return nbytes
 
     def _write_external_compressed_bytes(self, compressed_bytes, chunk_index):
-        fname = self._get_external_filename(chunk_index)
+        fname = self.get_external_filename(chunk_index)
 
         if True and self.verbose:
             print(f'     writing external: {fname}')
@@ -296,12 +357,15 @@ class Chunks(object):
             fobj.write(compressed_bytes)
 
     def _read_external_compressed_bytes(self, chunk_index):
-        fname = self._get_external_filename(chunk_index)
+        fname = self.get_external_filename(chunk_index)
         with open(fname, 'rb') as fobj:
             compressed_bytes = fobj.read()
         return compressed_bytes
 
-    def _get_external_filename(self, chunk_index):
+    def get_external_filename(self, chunk_index):
+        """
+        External chunk index file
+        """
         return f'{self.filename}.{chunk_index}'
 
     def _get_compressed_data(self, data):
@@ -886,12 +950,20 @@ class ChunkData(object):
         self.ensure_has_data()
         return self._data[arg]
 
+    def close(self):
+        self._fobj.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exception_type, exception_value, traceback):
+        self.close()
+
 
 def test_set_compressed():
     """
     cache_mem of 0.01 will force use of mergesort
     """
-    import os
     import tempfile
     import numpy as np
     from .columns import Columns

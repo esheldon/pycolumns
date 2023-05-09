@@ -98,101 +98,100 @@ def test_access(compression):
         cols.meta['versions'].write(dnew)
         assert cols.meta['versions'].read() == dnew
 
-        if not compression:
-            for name in data.dtype.names:
-                data[name][10:15] = (
-                    np.arange(1000, 1000+5).astype(data[name].dtype)
-                )
-                cols[name][10:15] = data[name][10:15]
-                assert np.all(data[name][:] == cols[name][:])
-
-            # sorted rows
-            rows = [5, 15, 17]
-            vals = np.arange(len(rows))
-            for name in data.dtype.names:
-                data[name][rows] = vals.astype(data[name].dtype)
-                cols[name][rows] = data[name][rows]
-                assert np.all(data[name][:] == cols[name][:])
-
-            # unsorted rows
-            rows = [17, 5, 15]
-            vals = np.arange(len(rows))
-            for name in data.dtype.names:
-                data[name][rows] = vals.astype(data[name].dtype)
-                cols[name][rows] = data[name][rows]
-                assert np.all(data[name][:] == cols[name][:])
-
-            row = 8
-            val = 1999
-            for name in data.dtype.names:
-                data[name][row] = val
-                cols[name][row] = val
-                assert np.all(data[name][:] == cols[name][:])
-
-            # check negative indices
-            assert cols[name][-2] == cols[name][num-2]
-            assert np.all(cols[name][[-3, -1]] == cols[name][[num-3, num-1]])
-            assert np.all(cols[name][-3:] == cols[name][[num-3, num-2, num-1]])
-
-            with pytest.raises(ValueError):
-                # tring to set number from string not representing numbers
-                cols['rand'][:] = cols['scol'][:]
-
-            # automatic conversion works num -> string
-            cols['scol'][:] = np.arange(cols.nrows)
-            assert np.all(
-                cols['scol'][:] == np.arange(cols.nrows).astype('U5')
+        for name in data.dtype.names:
+            data[name][10:15] = (
+                np.arange(1000, 1000+5).astype(data[name].dtype)
             )
+            cols[name][10:15] = data[name][10:15]
+            assert np.all(data[name][:] == cols[name][:])
 
-            cols['rand'][:] = cols['id'][:]
-            assert np.all(
-                cols['rand'][:] == cols['id'][:].astype(cols['rand'].dtype)
-            )
+        # sorted rows
+        rows = [5, 15, 17]
+        vals = np.arange(len(rows))
+        for name in data.dtype.names:
+            data[name][rows] = vals.astype(data[name].dtype)
+            cols[name][rows] = data[name][rows]
+            assert np.all(data[name][:] == cols[name][:])
 
-            # filling slice with scalar
-            cols['id'][5:10] = 3
-            assert np.all(cols['id'][5:10] == 3)
+        # unsorted rows
+        rows = [17, 5, 15]
+        vals = np.arange(len(rows))
+        for name in data.dtype.names:
+            data[name][rows] = vals.astype(data[name].dtype)
+            cols[name][rows] = data[name][rows]
+            assert np.all(data[name][:] == cols[name][:])
 
-            # filling slice with scalar
-            cols['id'][-5:-2] = 9
-            assert np.all(cols['id'][-5:-2] == 9)
+        row = 8
+        val = 1999
+        for name in data.dtype.names:
+            data[name][row] = val
+            cols[name][row] = val
+            assert np.all(data[name][:] == cols[name][:])
 
-            cols['scol'][5:10] = 'test'
-            assert np.all(cols['scol'][5:10] == 'test')
+        # check negative indices
+        assert cols[name][-2] == cols[name][num-2]
+        assert np.all(cols[name][[-3, -1]] == cols[name][[num-3, num-1]])
+        assert np.all(cols[name][-3:] == cols[name][[num-3, num-2, num-1]])
 
-            # filling rows with a scalar
-            ind = Indices([3, 5, 8], is_sorted=True)
-            cols['id'][ind] = 9999
-            assert np.all(cols['id'][ind] == 9999)
+        with pytest.raises(ValueError):
+            # tring to set number from string not representing numbers
+            cols['rand'][:] = cols['scol'][:]
 
-            cols['scol'][ind] = 'test'
-            assert np.all(cols['scol'][ind] == 'test')
+        # automatic conversion works num -> string
+        cols['scol'][:] = np.arange(cols.nrows)
+        assert np.all(
+            cols['scol'][:] == np.arange(cols.nrows).astype('U5')
+        )
 
-            # filling rows unsorted
-            ind = [8, 1, 3]
-            cols['id'][ind] = -8888
-            assert np.all(cols['id'][ind] == -8888)
+        cols['rand'][:] = cols['id'][:]
+        assert np.all(
+            cols['rand'][:] == cols['id'][:].astype(cols['rand'].dtype)
+        )
 
-            cols['scol'][ind] = '333'
-            assert np.all(cols['scol'][ind] == '333')
+        # filling slice with scalar
+        cols['id'][5:10] = 3
+        assert np.all(cols['id'][5:10] == 3)
 
-            # This only works filling gall items or if data
-            # has the right length
-            cols['rand'] = 8
-            assert np.all(cols['rand'][:] == 8)
+        # filling slice with scalar
+        cols['id'][-5:-2] = 9
+        assert np.all(cols['id'][-5:-2] == 9)
 
-            d = rng.uniform(size=cols.nrows).astype('f4')
-            cols['rand'] = d
-            assert np.all(cols['rand'][:] == d)
+        cols['scol'][5:10] = 'test'
+        assert np.all(cols['scol'][5:10] == 'test')
 
-            with pytest.raises(IndexError):
-                # not long enough
-                cols['rand'] = [3, 4]
+        # filling rows with a scalar
+        ind = Indices([3, 5, 8], is_sorted=True)
+        cols['id'][ind] = 9999
+        assert np.all(cols['id'][ind] == 9999)
 
-            ra = cols['/sub']['ra'][:]
-            assert np.all(ra == sub_data['ra'])
-            with pytest.raises(TypeError):
-                cols['/sub'] = 5
+        cols['scol'][ind] = 'test'
+        assert np.all(cols['scol'][ind] == 'test')
+
+        # filling rows unsorted
+        ind = [8, 1, 3]
+        cols['id'][ind] = -8888
+        assert np.all(cols['id'][ind] == -8888)
+
+        cols['scol'][ind] = '333'
+        assert np.all(cols['scol'][ind] == '333')
+
+        # This only works filling gall items or if data
+        # has the right length
+        cols['rand'] = 8
+        assert np.all(cols['rand'][:] == 8)
+
+        d = rng.uniform(size=cols.nrows).astype('f4')
+        cols['rand'] = d
+        assert np.all(cols['rand'][:] == d)
+
+        with pytest.raises(IndexError):
+            # not long enough
+            cols['rand'] = [3, 4]
+
+        ra = cols['/sub']['ra'][:]
+        assert np.all(ra == sub_data['ra'])
+        with pytest.raises(TypeError):
+            cols['/sub'] = 5
 
 
 def test_set_compressed():
