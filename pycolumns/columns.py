@@ -973,3 +973,8 @@ class _MetaSet(dict):
 
         c = Meta(path, verbose=self._verbose)
         super().__setitem__(name, c)
+
+    def __repr__(self):
+        s = ['Metadata:']
+        s += ['  '+n for n in self]
+        return '\n'.join(s)
