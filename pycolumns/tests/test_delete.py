@@ -35,8 +35,8 @@ def test_delete():
         cols = Columns.create(cdir, schema, verbose=True)
 
         cols.append(data)
-        cols.create_dict('metadata')
-        cols.dicts['metadata'].write({'x': 3})
+        cols.create_meta('metadata')
+        cols.meta['metadata'].write({'x': 3})
         # cols['metadata'] = {'x': 3}
 
         cols.create_sub_from_array(name='/sub', array=sub_data)
@@ -47,10 +47,10 @@ def test_delete():
         cols.delete_entry('id', yes=True)
         assert not os.path.exists(iddir)
 
-        fname = cols.dicts['metadata'].filename
+        fname = cols.meta['metadata'].filename
         assert os.path.exists(fname)
 
-        cols.delete_dict('metadata', yes=True)
+        cols.delete_meta('metadata', yes=True)
         assert not os.path.exists(fname)
 
         cols.delete(yes=True)

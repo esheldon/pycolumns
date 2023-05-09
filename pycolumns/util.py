@@ -171,14 +171,14 @@ def get_column_dir(dir, name):
     return os.path.join(dir, name)
 
 
-def get_filename(dir, name, type):
+def get_filename(dir, name, ext):
     """
     genearte a file name from dir, column name and column type
     """
-    if type not in defaults.ALLOWED_COL_TYPES:
-        raise ValueError(f'unknown file type {type}')
+    if ext not in defaults.ALLOWED_EXTENSIONS:
+        raise ValueError(f'unsuported extension {ext}')
 
-    return os.path.join(dir, f'{name}.{type}')
+    return os.path.join(dir, f'{name}.{ext}')
 
 
 def get_colfiles(coldir):

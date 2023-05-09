@@ -2,12 +2,12 @@ import os
 from . import util
 
 
-class Dict(object):
+class Meta(object):
     """
-    Represent a dict entry
+    Represent metadata that can be stored in JSON
     """
-    def __init__(self, filename, verbose=False,):
-        self._type = 'dict'
+    def __init__(self, filename, verbose=False):
+        self._type = 'meta'
         self._verbose = verbose
         self._filename = filename
         self._name = util.extract_name(filename)
@@ -20,7 +20,7 @@ class Dict(object):
     @property
     def name(self):
         """
-        get the name type of the column
+        get the name of this object
         """
         return self._name
 
@@ -34,24 +34,24 @@ class Dict(object):
     @property
     def type(self):
         """
-        get the data type of the column
+        get the type of this object
         """
         return self._type
 
     @property
     def filename(self):
         """
-        get the file name holding the column data
+        get the file name holding the data
         """
         return self._filename
 
     def write(self, data):
         """
-        Write data to the dict column.
+        Write data
 
         Parameters
         ----------
-        data: dict or json supported object
+        data: Any json supported object
             The data must be supported by the JSON format.
         """
 
@@ -59,12 +59,13 @@ class Dict(object):
 
     def update(self, data):
         """
-        Update the data in the dict column.
+        Update the data.  This only works for dictionaries
 
         Parameters
         ----------
-        data: dict or json supported object
-            The data must be supported by the JSON format.
+        data: dict
+            Update the data.  The stored data and the input must be dict or
+            dict like
         """
 
         odata = self.read()
@@ -73,15 +74,13 @@ class Dict(object):
 
     def read(self):
         """
-        read data from this column
+        read the data
         """
         return util.read_json(self.filename)
 
     def __repr__(self):
         """
-
         Get a list of metadat for this column.
-
         """
         indent = '  '
 
@@ -92,9 +91,9 @@ class Dict(object):
         if self.filename is not None:
             s += ['filename: %s' % self.filename]
 
-        s += ['type: dict']
+        s += ['type: meta']
 
         s = [indent + tmp for tmp in s]
-        s = ['Dict: '] + s
+        s = ['Meta: '] + s
 
         return '\n'.join(s)

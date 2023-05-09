@@ -22,7 +22,6 @@ from . import column
 from .column import Column
 
 from . import dictfile
-from .dictfile import Dict
 
 from . import indices
 from .indices import Indices

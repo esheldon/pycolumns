@@ -51,12 +51,14 @@ def test_access(compression):
         cols.create_sub_from_array(name='/sub', array=sub_data)
         assert len(cols.names) == len(data.dtype.names) + 1
 
-        meta = {'version': '0.1', 'seeing': 0.9}
-        cols.create_dict('meta')
-        cols.dicts['meta'].write(meta)
+        versions = {'numpy': '1.23.5'}
+        cols.create_meta('versions', versions)
 
-        rmeta = cols.dicts['meta'].read()
-        assert rmeta == meta
+        rmeta = cols.meta['versions'].read()
+        assert rmeta == versions
+
+        cols.create_meta('list', [3, 4])
+        assert cols.meta['list'].read() == [3, 4]
 
         indata = cols.read()
         for name in data.dtype.names:
@@ -83,20 +85,18 @@ def test_access(compression):
             assert np.all(data[name][5] == cols[name][5])
 
         #
-        # update data in columns
+        # update data in columns and meta
         #
 
-        dadd = {'new': 'hello'}
-        cols.dicts['meta'].update(dadd)
-        meta.update(dadd)
+        dadd = {'pycolumns': '2.0.0'}
+        cols.meta['versions'].update(dadd)
+        versions.update(dadd)
 
-        rmeta = cols.dicts['meta'].read()
-        assert rmeta == meta
+        assert cols.meta['versions'].read() == versions
 
         dnew = {'replaced': 3}
-        # cols.dicts['meta'] = dnew
-        cols.dicts['meta'].write(dnew)
-        assert cols.dicts['meta'].read() == dnew
+        cols.meta['versions'].write(dnew)
+        assert cols.meta['versions'].read() == dnew
 
         if not compression:
             for name in data.dtype.names:

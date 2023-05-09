@@ -1,9 +1,9 @@
 # flake8: noqa
 import numpy as np
 
-ALLOWED_COL_TYPES = [
-    'array', 'meta', 'index', 'index1', 'sorted', 'dict', 'cols',
-    'chunks',
+ALLOWED_EXTENSIONS = [
+    'array', 'meta', 'index', 'index1', 'sorted', 'cols',
+    'chunks', 'json',
 ]
 
 

@@ -1,11 +1,9 @@
 """
 TODO
 
-    - proper .dicts for protections and support setting (running .write) with
-      = set
     - support multiple levels '/sub1/sub2/sub3'
     - add vacuum to merge data with external chunk files
-    - Maybe don't have dicts and subcols in self as a name
+    - Maybe don't have meta and subcols in self as a name
         - get_dict()
         - get_subcols()
     - setters for some things like cache_mem, verbose etc.
@@ -14,7 +12,7 @@ TODO
 import os
 import numpy as np
 from .column import Column
-from .dictfile import Dict
+from .dictfile import Meta
 from . import util
 from .schema import TableSchema
 from .defaults import DEFAULT_CACHE_MEM, DEFAULT_CHUNKSIZE
@@ -50,7 +48,6 @@ class Columns(dict):
             )
 
         self._dir = dir
-        self._dicts = {}
         self._type = 'cols'
         self._verbose = verbose
         self._is_updating = False
@@ -219,11 +216,11 @@ class Columns(dict):
         return [c for c in self if self[c].type == 'col']
 
     @property
-    def dict_names(self):
+    def meta_names(self):
         """
         Get a list of the array column names
         """
-        return [c for c in self if self[c].type == 'dict']
+        return list(self.meta.keys())
 
     @property
     def subcols_names(self):
@@ -264,11 +261,11 @@ class Columns(dict):
         return self._cache_mem_gb
 
     @property
-    def dicts(self):
+    def meta(self):
         """
         Do this properly to add protections and controls
         """
-        return self._dicts
+        return self._meta
 
     def _dirbase(self):
         """
@@ -301,18 +298,17 @@ class Columns(dict):
 
                 # will be /name for name.cols
                 # else will be name
-                name = util.extract_name(path)
-                type = util.extract_type(path)
+                name, ext = util.split_ext(path)
+                # name = util.extract_name(path)
+                # ext = util.extract_extension(path)
 
-                if self.verbose:
-                    if type in ['cols', 'dict']:
-                        print(f'    loading : {name}')
+                if self.verbose and ext in ['cols', 'json']:
+                    print(f'    loading : {name}')
 
                 # only load .dict or .cols, ignore other stuff
-                if type == 'dict':
-                    c = Dict(path, verbose=self.verbose)
-                    self.dicts[name] = c
-                elif type == 'cols':
+                if ext == 'json':
+                    self.meta._load(path)
+                elif ext == 'cols':
                     c = Columns(
                         path, cache_mem=self.cache_mem, verbose=self.verbose,
                     )
@@ -362,28 +358,24 @@ class Columns(dict):
         table_schema = TableSchema([schema])
         self._add_columns(table_schema, fill=True)
 
-    def create_dict(self, name, data={}):
+    def create_meta(self, name, data={}):
         """
-        create a new dict column
+        create a new metadata entry
 
         parameters
         ----------
         name: str
-            Column name
-        data: dict, optional
-            Optional initial data, default {}
+            Name for this metadata entry
+        data: Data that can be stored as JSON
+            e.g. a dict, list etc.
         """
 
-        if name in self.dict_names:
+        if name in self.meta_names:
             raise ValueError("column '%s' already exists" % name)
 
-        filename = util.get_filename(dir=self.dir, name=name, type='dict')
-        c = Dict(filename, verbose=self.verbose)
-        # call super setitem directly for new entry
-        # super().__setitem__(name, c)
-        # self[name].write(data)
-        self.dicts[name] = c
-        self.dicts[name].write(data)
+        path = util.get_filename(dir=self.dir, name=name, ext='json')
+        self.meta._load(path)
+        self.meta[name].write(data)
 
     def create_sub(
         self, name, schema={}, cache_mem=DEFAULT_CACHE_MEM, verbose=False,
@@ -419,11 +411,11 @@ class Columns(dict):
                 'sub-Columns names must have a leading /, got {name}'
             )
 
-        if name in self.dict_names:
+        if name in self.subcols_names:
             raise ValueError("sub Columns '%s' already exists" % name)
 
         dname = name[1:]
-        dirname = util.get_filename(dir=self.dir, name=dname, type='cols')
+        dirname = util.get_filename(dir=self.dir, name=dname, ext='cols')
         c = Columns.create(
             dirname,
             schema=schema,
@@ -481,11 +473,11 @@ class Columns(dict):
                 'sub-Columns names must have a leading /, got {name}'
             )
 
-        if name in self.dict_names:
+        if name in self.subcols_names:
             raise ValueError("sub Columns '%s' already exists" % name)
 
         dname = name[1:]
-        dirname = util.get_filename(dir=self.dir, name=dname, type='cols')
+        dirname = util.get_filename(dir=self.dir, name=dname, ext='cols')
         c = Columns.from_array(
             dirname,
             array=array,
@@ -533,6 +525,7 @@ class Columns(dict):
             self[col]._close()
 
         super().clear()
+        self._meta = _MetaSet(coldir=self.dir, verbose=self.verbose)
 
     def _add_columns(self, schema, fill=False):
         """
@@ -661,13 +654,13 @@ class Columns(dict):
         for name in original_names:
             self.delete_entry(name, yes=True)
 
-        for name in self.dicts:
-            self.delete_dict(name, yes=True)
+        for name in self.meta:
+            self.delete_meta(name, yes=True)
 
         print('removing:', self.dir)
         shutil.rmtree(self.dir)
 
-    def delete_dict(self, name, yes=False):
+    def delete_meta(self, name, yes=False):
         """
         delete the specified dict
 
@@ -679,7 +672,7 @@ class Columns(dict):
             If True, don't prompt for confirmation
         """
 
-        if name not in self.dicts:
+        if name not in self.meta:
             print("cannot delete dict '%s', it does not exist" % name)
 
         if not yes:
@@ -689,11 +682,11 @@ class Columns(dict):
 
         if yes:
             print(f'Removing data for dict: {name}')
-            fname = self.dicts[name].filename
+            fname = self.meta[name].filename
             if os.path.exists(fname):
                 os.remove(fname)
 
-            del self.dicts[name]
+            del self.meta[name]
 
     def delete_entry(self, name, yes=False):
         """
@@ -903,7 +896,7 @@ class Columns(dict):
                 s += ['nrows: %s' % self.nrows]
 
         acols = []
-        dicts = []
+        metas = []
         subcols = []
         if len(self) > 0:
             acols += ['Table Columns:']
@@ -911,9 +904,9 @@ class Columns(dict):
             acols += ['  %-15s %6s %7s %-6s' % cnames]
             acols += ['  '+'-'*(35)]
 
-            dicts += ['Dictionaries:']
-            dicts += ['  %-15s' % ('name',)]
-            dicts += ['  '+'-'*(28)]
+            metas += ['Metadata:']
+            metas += ['  %-15s' % ('name',)]
+            metas += ['  '+'-'*(28)]
 
             subcols = ['Sub-Columns Directories:']
             subcols += ['  %-15s' % ('name',)]
@@ -948,8 +941,8 @@ class Columns(dict):
                         acols[-1] += ' %6s' % c_dtype
                         acols[-1] += ' %7s' % comp
                         acols[-1] += ' %-6s' % self[name].has_index
-                    elif c.type == 'dict':
-                        dicts += name_entry
+                    elif c.type == 'meta':
+                        metas += name_entry
                     else:
                         raise ValueError(f'bad type: {c.type}')
 
@@ -961,10 +954,10 @@ class Columns(dict):
             acols = [indent + tmp for tmp in acols]
             s += acols
 
-        if len(dicts) > 3:
+        if len(metas) > 3:
             s += [indent]
-            dicts = [indent + tmp for tmp in dicts]
-            s += dicts
+            metas = [indent + tmp for tmp in metas]
+            s += metas
 
         if len(subcols) > 3:
             s += [indent]
@@ -972,3 +965,32 @@ class Columns(dict):
             s += subcols
 
         return '\n'.join(s)
+
+
+class _MetaSet(dict):
+    """
+    Manage a set of Meta
+    """
+    def __init__(self, coldir, verbose):
+        self._coldir = coldir
+        self._verbose = verbose
+
+    def __getitem__(self, name):
+        if name not in self:
+            raise RuntimeError(f'dict {name} not found')
+
+        return super().__getitem__(name)
+
+    def __setitem__(self, name, data):
+        raise TypeError(
+            f'To write to dict {name}, use meta[{name}].write(data) '
+            f'or meta[{name}].update(data)'
+        )
+
+    def _load(self, path):
+        name = util.extract_name(path)
+        if name in self:
+            raise RuntimeError(f'dict {name} already exists')
+
+        c = Meta(path, verbose=self._verbose)
+        super().__setitem__(name, c)

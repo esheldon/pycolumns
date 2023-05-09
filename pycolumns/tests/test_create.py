@@ -59,17 +59,17 @@ def test_create(cache_mem, compression, verbose, fromdict):
 
         assert len(cols.names) == len(data.dtype.names)
         meta = {'version': '0.1', 'seeing': 0.9}
-        cols.create_dict('meta')
-        cols.dicts['meta'].write(meta)
-        # cols['meta'].write(meta)
+        cols.create_meta('metadata', meta)
 
-        # rmeta = cols['meta'].read()
-        rmeta = cols.dicts['meta'].read()
-        assert rmeta == meta
+        assert cols.meta['metadata'].read() == meta
+
+        newd = {'x': 5, 'name': 'joe'}
+        meta.update(newd)
+        cols.meta['metadata'].update(newd)
+        assert cols.meta['metadata'].read() == meta
 
         ncols = Columns(cdir)
-        rmeta = ncols.dicts['meta'].read()
-        assert rmeta == meta
+        assert ncols.meta['metadata'].read() == meta
 
         # after appending, verify is run, but let's double check
         for name in data.dtype.names:
