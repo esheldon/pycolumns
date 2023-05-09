@@ -61,21 +61,6 @@ def test_access(compression):
 
         assert len(cols.names) == len(data.dtype.names)
 
-        cols.create_sub_from_array(name='sub/', array=sub_data)
-        assert len(cols.names) == len(data.dtype.names) + 1
-        cols['sub/'].create_sub_from_array(name='sub2/', array=sub2_data)
-
-        cols['sub/dec']
-        cols['sub/']['sub2/']
-        cols['sub/sub2/']
-        cols['sub/sub2/x']
-
-        cols2 = Columns(cdir)
-        cols['sub/dec']
-
-        with pytest.raises(IndexError):
-            cols['sub/sub2/sub3/']
-
         versions = {'numpy': '1.23.5'}
         cols.create_meta('versions', versions)
 
@@ -214,6 +199,31 @@ def test_access(compression):
             # not long enough
             cols['rand'] = [3, 4]
 
+        #
+        # adding more tables
+        #
+
+        cols.create_sub_from_array(name='sub/', array=sub_data)
+        cols['sub/']
+
+        assert len(cols.names) == len(data.dtype.names) + 1
+
+        cols['sub/'].create_sub_from_array(name='sub2/', array=sub2_data)
+
+        cols['sub/dec']
+        cols['sub/']['sub2/']
+        cols['sub/sub2/']
+        cols['sub/sub2/x']
+
+        cols2 = Columns(cdir)
+        cols2['sub/']['dec']
+        cols2['sub/dec']
+        cols2['sub/sub2/']
+        cols2['sub/sub2/x']
+
+        with pytest.raises(IndexError):
+            cols['sub/sub2/sub3/']
+
         ra = cols['sub/']['ra'][:]
         assert np.all(ra == sub_data['ra'])
         assert np.all(cols['sub/ra'][:] == sub_data['ra'])
@@ -221,6 +231,8 @@ def test_access(compression):
             cols['sub/'] = 5
 
         x = cols['sub/sub2/']['x'][:]
+        assert np.all(x == sub2_data['x'])
+        x = cols['sub/sub2/x'][:]
         assert np.all(x == sub2_data['x'])
 
 

@@ -431,7 +431,7 @@ class Columns(dict):
         if name in self.subcols_names:
             raise ValueError("sub Columns '%s' already exists" % name)
 
-        dname = name[1:]
+        dname = name[:-1]
         dirname = util.get_filename(dir=self.dir, name=dname, ext='cols')
         c = Columns.create(
             dirname,
@@ -490,7 +490,7 @@ class Columns(dict):
         if name in self.subcols_names:
             raise ValueError("sub Columns '%s' already exists" % name)
 
-        dname = name[1:]
+        dname = name[:-1]
         dirname = util.get_filename(dir=self.dir, name=dname, ext='cols')
         c = Columns.from_array(
             dirname,
