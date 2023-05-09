@@ -352,7 +352,7 @@ class Column(object):
         if update_index and not self.is_updating:
             self.update_index()
 
-    def updating(self):
+    def updating(self, vacuum=False):
         """
         This enteres the updating context, which delays index
         updates until after exiting the context
@@ -362,6 +362,7 @@ class Column(object):
             col[35:88] = 99
         """
         self._is_updating = True
+        self._vacuum_on_exit = vacuum
         return self
 
     def _check_data(self, data):
@@ -877,6 +878,8 @@ class Column(object):
     def __exit__(self, exception_type, exception_value, traceback):
         self._is_updating = False
         self.update_index()
+        if self._vacuum_on_exit:
+            self.vacuum()
 
     def __repr__(self):
         indent = '  '

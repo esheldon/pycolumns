@@ -2,9 +2,6 @@
 TODO
 
     - support multiple levels '/sub1/sub2/sub3'
-    - add vacuum to merge data with external chunk files
-        - maybe have vacuum optionally run after exiting
-        and updating context
     - setters for some things like cache_mem, verbose etc.
     - auto partitioning of data
         - specify on creation that values in a column will

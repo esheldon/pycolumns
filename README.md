@@ -231,6 +231,11 @@ cols.vacuum()
 # a specific column
 cols['id'].vacuum()
 
+# you can vacuum on exit from updating contexts
+with cols['id'].updating(vacuum=True):
+    cols['id'][5:10] = 33
+    cols['id'][99:200] = 66
+
 # You can use update to update dictionary metadata.
 # Only the fields in the input dictionary are updated or added
 >>> c.meta['weather'].update({'temperature': 30.1, 'extra': 5})
