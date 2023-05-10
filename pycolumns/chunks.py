@@ -452,7 +452,7 @@ class Chunks(object):
         if nrows_to_add <= 0:
             return
 
-        # can choose this better 
+        # can choose this better
         row_chunksize = self.row_chunksize
         data = np.zeros(row_chunksize, dtype=self.dtype)
         if fill is not None:
