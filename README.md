@@ -129,7 +129,10 @@ Columns:
 # Creating a columns data store and adding or updating data
 #
 
-# the easiest way is to create from an existing array or dict of arrays
+cols = pyc.Columns.create(coldir)
+
+# Create a new Columns store with a table in the root
+# The schema is determined from input data
 
 dtype = [
     ('id', 'i8'),
@@ -140,18 +143,18 @@ dtype = [
 num = 10
 data = np.zeros(num, dtype=dtype)
 data['id'] = np.arange(num)
-data['x'] = rng.uniform(size=num)
-data['y'] = rng.uniform(size=num)
+data['x'] = np.random.uniform(size=num)
+data['y'] = np.random.uniform(size=num)
 data['name'] = data['id'].astype('U10')
 
-cols = pyc.Columns.create(coldir)
-cols.from_array(data)
+cols = pyc.Columns.create_from_array(coldir, data)
 
-# This version uses default compression for id and name
-cols.from_array(data, compression=['id', 'name'])
+# add more tables not in the root.  Create the schema
+# from the input array and append the data.
+# Use default compression for id and name
 
-# A table not in the root. Name must end in /
-cols.from_array(data, name='sub1/sub2/', compression=['id', 'name'])
+cols.from_array(data2, name='sub1/', compression=['id', 'name'])
+cols.from_array(data3, name='sub1/sub2/')
 
 # two ways to access
 cols['sub1/sub2/']
@@ -161,19 +164,19 @@ cols['sub1']['sub2/']['id']
 # Append more data to the columns. The input data is a structured
 # array or a dict of arrays.
 
->>> c.append(data1)
->>> c.append(data2)
+>>> c.append(moredata1)
+>>> c['sub1/sub2/'].append(moredata2)
 
 # add indexes for id and name
 cols['id'].create_index()
 cols['name'].create_index()
 
-# you can also create directly from a schema.  The schema itself
+# you can also create tables from a schema.  The schema itself
 # can be created from an array, individual Column schemas, or from a dict
 # here we set the chunksize for compressed columns to 10 megabytes
 
 schema = pyc.TableSchema.from_array(array, compression=['id'], chunksize='10m')
-cols.create_table(schema=schema)
+cols.create_table(schema=schema, name='fromschema/')
 
 # or you can build the schema from column schema
 cx = pyc.ColumnSchema('x', dtype='f4')
@@ -203,10 +206,6 @@ sch = {
 }
 
 schema = pyc.TableSchema.from_schema(sch)
-
-#
-# create a table not in the root
-#
 
 # add an uncompressed column, filling with zeros
 # currently only uncompressed columns can be added after

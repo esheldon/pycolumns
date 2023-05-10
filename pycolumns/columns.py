@@ -1,20 +1,10 @@
 """
 TODO
 
-    - make __in__ work for sub1/sub2/ etc.
     - some kind of lister, to list all tables full paths
-    - can allow cols[rows] cols[2:3] now since not doing
-    - setters for some things like cache_mem, verbose etc.
-    - auto partitioning of data
-        - specify on creation that values in a column will
-          be used to automatically partition rows of the data.
-          e.g. could specify mdet_step and will automatically
-          generate subdirectories and put rows in there.
-
-          The idea is that if one does cols['mdet_step'] == 'noshear'
-          then it would automatically limit you to that partition
-
-          Issue is that the current query stuff won't understand that
+    - can support cols[rows] cols[2:3] now
+    - support adding new compressed column, simplest would be to append
+      fill values
 """
 import os
 import numpy as np
@@ -31,8 +21,9 @@ class Columns(dict):
 
     Parameters
     ----------
-    dir: str
-        Path to database
+    coldir: str
+        Path to the Columns store.  The directory must already exist.
+        Use Columns.create to create a new Columns store
     cache_mem: str or number
         Cache memory for index creation, default '1g' or one gigabyte.
         Can be a number in gigabytes or a string
@@ -40,33 +31,32 @@ class Columns(dict):
             '1g' = 1 gigabytes
             '100m' = 100 metabytes
             '1000k' = 1000 kilobytes
-        Units can be g, m or k, case insenitive
+        Units can be g, m, k or b case insenitive
     verbose: bool, optional
         If set to True, print messages
     """
 
-    def __init__(self, dir, cache_mem=DEFAULT_CACHE_MEM, verbose=False):
+    def __init__(self, coldir, cache_mem=DEFAULT_CACHE_MEM, verbose=False):
 
-        dir = os.path.expandvars(dir)
+        coldir = os.path.expandvars(coldir)
 
-        if not os.path.exists(dir):
+        if not os.path.exists(coldir):
             raise RuntimeError(
-                f'dir {dir} does not exist.  Use Columns.create to initialize'
+                f'Directory {coldir} does not exist.  Use Columns.create to '
+                f'initialize'
             )
 
-        self._dir = dir
+        self._dir = coldir
         self._type = 'cols'
         self._verbose = verbose
         self._is_updating = False
         self._cache_mem = cache_mem
-        self._cache_mem_bytes = util.convert_to_bytes(cache_mem)
-        self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
         self._load()
 
     @classmethod
     def create(
-        cls, dir, cache_mem=DEFAULT_CACHE_MEM, verbose=False,
-        overwrite=False,
+        cls, coldir, cache_mem=DEFAULT_CACHE_MEM, verbose=False,
+        yes=False,
     ):
         """
         Initialize a new columns database.  The new Columns object
@@ -74,7 +64,7 @@ class Columns(dict):
 
         Parameters
         ----------
-        dir: str
+        coldir: str
             Path to columns directory
         cache_mem: str or number
             Cache memory for index creation, default '1g' or one gigabyte.
@@ -83,48 +73,126 @@ class Columns(dict):
                 '1g' = 1 gigabytes
                 '100m' = 100 metabytes
                 '1000k' = 1000 kilobytes
-            Units can be g, m or k, case insenitive
+            Units can be g, m, k or b case insenitive
 
         verbose: bool, optional
             If set to True, display information
-        overwrite: bool, optional
-            If the directory exists, remove existing data
+        yes: bool, optional
+            If set to True, do not prompt for confirmation when overwriting
+            an existing directory
 
         Examples
         --------
         import pycolumns as pyc
 
-        cols = pyc.Columns.create(dir)
+        cols = pyc.Columns.create(coldir)
         """
         import shutil
 
-        if dir is not None:
-            dir = os.path.expandvars(dir)
+        coldir = os.path.expandvars(coldir)
 
-        if os.path.exists(dir):
-            if not overwrite:
-                raise RuntimeError(
-                    f'directory {dir} already exists, send '
-                    f'overwrite=True to replace'
+        if os.path.exists(coldir):
+            if not yes:
+                answer = input(
+                    f'directory {coldir} already exists, are you sure '
+                    f'you want to overwrite? (y/n)'
                 )
+                if answer.lower() == 'y':
+                    yes = True
+
+            if not yes:
+                return
 
             if verbose:
-                print(f'removing {dir}')
-            shutil.rmtree(dir)
+                print(f'removing {coldir}')
+
+            shutil.rmtree(coldir)
 
         if verbose:
-            print(f'creating: {dir}')
+            print(f'creating: {coldir}')
 
-        os.makedirs(dir)
+        os.makedirs(coldir)
 
-        cols = Columns(dir, cache_mem=cache_mem, verbose=verbose)
+        cols = Columns(coldir, cache_mem=cache_mem, verbose=verbose)
+        return cols
+
+    @classmethod
+    def create_from_array(
+        cls,
+        coldir,
+        data,
+        name=None,
+        compression=None,
+        chunksize=DEFAULT_CHUNKSIZE,
+        append=True,
+        cache_mem=DEFAULT_CACHE_MEM,
+        verbose=False,
+        yes=False,
+
+    ):
+        """
+        Initialize a new columns database and create a table from the
+        input data.
+
+        Parameters
+        ----------
+        coldir: str
+            Path to columns directory
+        data: numpy array with fields or dict of arrays
+            The data from which to derive the schema
+        name: str, optional
+            Name for the new Columns with trailin slash, e.g. sub/ or
+            sub1/sub2/.  If not sent, will be created in the root directory
+        compression: dict, list, bool, or None, optional
+            See TableSchema.from_array for a full explanation
+        chunksize: dict, str or number
+            See TableSchema.from_array for a full explanation
+        append: bool, optional
+            If set to True, the data are also written to the new
+            Default True
+
+        cache_mem: str or number
+            Cache memory for index creation, default '1g' or one gigabyte.
+            Can be a number in gigabytes or a string
+            Strings should be like '{amount}{unit}'
+                '1g' = 1 gigabytes
+                '100m' = 100 metabytes
+                '1000k' = 1000 kilobytes
+            Units can be g, m, k or b case insenitive
+        verbose: bool, optional
+            If set to True, display information
+        yes: bool, optional
+            If set to True, do not prompt for confirmation when overwriting
+            an existing directory
+
+        Examples
+        --------
+        array = np.zeros(num, dtype=[('id', 'i8'), ('x', 'f4')])
+        cols = Columns.create_from_array(dir, array)
+        """
+
+        cols = Columns.create(
+            coldir=coldir,
+            cache_mem=cache_mem,
+            verbose=verbose,
+            yes=yes,
+        )
+
+        cols.from_array(
+            data=data,
+            name=name,
+            compression=compression,
+            chunksize=chunksize,
+            append=append,
+            yes=yes,
+        )
         return cols
 
     def create_table(
         self,
         schema={},
         name=None,
-        overwrite=False,
+        yes=False,
     ):
         """
         Initialize a new columns database table.  The new Columns object
@@ -139,8 +207,9 @@ class Columns(dict):
             Name for the new Columns, e.g. 'subcols/' or 'subcols1/subcols2/'.
             If not sent, will be created in the root directory of the
             Columns.  If not None, the name must end in a slash '/'
-        overwrite: bool, optional
-            If the directory exists, remove existing data
+        yes: bool, optional
+            If set to True, do not prompt for confirmation when overwriting
+            an existing directory
 
         Examples
         --------
@@ -157,16 +226,15 @@ class Columns(dict):
 
         # see the TableSchema and ColumnSchema classes for more options
         """
-        # import shutil
 
         subdir = util.get_sub_dir(self.dir, name)
 
         if subdir is not None:
             cols = Columns.create(
-                dir=subdir,
+                subdir,
                 cache_mem=self.cache_mem,
                 verbose=self.verbose,
-                overwrite=overwrite,
+                yes=yes,
             )
         else:
             cols = self
@@ -174,50 +242,10 @@ class Columns(dict):
         cols._add_columns(schema)
 
         if subdir is not None:
-            # first = name.split('/')[0] + '/'
-            # super().__setitem__(first, cols)
-            # Need a full reload because a number of levels
-            # can be affected
+            # Need a full reload because a number of levels can be affected
             self._load()
 
         return cols
-
-        # None means we are creating the columns in this Columns store
-        # not a sub
-        # if subdir is not None:
-        #     if os.path.exists(subdir):
-        #         if not overwrite:
-        #             raise RuntimeError(
-        #                 f'{name} already exists, send '
-        #                 f'overwrite=True to replace'
-        #             )
-        #
-        #         if self.verbose:
-        #             print(f'removing {subdir}')
-        #
-        #         shutil.rmtree(subdir)
-        #
-        # if self.verbose:
-        #     print(f'creating: {name}')
-        #
-        # if subdir is not None:
-        #     os.makedirs(subdir)
-        #
-        #     cols = Columns.create(
-        #         dir=subdir,
-        #         cache_mem=self.cache_mem,
-        #         verbose=self.verbose,
-        #     )
-        # else:
-        #     cols = self
-        #
-        # cols._add_columns(schema)
-        #
-        # if subdir is not None:
-        #     first = name.split('/')[0] + '/'
-        #     super().__setitem__(first, cols)
-        #
-        # return cols
 
     def from_array(
         self,
@@ -226,7 +254,7 @@ class Columns(dict):
         compression=None,
         chunksize=DEFAULT_CHUNKSIZE,
         append=True,
-        overwrite=False,
+        yes=False,
     ):
         """
         Initialize a new columns database, creating the schema from the input
@@ -237,11 +265,11 @@ class Columns(dict):
 
         Parameters
         ----------
-        name: str, optional
-            Name for the new Columns.  If not sent, will be created
-            in the root directory
         data: numpy array with fields or dict of arrays
             The data from which to derive the schema
+        name: str, optional
+            Name for the new Columns with trailin slash, e.g. sub/ or
+            sub1/sub2/.  If not sent, will be created in the root directory
         compression: dict, list, bool, or None, optional
             See TableSchema.from_array for a full explanation
         chunksize: dict, str or number
@@ -249,15 +277,16 @@ class Columns(dict):
         append: bool, optional
             If set to True, the data are also written to the new
             Default True
-        Units can be g, m, k or b case insenitive
 
-        overwrite: bool, optional
-            If the directory exists, remove existing data
+        yes: bool, optional
+            If set to True, do not prompt for confirmation when overwriting
+            an existing directory
 
         Examples
         --------
+        cols = Columns(coldir)
         array = np.zeros(num, dtype=[('id', 'i8'), ('x', 'f4')])
-        cols = Columns.from_array(dir, array)
+        cols.from_array(array, name='data/observations/')
         """
         schema = TableSchema.from_array(
             data, compression=compression, chunksize=chunksize,
@@ -265,7 +294,7 @@ class Columns(dict):
         cols = self.create_table(
             schema=schema,
             name=name,
-            overwrite=overwrite,
+            yes=yes,
         )
         if append:
             cols.append(data)
@@ -336,14 +365,6 @@ class Columns(dict):
     @property
     def cache_mem(self):
         return self._cache_mem
-
-    @property
-    def cache_mem_bytes(self):
-        return self._cache_mem_bytes
-
-    @property
-    def cache_mem_gb(self):
-        return self._cache_mem_gb
 
     @property
     def meta(self):
@@ -493,11 +514,19 @@ class Columns(dict):
         """
         Clear out the dictionary of column info
         """
+        self._close()
+        super().clear()
+        self._meta = _MetaSet(self.dir, verbose=self.verbose)
+
+    def _close(self):
+        """
+        close all open files, including those of sub Columns directories
+        """
         for col in self.column_names:
             self[col]._close()
 
-        super().clear()
-        self._meta = _MetaSet(coldir=self.dir, verbose=self.verbose)
+        for scol in self.subcols_names:
+            self[scol]._close()
 
     def _add_columns(self, schema, fill=False):
         """
@@ -622,7 +651,7 @@ class Columns(dict):
         Parameters
         ----------
         yes: bool
-            If True, don't prompt for confirmation
+            If set to True, don't prompt for confirmation
         """
         import shutil
 
@@ -697,6 +726,8 @@ class Columns(dict):
             return
 
         entry = self[name]
+        entry._close()
+
         if entry.type == 'cols':
             print(f'Removing data for sub columns: {name}')
 
@@ -818,11 +849,18 @@ class Columns(dict):
 
         return columns
 
+    def __contains__(self, name):
+        try:
+            _ = self[name]
+            return True
+        except IndexError:
+            return False
+
     def __getitem__(self, name):
 
         notfound = False
 
-        if name not in self:
+        if name not in self.names:
             ns = name.split('/')
             if len(ns) == 1:
                 # not a sub-columns, so not found

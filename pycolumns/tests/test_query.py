@@ -22,8 +22,7 @@ def test_query():
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, verbose=True)
-        cols.from_array(data)
+        cols = Columns.create_from_array(cdir, data=data, verbose=True)
 
         for name in data.dtype.names:
             assert not cols[name].has_index

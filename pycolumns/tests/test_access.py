@@ -50,8 +50,14 @@ def test_access(compression):
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.create(cdir, verbose=True)
-        cols.from_array(data=data, compression=ccols)
+
+        # Create a new Columns store with data in the root
+        cols = Columns.create_from_array(
+            cdir,
+            data=data,
+            compression=ccols,
+            verbose=True,
+        )
 
         assert len(cols.names) == len(data.dtype.names)
 
@@ -207,6 +213,9 @@ def test_access(compression):
         cols['sub1/']['sub2/']
         cols['sub1/sub2/']
         cols['sub1/sub2/x']
+
+        # use of "in"
+        assert 'sub1/sub2/' in cols
 
         cols.from_array(name='sub1/sub2/sub3/', data=sub2_data)
         cols['sub1/sub2/sub3/']

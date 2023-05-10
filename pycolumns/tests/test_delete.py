@@ -28,8 +28,12 @@ def test_delete():
 
         cdir = os.path.join(tmpdir, 'test.cols')
 
-        cols = Columns.create(cdir, verbose=True)
-        cols.from_array(data=data, compression=ccols)
+        cols = Columns.create_from_array(
+            cdir,
+            data=data,
+            compression=ccols,
+            verbose=True,
+        )
 
         cols.create_meta('metadata')
         cols.meta['metadata'].write({'x': 3})

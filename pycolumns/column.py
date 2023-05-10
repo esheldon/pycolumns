@@ -76,7 +76,7 @@ class Column(object):
         self.reload()
 
     def _close(self):
-        if hasattr(self, '_col'):
+        if hasattr(self, '_col') and self._col is not None:
             self._col.close()
             self._col = None
 
