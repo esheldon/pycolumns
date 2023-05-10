@@ -2,22 +2,8 @@
 TODO
 
     - make __in__ work for sub1/sub2/ etc.
+    - some kind of lister, to list all tables full paths
     - can allow cols[rows] cols[2:3] now since not doing
-    - support multiple levels 'sub1/sub2/sub3/'
-        - done but maybe allow doing create on subcols with
-        that type of name, from the root
-        e.g. rather than specifying a real path, specify something
-        like
-
-        cols.from_array('/sub1/sub2', array)
-       - would want to refactor this sub pathing stuff for use outside
-       of __getitem__
-    - maybe move over to
-        - Columns.create(dir)
-        - cols.create_table()  # puts it in root
-        - cols.create_table(path)  # puts it in path/
-
-    - think about renaming sub->table as in create_table, or maybe
     - setters for some things like cache_mem, verbose etc.
     - auto partitioning of data
         - specify on creation that values in a column will
