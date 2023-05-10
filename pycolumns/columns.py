@@ -1,7 +1,6 @@
 """
 TODO
 
-    - some kind of lister, to list all tables full paths
     - can support cols[rows] cols[2:3] now
     - support adding new compressed column, simplest would be to append
       fill values

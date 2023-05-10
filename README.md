@@ -44,7 +44,19 @@ Columns:
 
 # print the full directory structure
 >>> c.list()
->>> c.list(verbose=True)
+root has 4 columns 2 metadata
+telemetry/
+
+>>> c.list(full=True)
+- id
+- name
+- x
+- y
+- {meta}
+- {versions}
+telemetry/
+  - humid
+  - temp
 
 # Above we see the main types supported:  A table of columns, metadata entries, and
 # sub-Columns directories, which are themselves full Columns.  the id and name
