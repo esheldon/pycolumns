@@ -42,6 +42,10 @@ Columns:
     ----------------------------
     telemetry/
 
+# print the full directory structure
+>>> c.list()
+>>> c.list(verbose=True)
+
 # Above we see the main types supported:  A table of columns, metadata entries, and
 # sub-Columns directories, which are themselves full Columns.  the id and name
 # columns have zstd compression and indexes for fast searching

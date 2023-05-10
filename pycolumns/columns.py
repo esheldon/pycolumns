@@ -819,6 +819,40 @@ class Columns(dict):
 
         return data
 
+    def list(self, full=False, isroot=True, indent=''):
+        """
+        List the directory structure
+
+        Parameters
+        ----------
+        full: bool
+            If set to True, list everything including column names
+            Metadata entries are enclosed in {brackets}
+        """
+        if isroot and not full:
+            # print('root')
+            nc = len(self.column_names)
+            nm = len(self.meta)
+            if nc > 0 or nm > 0:
+                ln = ['root has']
+                if nc > 0:
+                    ln += [f'{nc} columns']
+                if nm > 0:
+                    ln += [f'{nm} metadata']
+                ln = ' '.join(ln)
+                print(ln)
+
+        if full:
+            for name in self.column_names:
+                print(indent + '- ' + name)
+            for name in self.meta:
+                print(indent + '- ' + '{%s}' % name)
+
+        for name in self.names:
+            if name[-1] == '/':
+                print(indent + name)
+                self[name].list(isroot=False, full=full, indent=indent + '  ')
+
     def _extract_dtype(self, columns):
         dtype = []
 
@@ -859,6 +893,13 @@ class Columns(dict):
     def __getitem__(self, name):
 
         notfound = False
+
+        if name in ['.', './']:
+            return self
+
+        # take off leading ./
+        if name not in self.names and len(name) > 2 and name[:2] == './':
+            name = name[2:]
 
         if name not in self.names:
             ns = name.split('/')

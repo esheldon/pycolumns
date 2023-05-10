@@ -220,7 +220,6 @@ def test_access(compression):
         cols.from_array(name='sub1/sub2/sub3/', data=sub2_data)
         cols['sub1/sub2/sub3/']
         cols['sub1/sub2/sub3/x']
-        return
 
         cols2 = Columns(cdir)
         cols2['sub1/']['dec']
