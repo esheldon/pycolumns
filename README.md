@@ -37,13 +37,13 @@ Columns:
     meta
     versions
 
-  Sub-Columns Directories:
+  Sub Tables Directories:
     name
     ----------------------------
     telemetry/
 
 # Above we see the main types supported:  A table of columns, metadata entries, and
-# sub-Columns directories, which are themselves full Columns.  the id and name
+# sub tables, which are themselves full Columns.  The id and name
 # columns have zstd compression and indexes for fast searching
 #
 # Note there is a main table in the root directory as well as a named
@@ -59,6 +59,7 @@ Columns:
     temp               <f8    None False
     voltate            <f4    None False
 
+# Only objects in the root are shown above, but we can
 # print the full directory structure
 >>> cols.list()
 root has 4 columns 2 metadata
@@ -152,8 +153,18 @@ Column:
 >>> ind = cols['id'].between(15, 25) | (cols['name'] == 'cxj2')
 >>> ind = (cols['id'] != 66) & (cols['name'] != 'af23')
 
+#
+# reading data from a metadata entry.
+#
+
+>>> cols.meta['versions'].read()
+>>> {'data_vers': 'v5b', 's_vers': '1.1.2'}
+
+#
 # As an alternative to slicing you can use the the .read method
 # both for Columns and individual columns
+#
+
 >>> data = cols.read()
 >>> data = cols.read(columns=columns)
 >>> data = cols.read(columns=columns, rows=rows)
@@ -163,10 +174,6 @@ Column:
 
 # using .read you can get the data as a dict of arrays
 >>> data = cols.read(asdict=True)
-
-# reading data from a metadata entry.
->>> cols.meta['versions'].read()
->>> {'data_vers': 'v5b', 's_vers': '1.1.2'}
 
 #
 # Creating a columns data store and adding or updating data
@@ -178,12 +185,7 @@ cols = pyc.Columns.create(coldir)
 # Create a new Columns store with a table in the root
 # The schema is determined from input data
 
-dtype = [
-    ('id', 'i8'),
-    ('x', 'f4'),
-    ('y', 'f4'),
-    ('name', 'U10'),
-]
+dtype = [('id', 'i8'), ('name', 'U10')]
 num = 10
 data = np.zeros(num, dtype=dtype)
 data['id'] = np.arange(num)
@@ -225,17 +227,17 @@ schema = pyc.TableSchema.from_array(array, compression=['id'], chunksize='10m')
 cols.create_table(schema=schema, name='fromschema/')
 
 # or you can build the schema from individual column schema
-cx = pyc.ColumnSchema('x', dtype='f4')
-c9 = pyc.ColumnSchema('x9', dtype='f4')
 cid = pyc.ColumnSchema('id', dtype='i8', compression=True)
+cname = pyc.ColumnSchema('name', dtype='i8', compression=True)
+schema = pyc.TableSchema([cid, cname])
+
+# Note you specify compression info in detail
 cname = pyc.ColumnSchema(
     'name',
     dtype='U5',
     compression={'cname': 'zstd', 'zlevel': 5, 'shuffle': 'bitshuffle'}
     chunksize='10m',  # 10 megabytes
 )
-
-schema = pyc.TableSchema([cid, c9, cx, cname])
 
 # You can also use a dict
 sch = {
@@ -248,9 +250,11 @@ sch = {
 
 schema = pyc.TableSchema.from_schema(sch)
 
-# add a new column.  Default fill value is zeros, but you can set it
-# with fill_value
+#
+# add a new column.
+#
 
+# Default fill value is zeros, but you can set it with fill_value
 >>> cschema = pyc.ColumnSchema('newfcol', dtype='f4')
 >>> cols.create_column(cschema)
 >>> assert np.all(cols['newfcol'][:] == 0)
@@ -301,7 +305,7 @@ with cols['id'].updating(vacuum=True):
 # completely overwrite
 >>> cols['weather'].write([3, 4, 5])
 
-# get all names, including sub Columns
+# get all names, including direct sub tables of the root
 >>> cols.names
 ['telemetry/', 'id', 'y', 'x', 'name', 'meta']
 
@@ -313,8 +317,8 @@ with cols['id'].updating(vacuum=True):
 >>> cols.meta_names
 ['versions', 'weather']
 
-# only sub Columns directories
->>> cols.subcols_names
+# only sub table directories (only those directly above root are shown)
+>>> cols.sub_table_names
 ['telemetry/']
 
 # reload all columns or specified column/column list

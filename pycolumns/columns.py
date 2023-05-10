@@ -329,7 +329,7 @@ class Columns(dict):
         return list(self.meta.keys())
 
     @property
-    def subcols_names(self):
+    def sub_table_names(self):
         """
         Get a list of the array column names
         """
@@ -517,7 +517,7 @@ class Columns(dict):
         for col in self.column_names:
             self[col]._close()
 
-        for scol in self.subcols_names:
+        for scol in self.sub_table_names:
             self[scol]._close()
 
     def _add_columns(self, schema, fill=False):
@@ -977,11 +977,11 @@ class Columns(dict):
             metas += ['  '+n for n in self.meta_names]
 
         subcols = []
-        if len(self.subcols_names) > 0:
-            subcols += ['Sub-Columns Directories:']
+        if len(self.sub_table_names) > 0:
+            subcols += ['Sub Tables:']
             subcols += ['  %-15s' % ('name',)]
             subcols += ['  '+'-'*(28)]
-            subcols += ['  '+n for n in self.subcols_names]
+            subcols += ['  '+n for n in self.sub_table_names]
 
         acols = []
 
