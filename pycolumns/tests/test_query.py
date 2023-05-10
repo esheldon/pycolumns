@@ -15,15 +15,14 @@ def test_query():
 
     rng = np.random.RandomState(seed)
 
+    data = np.zeros(num, dtype=[('id', 'i8'), ('rand', 'f4')])
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num, high=num)
+
     with tempfile.TemporaryDirectory() as tmpdir:
+
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns(cdir, verbose=True)
-
-        data = np.zeros(num, dtype=[('id', 'i8'), ('rand', 'f4')])
-        data['id'] = np.arange(num)
-        data['rand'] = rng.uniform(size=num, high=num)
-
-        cols.append(data)
+        cols = Columns.create_from_array(cdir, data=data, verbose=True)
 
         for name in data.dtype.names:
             assert not cols[name].has_index

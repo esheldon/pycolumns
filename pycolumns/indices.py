@@ -11,6 +11,19 @@ class Indices(np.ndarray):
     and "|" operators.  These return the intersection or union of values in two
     Indices objects.
 
+    Parameters
+    ----------
+    init_data: array or Indices
+        The initial data
+    copy: bool, optional
+        If set to True, ensure a copy of the input data is made
+    is_sorted: bool, optional
+        If set to True, the input data are sorted
+    is_checked: bool, optional
+        If set to True, the input rows have been checked to be in bounds,
+        and negatives are converted to positives.  This can be set later
+        with the .is_checked setter
+
     Methods:
         The "&" and "|" operators are defined.
 
@@ -25,17 +38,51 @@ class Indices(np.ndarray):
         Indices([3, 4, 5, 6])
 
     """
-    def __new__(self, init_data, copy=False):
-        self._is_sorted = False
+    def __new__(
+        self, init_data, copy=False, is_sorted=False, is_checked=False
+    ):
 
-        # always force native byte order since we send this to C code
-        # when using fitsio
+        # always force i8 and native byte order since we send this to C code
         arr = np.array(init_data, dtype='i8', copy=copy)
         shape = arr.shape
 
         ret = np.ndarray.__new__(self, shape, arr.dtype,
                                  buffer=arr)
+
+        self._is_sorted = is_sorted
+        if arr.ndim == 0:
+            self._is_sorted = True
+
+        self._is_checked = is_checked
+
         return ret
+
+    def get_minmax(self):
+        if self.ndim == 0:
+            mm = int(self), int(self)
+        else:
+
+            if self.is_sorted:
+                imin, imax = 0, self.size - 1
+            else:
+                s = self.sort_index
+                imin, imax = s[0], s[-1]
+
+            mm = self[imin], self[imax]
+
+        return mm
+
+    @property
+    def sort_index(self):
+        """
+        get an array that sorts the index
+        """
+        if self.is_sorted:
+            return None
+        else:
+            if not hasattr(self, '_sort_index'):
+                self._sort_index = self.argsort()
+            return self._sort_index
 
     @property
     def is_sorted(self):
@@ -44,6 +91,22 @@ class Indices(np.ndarray):
         """
         return self._is_sorted
 
+    @property
+    def is_checked(self):
+        """
+        returns True if the rows have been checked for negatives and
+        fixed
+        """
+        return self._is_checked
+
+    @is_checked.setter
+    def is_checked(self, val):
+        """
+        returns True if the rows have been checked for negatives and
+        fixed
+        """
+        self._is_checked = val
+
     def sort(self):
         """
         sort and set the is_sorted flag
@@ -51,6 +114,7 @@ class Indices(np.ndarray):
         if not self.is_sorted:
             if self.ndim > 0:
                 super(Indices, self).sort()
+            self._sort_index = None
             self._is_sorted = True
 
     def array(self):
@@ -62,7 +126,8 @@ class Indices(np.ndarray):
             w = np.intersect1d(self, ind)
         else:
             raise ValueError("comparison index must be an Indices object")
-        return Indices(w)
+
+        return Indices(w, is_sorted=True)
 
     def __or__(self, ind):
         # take the unique union
@@ -71,9 +136,16 @@ class Indices(np.ndarray):
         else:
             raise ValueError("comparison index must be an Indices object")
 
-        return Indices(w)
+        return Indices(w, is_sorted=True)
 
     def __repr__(self):
-        rep = np.ndarray.__repr__(self)
-        rep = rep.replace('array', 'Indices')
-        return rep
+        arep = np.ndarray.__repr__(self)
+        arep = arep.replace('array', 'Indices')
+
+        rep = [
+            'Indices:',
+            f'    size: {self.size}',
+            f'    sorted: {self.is_sorted}',
+            arep,
+        ]
+        return '\n'.join(rep)

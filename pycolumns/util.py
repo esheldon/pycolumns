@@ -1,9 +1,9 @@
 import os
-import json
 import numpy as np
+from . import defaults
 
 
-def extract_rows(rows, sort=True):
+def extract_rows(rows, nrows, check_slice_stop=False):
     """
     extract rows for reading
 
@@ -11,87 +11,202 @@ def extract_rows(rows, sort=True):
     ----------
     rows: sequence, Indices, slice or None
         Possible rows to extract
-    sort: bool, optional
-        Whether to sort when converted to Indices
+    nrows: int
+        Total number of rows
+    check_slice_stop: bool, optional
+        this is for doing row updates and when we need
+        the slice to be exact, not go beyond nrows
 
     Returns
     -------
-    Indices, possibly sorted.  Note this does not make a copy of the data
+    Indices, or slice.  possibly sorted.
     """
     from .indices import Indices
 
-    if (
-        rows is not None
-        and not isinstance(rows, slice)
-        and not isinstance(rows, Indices)
-    ):
-        output = Indices(rows)
-    else:
-        output = rows
+    if isinstance(rows, Indices) and rows.is_checked:
+        return rows
 
-    if isinstance(rows, Indices) and sort:
-        output.sort()
+    if isinstance(rows, slice):
+        s = extract_slice(rows, nrows, check_slice_stop=check_slice_stop)
+        if s.step is not None:
+            ind = np.arange(s.start, s.stop, s.step)
+            output = Indices(ind, is_sorted=True)
+        else:
+            output = s
+
+    elif rows is None:
+        output = slice(0, nrows)
+    elif isinstance(rows, Indices):
+        output = rows
+    else:
+        output = Indices(rows)
+
+    if isinstance(output, Indices):
+        if output.ndim == 0 and output < 0:
+            output = Indices(nrows + output, is_checked=True)
+        else:
+            w, = np.where(output < 0)
+            if w.size > 0:
+                # make a copy since we don't want to modify underlying
+                # input data
+                output = output.copy()
+                output[w] += nrows
+                output.is_checked = True
+                assert output.is_checked
 
     return output
 
 
-def extract_colname(filename):
+def extract_slice(s, nrows, check_slice_stop=False):
+    start = s.start
+    stop = s.stop
+
+    if stop is not None and check_slice_stop:
+        # this is for doing row updates and when we need
+        # the slice to be exact, not go beyond nrows
+        if stop > nrows:
+            raise IndexError(f'slice stop {stop} > nrows {nrows}')
+
+    if start is None:
+        start = 0
+    if stop is None:
+        stop = nrows
+
+    if start < 0:
+        start = nrows + start
+        if start < 0:
+            raise IndexError("Index out of bounds")
+
+    if stop < 0:
+        stop = nrows + stop
+
+    if stop < start:
+        # will return an empty struct
+        stop = start
+
+    if stop is None or stop > nrows:
+        stop = nrows
+
+    return slice(start, stop, s.step)
+
+
+def extract_name(filename):
     """
     Extract the column name from the file name
     """
 
-    bname = os.path.basename(filename)
-    name = '.'.join(bname.split('.')[0:-1])
+    name, _ = split_ext(filename)
     return name
+    # n, ext = split_ext(filename)
+    # if ext == 'cols':
+    #     return f'/{n}'
+    # else:
+    #     return n
+    # bname = os.path.basename(filename)
+    # name = '.'.join(bname.split('.')[0:-1])
+    # return name
 
 
-def extract_coltype(filename):
+def extract_type(filename):
     """
     Extract the type from the file name
     """
-    return filename.split('.')[-1]
+    return extract_extension(filename)
 
 
-def create_filename(dir, name, type):
+def extract_extension(filename):
+    """
+    Extract the extension
+    """
+    _, ext = split_ext(filename)
+    return ext
+
+
+def split_ext(filename):
+    """
+    For /path/to/blah.txt returns ('blah', 'txt')
+    """
+    bname = os.path.basename(filename)
+    s = bname.split('.')
+    if len(s) == 1:
+        name = s[0]
+        ext = ''
+    else:
+        name = '.'.join(s[0:-1])
+        ext = s[-1]
+    return name, ext
+
+
+def get_meta_filename(path):
+    """
+    Get a path to a .meta file assuming path is a column directory
+    """
+    bname = os.path.basename(path)
+    return f'{path}/{bname}.meta'
+
+
+def is_column(path):
+    """
+    Returns True if path is a directory (or link) containing
+    a file named basename(path).meta
+    """
+    metapath = get_meta_filename(path)
+    if os.path.exists(metapath):
+        return True
+    else:
+        return False
+
+
+def get_column_dir(dir, name):
+    """
+    get path to column directory
+    """
+    return os.path.join(dir, name)
+
+
+def get_filename(dir, name, ext):
     """
     genearte a file name from dir, column name and column type
     """
-    if dir is None:
-        raise ValueError('Cannot create column filename, dir is None')
+    if ext not in defaults.ALLOWED_EXTENSIONS:
+        raise ValueError(f'unsuported extension {ext}')
 
-    if name is None:
-        raise ValueError('Cannot create column filename: name is None')
+    return os.path.join(dir, f'{name}.{ext}')
 
-    if type is None:
-        raise ValueError('Cannot create column filename: type is None')
 
-    if type == 'dict':
-        ext = 'json'
-    elif type == 'array':
-        ext = 'array'
-    else:
-        raise ValueError("bad file type: '%s'" % type)
-
-    return os.path.join(dir, name+'.'+ext)
+def get_colfiles(coldir):
+    name = os.path.basename(coldir)
+    return {
+        'dir': coldir,
+        'name': name,
+        'meta': get_filename(coldir, name, 'meta'),
+        'array': get_filename(coldir, name, 'array'),
+        'index': get_filename(coldir, name, 'index'),
+        'index1': get_filename(coldir, name, 'index1'),
+        'sorted': get_filename(coldir, name, 'sorted'),
+        'chunks': get_filename(coldir, name, 'chunks'),
+    }
 
 
 def read_json(fname):
     """
     wrapper to read json
     """
+    import json
 
     with open(fname) as fobj:
         data = json.load(fobj)
     return data
 
 
-def write_json(obj, fname, pretty=True):
+def write_json(fname, obj):
     """
     wrapper for writing json
     """
+    import json
 
     with open(fname, 'w') as fobj:
-        json.dump(obj, fobj, indent=1, separators=(',', ':'))
+        json.dump(obj, fobj, indent=4, separators=(',', ':'))
 
 
 def get_native_data(data):
@@ -121,33 +236,222 @@ def get_native_data(data):
     return new_data
 
 
-def maybe_decode_fits_ascii_strings_to_unicode_py3(array):
-    new_dtype, do_conversion = (
-        maybe_convert_ascii_dtype_to_unicode(array.dtype)
-    )
-    if do_conversion:
-        array = array.astype(new_dtype, copy=False)
-    return array
+def convert_to_gigabytes(s):
+    try:
+        gigs = float(s)
+    except ValueError:
+        slow = s.lower()
 
-
-def maybe_convert_ascii_dtype_to_unicode(dtype):
-
-    do_conversion = False
-    new_dt = []
-    for dt in dtype.descr:
-        if 'S' in dt[1]:
-            do_conversion = True
-            if len(dt) == 3:
-                new_dt.append((
-                    dt[0],
-                    dt[1].replace('S', 'U').replace('|', ''),
-                    dt[2]))
-            else:
-                new_dt.append((
-                    dt[0],
-                    dt[1].replace('S', 'U').replace('|', '')))
+        units = slow[-1]
+        amount = slow[:-1]
+        if units == 'g':
+            gigs = float(amount)
+        elif units == 'm':
+            gigs = float(amount) / 1024
+        elif units == 'k':
+            gigs = float(amount) / 1024 ** 2
+        elif units == 'b':
+            gigs = float(amount) / 1024 ** 3
         else:
-            new_dt.append(dt)
+            raise ValueError(f'band unit in {s}')
 
-    new_dtype = np.dtype(new_dt)
-    return new_dtype, do_conversion
+    return gigs
+
+
+def convert_to_bytes(s):
+    try:
+        bts = float(s)
+    except ValueError:
+        slow = s.lower()
+
+        units = slow[-1]
+        amount = slow[:-1]
+        if units == 'g':
+            bts = float(amount) * 1024 ** 3
+        elif units == 'm':
+            bts = float(amount) * 1024 ** 2
+        elif units == 'k':
+            bts = float(amount) * 1024
+        elif units == 'b':
+            bts = float(amount)
+        else:
+            raise ValueError(f'band unit in {s}')
+
+    return bts
+
+
+def get_compression_with_defaults(compression=None, convert=False):
+    """
+    get compression with defaults set
+
+    Parameters
+    ----------
+    compression: dict, optional
+        If a dict is sent, defaults are filled in as needed, otherwise defaults
+        are returned
+    convert: bool, optional
+        If set to True, convert the shuffle to the blosc integer
+        value
+
+    Returns
+    -------
+    dict with compression set
+    """
+
+    comp = defaults.DEFAULT_COMPRESSION.copy()
+    if hasattr(compression, 'keys'):
+        comp.update(compression)
+
+    if convert:
+        comp['shuffle'] = convert_shuffle(comp['shuffle'])
+
+    return comp
+
+
+def convert_shuffle(shuffle):
+    """
+    convert shuffle to the integer value
+
+    Parameters
+    ----------
+    shuffle: str or int
+        'shuffle', blosc.SHUFFLE, 'bitshuffle' or blosc.BITSHUFFLE
+        'noshuffle', blosc.NOSHUFFLE
+        String is case insensitive
+
+    Returns
+    -------
+    The integer value, e.g. blosc.SHUFFLE
+    """
+    import blosc
+
+    shuffle = shuffle.upper()
+
+    if shuffle in ('SHUFFLE', blosc.SHUFFLE):
+        new_shuf = blosc.SHUFFLE
+    elif shuffle in ('BITSHUFFLE', blosc.BITSHUFFLE):
+        new_shuf = blosc.BITSHUFFLE
+    elif shuffle in ('NOSHUFFLE', blosc.NOSHUFFLE):
+        new_shuf = blosc.NOSHUFFLE
+    else:
+        raise ValueError(f'bad shuffle: {shuffle}')
+    return new_shuf
+
+
+def schema_to_dtype(schema):
+    """
+    convert a schema into a numpy dtype
+
+    Parameters
+    ----------
+    schema: dict
+        Dict names for fields and dtype
+    """
+    descr = []
+
+    for name in schema:
+        descr.append((name, schema[name]['dtype']))
+
+    return np.dtype(descr)
+
+
+def get_chunks(chunkrows_sorted, rows):
+    """
+    Get chunk assignments for the input rows
+
+    Parameters
+    ----------
+    chunkrows_sorted: array
+        Sorted array of chunk row start positions
+    rows: array
+        Rows to assign
+
+    Returns
+    -------
+    chunk_indices: array
+        chunk index for each row
+    """
+    s = np.searchsorted(chunkrows_sorted, rows, side='right')
+    s -= 1
+    s.clip(min=0, max=chunkrows_sorted.size-1, out=s)
+    return s
+
+
+def get_data_names(data):
+    """
+    Get names for the data, either keys for a dict of arrays or names
+    from a structured array
+
+    Parameters
+    ----------
+    data: array or dict
+        A structured array or dict with arrays
+
+    Returns
+    -------
+    List of names
+    """
+    if hasattr(data, 'keys'):
+        names = list(data.keys())
+    else:
+        names = data.dtype.names
+        if names is None:
+            raise ValueError('array must have fields')
+
+    return names
+
+
+def byteswap_inplace(data):
+    """
+    Byte swap the data in place and with new dtype
+    """
+    data.byteswap(inplace=True)
+    data.dtype = data.dtype.newbyteorder()
+
+
+def get_data_with_conversion(data, dtype, ndmin=1):
+    """
+    returns the data, possibly converted to the specified type,
+    otherwise just a new ref
+    """
+    try:
+        ndata = np.array(data, ndmin=ndmin, dtype=dtype, copy=False)
+    except ValueError as err:
+        if isinstance(data, np.ndarray):
+            raise ValueError(
+                f'Could not convert data of type {data.dtype} to {dtype}: '
+                f'{err}'
+            )
+        else:
+            raise
+
+    return ndata
+
+
+def get_sub_dir(root, name):
+    if name is None:
+        return None
+
+    check_sub_name(name)
+
+    nsub = '.cols/'.join(name.split('/'))
+    return os.path.join(root, nsub)
+
+
+def check_sub_name(name):
+    if len(name) < 2 or name[-1] != '/' or name[0] == '/':
+        raise ValueError(
+            f'sub-Columns names must be a string with the form '
+            f'path/, got {name}'
+        )
+
+
+def get_sub_name(name):
+    """
+    sub-cols get a leading slash
+    """
+    return f'{name}/'
+
+
+def iscols(arg):
+    return not isinstance(arg, slice) and isinstance(arg[0], str)
