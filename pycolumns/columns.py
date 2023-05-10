@@ -1,9 +1,3 @@
-"""
-TODO
-
-    - can support cols[rows] cols[2:3] now
-
-"""
 import os
 import numpy as np
 from .column import Column
@@ -888,7 +882,15 @@ class Columns(dict):
         except IndexError:
             return False
 
-    def __getitem__(self, name):
+    def __getitem__(self, arg):
+
+        if not np.isscalar(arg):
+            if util.iscols(arg):
+                return _ColumnSubset(self, arg)
+            else:
+                return self.read(rows=arg)
+        else:
+            name = arg
 
         notfound = False
 
@@ -1066,3 +1068,12 @@ class _MetaSet(dict):
         s = ['Metadata:']
         s += ['  '+n for n in self]
         return '\n'.join(s)
+
+
+class _ColumnSubset(object):
+    def __init__(self, cols, columns):
+        self._cols = cols
+        self._columns = columns
+
+    def __getitem__(self, rows):
+        return self._cols.read(rows=rows, columns=self._columns)

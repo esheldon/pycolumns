@@ -451,3 +451,7 @@ def get_sub_name(name):
     sub-cols get a leading slash
     """
     return f'{name}/'
+
+
+def iscols(arg):
+    return not isinstance(arg, slice) and isinstance(arg[0], str)

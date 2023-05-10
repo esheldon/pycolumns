@@ -74,9 +74,31 @@ def test_access(compression):
         for name in data.dtype.names:
             assert np.all(data[name] == indata[name])
 
+        indata = cols[:]
+        for name in data.dtype.names:
+            assert np.all(data[name] == indata[name])
+
+        indata = cols[20:30]
+        for name in data.dtype.names:
+            assert np.all(data[name][20:30] == indata[name])
+
         for name in data.dtype.names:
             tdata = cols[name][:]
             assert np.all(data[name] == tdata)
+
+        columns = ['id', 'rand']
+        indata = cols[columns][:]
+        for name in indata.dtype.names:
+            assert np.all(data[name] == indata[name])
+
+        rows = [8, 9, 15]
+        indata = cols.read(rows=rows, columns=columns)
+        for name in indata.dtype.names:
+            assert np.all(data[name][rows] == indata[name])
+
+        indata = cols[columns][rows]
+        for name in indata.dtype.names:
+            assert np.all(data[name][rows] == indata[name])
 
         # sorted rows
         rows = np.arange(0, data.size, 2)
