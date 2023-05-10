@@ -37,7 +37,7 @@ Columns:
     meta
     versions
 
-  Sub Tables Directories:
+  Sub Tables:
     name
     ----------------------------
     telemetry/
@@ -60,10 +60,12 @@ Columns:
     voltate            <f4    None False
 
 # Only objects in the root are shown above, but we can
-# print the full directory structure
+# print the full directory structure which shows that
+# telemetry also has a sub table
 >>> cols.list()
 root has 4 columns 2 metadata
 telemetry/
+  periods/
 
 >>> cols.list(full=True)
 - id
@@ -75,6 +77,9 @@ telemetry/
 telemetry/
   - humid
   - temp
+  periods/
+    - start
+    - end
 
 # display info about column 'id'
 >>> cols['id']
@@ -115,11 +120,11 @@ Column:
 >>> data = cols[columns][rows]
 >>> data = cols[columns][10:20]
 
-# read all data from the telemetry/ table
+# read data from the telemetry/ table
 >>> data = cols['telemetry/'][:]
 >>> v = cols['telemetry/']['voltage'][:]
 
-# You can get the table object direclty.  It is also a Columns object
+# You can get the table object directly.  It is also a Columns object
 >>> telcols = cols['telemetry/']
 >>> v = telcols['voltage'][:]
 
@@ -189,20 +194,20 @@ dtype = [('id', 'i8'), ('name', 'U10')]
 num = 10
 data = np.zeros(num, dtype=dtype)
 data['id'] = np.arange(num)
-data['x'] = np.random.uniform(size=num)
-data['y'] = np.random.uniform(size=num)
 data['name'] = data['id'].astype('U10')
 
 cols = pyc.Columns.create_from_array(coldir, data)
 
-# add more tables not in the root.  Create the schema
-# from the input array and append the data.
-# Use default compression for id and name
+# add more tables not in the root.  from_array() creates the schema from the
+# input array and by default appends the data.  Note table names must end in
+# the / character
 
+# Use default compression
 cols.from_array(data2, name='sub1/', compression=['id', 'name'])
 cols.from_array(data3, name='sub1/sub2/')
 
-# two ways to access
+# two ways to access sub tables, via intermediate Columns objects or by full
+# path
 cols['sub1/sub2/']
 cols['sub1/sub2/id']
 cols['sub1']['sub2/']['id']
@@ -304,6 +309,10 @@ with cols['id'].updating(vacuum=True):
 
 # completely overwrite
 >>> cols['weather'].write([3, 4, 5])
+
+#
+# getting names of entries
+#
 
 # get all names, including direct sub tables of the root
 >>> cols.names
