@@ -145,6 +145,7 @@ Columns:
 # Creating a columns data store and adding or updating data
 #
 
+# create an empty Colulmns
 cols = pyc.Columns.create(coldir)
 
 # Create a new Columns store with a table in the root
