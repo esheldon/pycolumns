@@ -5,7 +5,7 @@ from . import util
 
 
 def from_fits(
-    dir,
+    coldir,
     filename,
     ext=1,
     native=False,
@@ -15,14 +15,14 @@ def from_fits(
     chunksize=DEFAULT_CHUNKSIZE,
     cache_mem=DEFAULT_CACHE_MEM,
     verbose=False,
-    overwrite=False,
+    yes=False,
 ):
     """
     Create or append to a columns database, reading from the input fits file.
 
     parameters
     ----------
-    dir: str
+    coldir: str
         Columns directory
     filename: string
         Name of the file to read
@@ -51,8 +51,9 @@ def from_fits(
         Cache memory for index creation, default '1g' or one gigabyte.
     verbose: bool, optional
         If set to True, display information
-    overwrite: bool, optional
-        If set to True, overwrite existing data
+    yes: bool, optional
+        If set to True, do not prompt for confirmation when overwriting
+        an existing directory
     """
     import fitsio
 
@@ -71,15 +72,17 @@ def from_fits(
         if byteswap:
             util.byteswap_inplace(one)
 
-        cols = Columns.from_array(
-            dir=dir,
-            array=one,
+        cols = Columns.create(
+            coldir,
+            yes=yes,
+            cache_mem=cache_mem,
+            verbose=verbose,
+        )
+        cols.from_array(
+            one,
             compression=compression,
             chunksize=chunksize,
-            overwrite=overwrite,
-            cache_mem=cache_mem,
             append=False,
-            verbose=verbose,
         )
 
         nrows = hdu.get_nrows()

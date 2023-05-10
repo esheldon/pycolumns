@@ -20,9 +20,8 @@ def test_vacuum():
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.from_array(
-            cdir, data, compression=['id'], verbose=True,
-        )
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data, compression=['id'])
 
         # this will expand quite a bit, fragmenting the file
         rind = rng.randint(0, 2**31, size=num)
@@ -66,9 +65,8 @@ def test_vacuum_context():
     with tempfile.TemporaryDirectory() as tmpdir:
 
         cdir = os.path.join(tmpdir, 'test.cols')
-        cols = Columns.from_array(
-            cdir, data, compression=['id'], verbose=True,
-        )
+        cols = Columns.create(cdir, verbose=True)
+        cols.from_array(data, compression=['id'])
 
         # this will expand quite a bit, fragmenting the file
         with cols['id'].updating(vacuum=True):
