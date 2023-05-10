@@ -81,7 +81,7 @@ Column:
 >>> c.nrows
 64348146
 
-# read all columns into a single rec array.
+# read all columns into a single structured array.
 >>> data = c.read()
 
 # using asdict=True puts the data into a dict.
@@ -94,8 +94,8 @@ Column:
 >>> data = c.read(columns=['id', 'x'], rows=[3, 225, 1235])
 >>> data = c.read(columns=['id', 'x'], rows=slice(10, 20))
 
-# read all data from column 'id' as an array rather than recarray
-# alternative syntaxes
+# read all data from column 'id' as an array rather than as part of a
+# structured array
 >>> ind = c['id'][:]
 >>> ind = c['id'].read()
 
@@ -224,13 +224,15 @@ sch = {
 
 schema = pyc.TableSchema.from_schema(sch)
 
-# add an uncompressed column, filling with zeros
-# currently only uncompressed columns can be added after
-# the columns have data
+# add a new column.  Default fill value is zeros
 
->>> cschema = pyc.ColumnSchema('newcol', dtype='f4')
+>>> cschema = pyc.ColumnSchema('newfcol', dtype='f4')
 >>> c.create_column(cschema)
->>> assert np.all(c['newcol'][:] == 0)
+>>> assert np.all(c['newfcol'][:] == 0)
+
+>>> cschema = pyc.ColumnSchema('newscol', dtype='U4', fill_value='none')
+>>> c.create_column(cschema)
+>>> assert np.all(c['newscol'][:] == 'none')
 
 # add a metadata entry
 >>> weather = {'temperature': 30, 'humidity': 50}

@@ -437,6 +437,38 @@ class Chunks(object):
                 f'\n{s}'
             )
 
+    def extend(self, nrows, fill=None):
+        """
+        Extend the column to the specified number of rows
+
+        Parameters
+        ----------
+        nrows: int
+            New number of rows
+        fill: fill value, optional
+            Optionally fill with this value
+        """
+        nrows_to_add = int(nrows) - self.nrows
+        if nrows_to_add <= 0:
+            return
+
+        # can choose this better 
+        row_chunksize = self.row_chunksize
+        data = np.zeros(row_chunksize, dtype=self.dtype)
+        if fill is not None:
+            data[:] = fill
+
+        nwrites = nrows_to_add // row_chunksize
+        nleft = nrows_to_add % row_chunksize
+        if nleft > 0:
+            nwrites += 1
+
+        for i in range(nwrites):
+            if i == nwrites - 1:
+                self.append(data[:nleft])
+            else:
+                self.append(data)
+
     def read_chunk(self, chunk_index):
         """
         Read the indicated chunk

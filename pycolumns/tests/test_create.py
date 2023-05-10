@@ -14,7 +14,7 @@ def test_create(cache_mem, compression, verbose, fromdict, from_array):
     import tempfile
     import numpy as np
     from ..columns import Columns
-    from ..schema import TableSchema, ColumnSchema
+    from ..schema import TableSchema
 
     seed = 333
     num = 20
@@ -109,6 +109,44 @@ def test_create(cache_mem, compression, verbose, fromdict, from_array):
             )
             cols.append(bad_data)
 
+
+def test_create_column():
+    """
+    cache_mem of 0.01 will force use of mergesort
+    """
+    import os
+    import tempfile
+    import numpy as np
+    from ..columns import Columns
+    from ..schema import TableSchema, ColumnSchema
+
+    seed = 333
+    num = 20
+
+    rng = np.random.RandomState(seed)
+
+    dtype = [('id', 'i8'), ('rand', 'f4'), ('scol', 'U5')]
+    data = np.zeros(num, dtype=dtype)
+    data['id'] = np.arange(num)
+    data['rand'] = rng.uniform(size=num)
+    data['scol'] = [str(val) for val in data['id']]
+
+    ccols = ['id', 'scol']
+
+    schema = TableSchema.from_array(data, compression=ccols)
+
+    print(schema)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        cdir = os.path.join(tmpdir, 'test.cols')
+        cols = Columns.create_from_array(
+            cdir,
+            data,
+            compression=ccols,
+            verbose=True,
+        )
+
         newschema = ColumnSchema('newcol', dtype='i4')
         cols.create_column(newschema)
         assert cols['newcol'][:].size == cols.size
@@ -131,7 +169,8 @@ def test_create(cache_mem, compression, verbose, fromdict, from_array):
         cols.create_column(newschema)
         assert np.all(cols['ss'][:] == b'yes')
 
-        with pytest.raises(RuntimeError):
-            # can't resize compressed cols
-            newschema = ColumnSchema('bad', dtype='U2', compression=True)
-            cols.create_column(newschema)
+        newschema = ColumnSchema(
+            'scomp', dtype='U2', compression=True, fill_value='hi',
+        )
+        cols.create_column(newschema)
+        assert np.all(cols['scomp'][:] == 'hi')

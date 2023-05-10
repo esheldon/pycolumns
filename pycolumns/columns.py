@@ -2,8 +2,7 @@
 TODO
 
     - can support cols[rows] cols[2:3] now
-    - support adding new compressed column, simplest would be to append
-      fill values
+
 """
 import os
 import numpy as np

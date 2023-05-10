@@ -313,7 +313,10 @@ class Column(object):
             if nrows > nrows_old and 'fill_value' in self._meta:
                 self[nrows_old:] = self._meta['fill_value']
         else:
-            raise RuntimeError('cannot resize compressed data')
+            if nrows < self.nrows:
+                raise NotImplementedError('cannot shrink compressed columns')
+
+            self._col.extend(nrows, fill=self._meta.get('fill_value'))
 
         if self.has_index:
             self.update_index()
