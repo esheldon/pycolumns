@@ -243,12 +243,13 @@ def test_access(compression):
         cols['sub1/sub2/sub3/']
         cols['sub1/sub2/sub3/x']
 
-        cols2 = Columns(cdir)
-        cols2['sub1/']['dec']
-        cols2['sub1/dec']
-        cols2['sub1/sub2/']
-        cols2['sub1/sub2/x']
-        cols2['sub1/sub2/sub3/x']
+        # open new in read only mode
+        rocols = Columns(cdir)
+        rocols['sub1/']['dec']
+        rocols['sub1/dec']
+        rocols['sub1/sub2/']
+        rocols['sub1/sub2/x']
+        rocols['sub1/sub2/sub3/x']
 
         with pytest.raises(IndexError):
             cols['sub1/sub2/sub3/sub4/']
@@ -263,6 +264,14 @@ def test_access(compression):
         assert np.all(x == sub2_data['x'])
         x = cols['sub1/sub2/x'][:]
         assert np.all(x == sub2_data['x'])
+
+        # IOError is raised when trying to write in read only mode
+        with pytest.raises(IOError):
+            rocols['sub1/sub2/'].append(sub2_data)
+        with pytest.raises(IOError):
+            rocols['sub1/sub2/x'][:10] = 5
+        with pytest.raises(IOError):
+            rocols.meta['versions'].update({'blah': 5})
 
 
 def test_set_compressed():

@@ -48,6 +48,32 @@ def test_create_index(cache_mem, compression):
         assert np.all(sdata == data['rand'][s])
 
 
+def test_readonly():
+    """
+    cache_mem of 0.01 will force use of mergesort
+    """
+    import os
+    import tempfile
+    import numpy as np
+    from ..columns import Columns
+
+    seed = 877
+    num = 100
+    rng = np.random.RandomState(seed)
+    data = np.zeros(num, dtype=[('rand', 'f8')])
+    data['rand'] = rng.uniform(size=num)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        cdir = os.path.join(tmpdir, 'test.cols')
+        Columns.create_from_array(cdir, data=data, verbose=True)
+
+        rocols = Columns(cdir)
+
+        with pytest.raises(IOError):
+            rocols['rand'].create_index()
+
+
 @pytest.mark.parametrize('compression', [False, True])
 def test_create_index_str(compression):
     """

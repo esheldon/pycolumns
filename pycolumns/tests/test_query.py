@@ -2,9 +2,6 @@ import pytest
 
 
 def test_query():
-    """
-    cache_mem of 0.01 will force use of mergesort
-    """
     import os
     import tempfile
     import numpy as np

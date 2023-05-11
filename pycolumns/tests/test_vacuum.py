@@ -1,3 +1,4 @@
+import pytest
 
 
 def test_vacuum():
@@ -44,6 +45,11 @@ def test_vacuum():
             ext_fname = cc.get_external_filename(chunk_index)
             assert not os.path.exists(ext_fname)
 
+        # no vaccum in read only mode
+        rocols = Columns(cdir)
+        with pytest.raises(IOError):
+            rocols.vacuum()
+
 
 def test_vacuum_context():
     import os
@@ -87,3 +93,8 @@ def test_vacuum_context():
         for chunk_index in w:
             ext_fname = cc.get_external_filename(chunk_index)
             assert not os.path.exists(ext_fname)
+
+        rocols = Columns(cdir)
+        with pytest.raises(IOError):
+            with rocols.updating():
+                pass

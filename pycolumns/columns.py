@@ -1,3 +1,6 @@
+"""
+TODO pass on mode for meta
+"""
 import os
 import numpy as np
 from .column import Column
@@ -16,6 +19,11 @@ class Columns(dict):
     coldir: str
         Path to the Columns store.  The directory must already exist.
         Use Columns.create to create a new Columns store
+    mode: str, optional
+        'r' for read only
+        'r+' for appending and modifying
+        Do not send 'w' or 'w+', which would erase existing data.  To
+        create or overwrite a Columns use Columns.create()
     cache_mem: str or number
         Cache memory for index creation, default '1g' or one gigabyte.
         Can be a number in gigabytes or a string
@@ -28,7 +36,18 @@ class Columns(dict):
         If set to True, print messages
     """
 
-    def __init__(self, coldir, cache_mem=DEFAULT_CACHE_MEM, verbose=False):
+    def __init__(
+        self,
+        coldir,
+        mode='r',
+        cache_mem=DEFAULT_CACHE_MEM,
+        verbose=False,
+    ):
+
+        if mode not in ['r', 'r+']:
+            raise RuntimeError(
+                'only modes r and r+ supported on Columns construction'
+            )
 
         coldir = os.path.expandvars(coldir)
 
@@ -39,6 +58,7 @@ class Columns(dict):
             )
 
         self._dir = coldir
+        self._mode = mode
         self._type = 'cols'
         self._verbose = verbose
         self._is_updating = False
@@ -105,7 +125,7 @@ class Columns(dict):
 
         os.makedirs(coldir)
 
-        cols = Columns(coldir, cache_mem=cache_mem, verbose=verbose)
+        cols = Columns(coldir, mode='r+', cache_mem=cache_mem, verbose=verbose)
         return cols
 
     @classmethod
@@ -219,6 +239,8 @@ class Columns(dict):
         # see the TableSchema and ColumnSchema classes for more options
         """
 
+        self._check_mode_is_write('create a table')
+
         subdir = util.get_sub_dir(self.dir, name)
 
         if subdir is not None:
@@ -276,7 +298,7 @@ class Columns(dict):
 
         Examples
         --------
-        cols = Columns(coldir)
+        cols = Columns(coldir, mode='r+')
         array = np.zeros(num, dtype=[('id', 'i8'), ('x', 'f4')])
         cols.from_array(array, name='data/observations/')
         """
@@ -347,6 +369,10 @@ class Columns(dict):
         return self._dir
 
     @property
+    def mode(self):
+        return self._mode
+
+    @property
     def verbose(self):
         return self._verbose
 
@@ -389,7 +415,8 @@ class Columns(dict):
             if util.is_column(path):
                 name = os.path.basename(path)
                 c = Column(
-                    path, cache_mem=self.cache_mem, verbose=self.verbose,
+                    path, mode=self.mode,
+                    cache_mem=self.cache_mem, verbose=self.verbose,
                 )
                 super().__setitem__(name, c)
             else:
@@ -408,7 +435,8 @@ class Columns(dict):
                     self.meta._load(path)
                 elif ext == 'cols':
                     c = Columns(
-                        path, cache_mem=self.cache_mem, verbose=self.verbose,
+                        path, mode=self.mode,
+                        cache_mem=self.cache_mem, verbose=self.verbose,
                     )
                     cname = util.get_sub_name(name)
                     super().__setitem__(cname, c)
@@ -467,6 +495,7 @@ class Columns(dict):
         data: Data that can be stored as JSON
             e.g. a dict, list etc.
         """
+        self._check_mode_is_write('create metadata')
 
         if name in self.meta_names:
             raise ValueError("column '%s' already exists" % name)
@@ -508,7 +537,7 @@ class Columns(dict):
         """
         self._close()
         super().clear()
-        self._meta = _MetaSet(self.dir, verbose=self.verbose)
+        self._meta = _MetaSet(self.dir, mode=self.mode, verbose=self.verbose)
 
     def _close(self):
         """
@@ -532,6 +561,8 @@ class Columns(dict):
         fill: bool, optional
             If set to True, the new columns are filled out to the current nrows
         """
+
+        self._check_mode_is_write('create columns')
 
         # Try to convert to schema
         if not isinstance(schema, TableSchema):
@@ -581,6 +612,7 @@ class Columns(dict):
             If set to True, verify all the columns have the same number of rows
             after appending.  Default True
         """
+        self._check_mode_is_write('append to a table')
 
         names = util.get_data_names(data)
 
@@ -621,6 +653,7 @@ class Columns(dict):
             cols.append(data1)
             cols.append(data2)
         """
+        self._check_mode_is_write('enter updating context')
         self._is_updating = True
         return self
 
@@ -633,6 +666,9 @@ class Columns(dict):
         compressed data is stored temporarily in a separate file.  Running
         vacuum combines all data back together in a single contiguous file.
         """
+
+        self._check_mode_is_write('vacuum')
+
         for name in self.column_names:
             self[name].vacuum()
 
@@ -646,6 +682,8 @@ class Columns(dict):
             If set to True, don't prompt for confirmation
         """
         import shutil
+
+        self._check_mode_is_write('delete data')
 
         if not yes:
             answer = input('really delete all data? (y/n) ')
@@ -676,6 +714,7 @@ class Columns(dict):
         yes: bool
             If True, don't prompt for confirmation
         """
+        self._check_mode_is_write('delete metadata')
 
         if name not in self.meta:
             print("cannot delete dict '%s', it does not exist" % name)
@@ -705,6 +744,7 @@ class Columns(dict):
             If True, don't prompt for confirmation
         """
         import shutil
+        self._check_mode_is_write('delete entries')
 
         if name not in self.names:
             print("cannot delete entry '%s', it does not exist" % name)
@@ -875,6 +915,10 @@ class Columns(dict):
 
         return columns
 
+    def _check_mode_is_write(self, action):
+        if self.mode != 'r+':
+            raise IOError(f'cannot {action} in read only mode')
+
     def __contains__(self, name):
         try:
             _ = self[name]
@@ -929,10 +973,11 @@ class Columns(dict):
         Only supported for dict.  For Column you need to do
         cols[name][ind] = 3 etc.
         """
+        self._check_mode_is_write('update data')
+
         item = self[name]
-        if item.type == 'dict':
-            item.write(data)
-        elif item.type == 'col':
+
+        if item.type == 'col':
             # let the error handling occur in Column
             self[name][:] = data
         elif item.type == 'cols':
@@ -1040,8 +1085,9 @@ class _MetaSet(dict):
     """
     Manage a set of Meta
     """
-    def __init__(self, coldir, verbose):
+    def __init__(self, coldir, mode, verbose):
         self._coldir = coldir
+        self._mode = mode
         self._verbose = verbose
 
     def __getitem__(self, name):
@@ -1061,7 +1107,7 @@ class _MetaSet(dict):
         if name in self:
             raise RuntimeError(f'dict {name} already exists')
 
-        c = Meta(path, verbose=self._verbose)
+        c = Meta(path, mode=self._mode, verbose=self._verbose)
         super().__setitem__(name, c)
 
     def __repr__(self):

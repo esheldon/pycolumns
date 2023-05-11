@@ -5,9 +5,20 @@ from . import util
 class Meta(object):
     """
     Represent metadata that can be stored in JSON
+
+    Parameters
+    ----------
+    filename: str
+        The path to the file
+    mode: str, optional
+        'r' for read only
+        'r+' for appending and modifying
+    verbose: bool, optional
+        If set to True, print messages
     """
-    def __init__(self, filename, verbose=False):
+    def __init__(self, filename, mode='r', verbose=False):
         self._type = 'meta'
+        self._mode = mode
         self._verbose = verbose
         self._filename = filename
         self._name = util.extract_name(filename)
@@ -32,6 +43,13 @@ class Meta(object):
         return self._dir
 
     @property
+    def mode(self):
+        """
+        get open mode
+        """
+        return self._mode
+
+    @property
     def type(self):
         """
         get the type of this object
@@ -54,6 +72,7 @@ class Meta(object):
         data: Any json supported object
             The data must be supported by the JSON format.
         """
+        self._check_mode_is_write('write to metadata')
 
         util.write_json(self.filename, data)
 
@@ -67,6 +86,7 @@ class Meta(object):
             Update the data.  The stored data and the input must be dict or
             dict like
         """
+        self._check_mode_is_write('update metadata')
 
         odata = self.read()
         odata.update(data)
@@ -77,6 +97,10 @@ class Meta(object):
         read the data
         """
         return util.read_json(self.filename)
+
+    def _check_mode_is_write(self, action):
+        if self.mode != 'r+':
+            raise IOError('cannot {action} in read only mode')
 
     def __repr__(self):
         """
