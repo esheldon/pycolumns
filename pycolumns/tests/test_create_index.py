@@ -136,8 +136,9 @@ def test_updating():
     from ..columns import Columns
 
     num = 20
-    data = np.zeros(num, dtype=[('ind', 'i8')])
+    data = np.zeros(num, dtype=[('ind', 'i8'), ('noindex', 'i4')])
     data['ind'] = np.arange(num)
+    data['noindex'] = np.arange(num) * 2
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -150,8 +151,14 @@ def test_updating():
         )
 
         cols['ind'].create_index()
+
         assert cols['ind'].has_index
         assert cols['ind']._index.size == cols['ind'].size
+
+        cols['ind'].update_index()
+
+        with pytest.raises(RuntimeError):
+            cols['noindex'].update_index()
 
         # in context, indexes are not updated during an append
         with cols.updating():

@@ -994,7 +994,9 @@ class Columns(dict):
         self._is_updating = False
 
         for name in self.column_names:
-            self[name].update_index()
+            col = self[name]
+            if col.has_index:
+                col.update_index()
 
     def __repr__(self):
         """

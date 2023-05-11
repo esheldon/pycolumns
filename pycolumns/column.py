@@ -377,7 +377,7 @@ class Column(object):
         # self._check_data_dtype(data)
         self._col.append(data)
 
-        if update_index and not self.is_updating:
+        if self.has_index and update_index and not self.is_updating:
             self.update_index()
 
     def updating(self, vacuum=False):
@@ -434,7 +434,7 @@ class Column(object):
 
         # todo, context manager for this so only updates index after leaving
         # context
-        if not self.is_updating:
+        if self.has_index and not self.is_updating:
             self.update_index()
 
     def read(self, rows=None):
@@ -618,8 +618,12 @@ class Column(object):
         """
         self._check_mode_is_write('update an index')
 
-        if self.has_index:
-            self.create_index(overwrite=True)
+        if not self.has_index:
+            raise RuntimeError(
+                f'Cannot update non-existent index for column {self.name}'
+            )
+
+        self.create_index(overwrite=True)
 
     def delete_index(self):
         """
@@ -919,7 +923,10 @@ class Column(object):
 
     def __exit__(self, exception_type, exception_value, traceback):
         self._is_updating = False
-        self.update_index()
+
+        if self.has_index:
+            self.update_index()
+
         if self._vacuum_on_exit:
             self.vacuum()
 

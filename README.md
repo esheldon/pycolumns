@@ -17,8 +17,8 @@ Examples
 # instantiate a column database from the specified coldir
 >>> cols = pyc.Columns('/some/path/mycols.cols')
 
-# to open for writing updating, send mode='r+'
->>> cu = pyc.Columns(coldir, mode='r+')
+# to open for writing and updating, send mode='r+'
+>>> for_updating = pyc.Columns(coldir, mode='r+')
 
 # display some info about the columns
 >>> cols
