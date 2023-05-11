@@ -992,7 +992,7 @@ class Columns(dict):
             acols += ['  %-15s %6s %7s %-6s' % cnames]
             acols += ['  '+'-'*(35)]
 
-            for name in sorted(column_names):
+            for name in column_names:
                 c = self[name]
 
                 name = c.name
