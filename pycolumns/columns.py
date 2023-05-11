@@ -1,6 +1,3 @@
-"""
-TODO pass on mode for meta
-"""
 import os
 import numpy as np
 from .column import Column
@@ -23,7 +20,7 @@ class Columns(dict):
         'r' for read only
         'r+' for appending and modifying
         Do not send 'w' or 'w+', which would erase existing data.  To
-        create or overwrite a Columns use Columns.create()
+        create or overwrite a Columns store use Columns.create()
     cache_mem: str or number
         Cache memory for index creation, default '1g' or one gigabyte.
         Can be a number in gigabytes or a string
@@ -1007,12 +1004,10 @@ class Columns(dict):
         ncols = len(self.column_names)
         indent = '  '
         s = []
-        if self.dir is not None:
-            # dbase = self._dirbase()
-            # s += [dbase]
-            s += ['dir: '+self.dir]
-            if ncols > 0 and hasattr(self, '_nrows'):
-                s += ['nrows: %s' % self.nrows]
+        s = ['dir: '+self.dir]
+        s = ['mode: '+self.mode]
+        if ncols > 0 and hasattr(self, '_nrows'):
+            s += ['nrows: %s' % self.nrows]
 
         metas = []
         if len(self.meta_names) > 0:
