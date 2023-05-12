@@ -134,6 +134,7 @@ PyColumn_fill_slice(
         );
         if (nwrote < 1) {
             // NPY_END_THREADS;
+            fflush(self->fptr);
             PyErr_Format(PyExc_IOError,
                          "Error writing row %" NPY_INTP_FMT
                          " to file", row);
@@ -170,6 +171,7 @@ PyColumn_append(
 
     fseek(self->fptr, 0, SEEK_END);
     if (PyArray_ToFile(array, self->fptr, "", "") != 0) {
+        fflush(self->fptr);
         PyErr_Format(PyExc_IOError,
                      "Error writing data to %s with mode %s",
                      self->fname, self->mode);
@@ -200,6 +202,7 @@ PyColumn_write_at(
     pyc_seek_row(self, start, elsize);
 
     if (PyArray_ToFile(array, self->fptr, "", "") != 0) {
+        fflush(self->fptr);
         PyErr_Format(PyExc_IOError,
                      "Error writing data to %s with mode %s",
                      self->fname, self->mode);
@@ -256,6 +259,7 @@ PyColumn_write_rows(
         );
         if (nwrote < 1) {
             // NPY_END_THREADS;
+            fflush(self->fptr);
             PyErr_Format(PyExc_IOError,
                          "Error writing row %" NPY_INTP_FMT
                          " to file", row);
@@ -264,6 +268,9 @@ PyColumn_write_rows(
         }
         PyArray_ITER_NEXT(it);
     }
+
+    fflush(self->fptr);
+
     // NPY_END_THREADS;
     Py_DECREF(it);
 
@@ -320,6 +327,7 @@ PyColumn_write_rows_sortind(
             self->fptr
         );
         if (nwrote < 1) {
+            fflush(self->fptr);
             // NPY_END_THREADS;
             PyErr_Format(PyExc_IOError,
                          "Error writing row %" NPY_INTP_FMT
@@ -328,6 +336,7 @@ PyColumn_write_rows_sortind(
         }
     }
     // NPY_END_THREADS;
+    fflush(self->fptr);
 
     Py_RETURN_NONE;
 }
@@ -379,6 +388,7 @@ PyColumn_fill_rows(
         );
         if (nwrote < 1) {
             // NPY_END_THREADS;
+            fflush(self->fptr);
             PyErr_Format(PyExc_IOError,
                          "Error writing row %" NPY_INTP_FMT
                          " to file", row);
@@ -387,6 +397,8 @@ PyColumn_fill_rows(
         }
         PyArray_ITER_NEXT(it);
     }
+    fflush(self->fptr);
+
     // NPY_END_THREADS;
     Py_DECREF(it);
 
@@ -441,6 +453,7 @@ PyColumn_fill_rows_sortind(
         );
         if (nwrote < 1) {
             // NPY_END_THREADS;
+            fflush(self->fptr);
             PyErr_Format(PyExc_IOError,
                          "Error writing row %" NPY_INTP_FMT
                          " to file", row);
@@ -448,6 +461,7 @@ PyColumn_fill_rows_sortind(
         }
     }
     // NPY_END_THREADS;
+    fflush(self->fptr);
 
     Py_RETURN_NONE;
 }
