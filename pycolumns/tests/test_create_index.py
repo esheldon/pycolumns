@@ -48,6 +48,32 @@ def test_create_index(cache_mem, compression):
         assert np.all(sdata == data['rand'][s])
 
 
+def test_readonly():
+    """
+    cache_mem of 0.01 will force use of mergesort
+    """
+    import os
+    import tempfile
+    import numpy as np
+    from ..columns import Columns
+
+    seed = 877
+    num = 100
+    rng = np.random.RandomState(seed)
+    data = np.zeros(num, dtype=[('rand', 'f8')])
+    data['rand'] = rng.uniform(size=num)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+
+        cdir = os.path.join(tmpdir, 'test.cols')
+        Columns.create_from_array(cdir, data=data, verbose=True)
+
+        rocols = Columns(cdir)
+
+        with pytest.raises(IOError):
+            rocols['rand'].create_index()
+
+
 @pytest.mark.parametrize('compression', [False, True])
 def test_create_index_str(compression):
     """
@@ -110,8 +136,9 @@ def test_updating():
     from ..columns import Columns
 
     num = 20
-    data = np.zeros(num, dtype=[('ind', 'i8')])
+    data = np.zeros(num, dtype=[('ind', 'i8'), ('noindex', 'i4')])
     data['ind'] = np.arange(num)
+    data['noindex'] = np.arange(num) * 2
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -124,8 +151,14 @@ def test_updating():
         )
 
         cols['ind'].create_index()
+
         assert cols['ind'].has_index
         assert cols['ind']._index.size == cols['ind'].size
+
+        cols['ind'].update_index()
+
+        with pytest.raises(RuntimeError):
+            cols['noindex'].update_index()
 
         # in context, indexes are not updated during an append
         with cols.updating():

@@ -13,6 +13,11 @@ class Column(object):
     ----------
     coldir: str
         Path to the directory holding data
+    mode: str
+        'r' for read only
+        'r+' for appending and modifying
+        Do not send 'w' or 'w+', which would erase existing data.
+        To manage creation use a Columns object
     cache_mem: str or number
         Cache memory for index creation, default '1g' or one gigabyte.
         Can be a number in gigabytes or a string
@@ -61,6 +66,7 @@ class Column(object):
     def __init__(
         self,
         coldir,
+        mode='r',
         cache_mem=DEFAULT_CACHE_MEM,
         verbose=False,
     ):
@@ -68,7 +74,13 @@ class Column(object):
         initialize the meta data, and possibly load the mmap
         """
 
+        if mode not in ['r', 'r+']:
+            raise RuntimeError(
+                'only modes r and r+ supported on Column construction'
+            )
+
         self._dir = coldir
+        self._mode = mode
         self._cache_mem = cache_mem
         self._cache_mem_gb = util.convert_to_gigabytes(cache_mem)
         self._verbose = verbose
@@ -128,6 +140,13 @@ class Column(object):
         get the directory holding the file
         """
         return self._dir
+
+    @property
+    def mode(self):
+        """
+        Get the open mode
+        """
+        return self._mode
 
     @property
     def verbose(self):
@@ -277,7 +296,7 @@ class Column(object):
                 filename=self.array_filename,
                 chunks_filename=self.chunks_filename,
                 dtype=self._meta['dtype'],
-                mode='r+',
+                mode=self.mode,
                 compression=meta['compression'],
                 chunksize=meta['chunksize'],
                 verbose=self.verbose,
@@ -286,7 +305,7 @@ class Column(object):
             self._col = CColumn(
                 self.array_filename,
                 dtype=self._meta['dtype'],
-                mode='r+',
+                mode=self.mode,
                 # verbose=self.verbose,
             )
 
@@ -303,6 +322,9 @@ class Column(object):
         nrows: int
             The new number of rows.
         """
+
+        self._check_mode_is_write('resize column')
+
         if isinstance(self._col, CColumn):
             nrows_old = self.nrows
 
@@ -330,6 +352,8 @@ class Column(object):
         compressed data is stored temporarily in a separate file.  Running
         vacuum combines all data back together in a single contiguous file.
         """
+        self._check_mode_is_write('vacuum')
+
         if isinstance(self._col, Chunks):
             self._col.vacuum()
 
@@ -345,6 +369,7 @@ class Column(object):
             Data to append to the file.  If the column data already exists,
             the data types must match exactly.
         """
+        self._check_mode_is_write('append data')
 
         self._check_data(data)
 
@@ -352,7 +377,7 @@ class Column(object):
         # self._check_data_dtype(data)
         self._col.append(data)
 
-        if update_index and not self.is_updating:
+        if self.has_index and update_index and not self.is_updating:
             self.update_index()
 
     def updating(self, vacuum=False):
@@ -364,6 +389,8 @@ class Column(object):
             col[5:10] = 25
             col[35:88] = 99
         """
+        self._check_mode_is_write('enter updating context')
+
         self._is_updating = True
         self._vacuum_on_exit = vacuum
         return self
@@ -401,11 +428,13 @@ class Column(object):
         Item lookup method, e.g. col[..] meaning slices or
         sequences, etc.
         """
+        self._check_mode_is_write('update column data')
+
         self._col[arg] = values
 
         # todo, context manager for this so only updates index after leaving
         # context
-        if not self.is_updating:
+        if self.has_index and not self.is_updating:
             self.update_index()
 
     def read(self, rows=None):
@@ -423,6 +452,7 @@ class Column(object):
         """
         Attempt to delete the data file associated with this column
         """
+        self._check_mode_is_write('delete column data')
 
         if hasattr(self, '_col'):
             del self._col
@@ -463,6 +493,8 @@ class Column(object):
         import os
         from tempfile import TemporaryDirectory
         import shutil
+
+        self._check_mode_is_write('create an index')
 
         if self.has_index and not overwrite:
             raise RuntimeError(
@@ -584,14 +616,21 @@ class Column(object):
         """
         Recreate the index for this column.
         """
-        if self.has_index:
-            self.create_index(overwrite=True)
+        self._check_mode_is_write('update an index')
+
+        if not self.has_index:
+            raise RuntimeError(
+                f'Cannot update non-existent index for column {self.name}'
+            )
+
+        self.create_index(overwrite=True)
 
     def delete_index(self):
         """
         Delete the index for this column if it exists
         """
         import os
+        self._check_mode_is_write('delete an index')
 
         if self.has_index:
             names = [
@@ -874,13 +913,20 @@ class Column(object):
 
         return Indices(indices)
 
+    def _check_mode_is_write(self, action):
+        if self.mode != 'r+':
+            raise IOError(f'cannot {action} in read only mode')
+
     def __enter__(self):
         self._is_updating = True
         return self
 
     def __exit__(self, exception_type, exception_value, traceback):
         self._is_updating = False
-        self.update_index()
+
+        if self.has_index:
+            self.update_index()
+
         if self._vacuum_on_exit:
             self.vacuum()
 
