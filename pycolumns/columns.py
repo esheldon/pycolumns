@@ -256,7 +256,10 @@ class Columns(dict):
             # Need a full reload because a number of levels can be affected
             self._load()
 
-        return cols
+        if name is not None:
+            return self[name]
+        else:
+            return self
 
     def from_array(
         self,
