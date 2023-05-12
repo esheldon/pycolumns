@@ -236,11 +236,11 @@ cid = pyc.ColumnSchema('id', dtype='i8', compression=True)
 cname = pyc.ColumnSchema('name', dtype='i8', compression=True)
 schema = pyc.TableSchema([cid, cname])
 
-# Note you specify compression info in detail
+# Note you specify blosc compression info in detail
 cname = pyc.ColumnSchema(
     'name',
     dtype='U5',
-    compression={'cname': 'zstd', 'zlevel': 5, 'shuffle': 'bitshuffle'}
+    compression={'cname': 'zstd', 'clevel': 5, 'shuffle': 'bitshuffle'}
     chunksize='10m',  # 10 megabytes
 )
 
